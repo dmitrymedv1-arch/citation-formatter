@@ -2608,13 +2608,15 @@ class ModernUIComponents:
             .border-info {{ border-color: {theme['info']}; }}
             </style>
         """, unsafe_allow_html=True)
-    
+           
     def render_header(self):
         """Рендер заголовка и контролов"""
+        st.markdown("<div style='padding-top: 20px;'></div>", unsafe_allow_html=True)
+        
         col_title, col_controls = st.columns([2, 3])
         
         with col_title:
-            st.markdown(f"<h1>🎓 {get_text('header')}</h1>", unsafe_allow_html=True)
+            st.markdown(f"<h1 style='margin-top: 0;'>🎓 {get_text('header')}</h1>", unsafe_allow_html=True)
         
         with col_controls:
             # Компактные контролы в строку
@@ -4344,5 +4346,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
