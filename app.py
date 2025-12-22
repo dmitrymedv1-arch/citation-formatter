@@ -373,7 +373,7 @@ class UserPreferencesManager:
     def __init__(self, db_path: str = Config.USER_PREFS_DB):
         self.db_path = db_path
         self._init_db()
-    
+
     def _init_db(self):
         """Инициализация базы данных предпочтений"""
         with sqlite3.connect(self.db_path) as conn:
@@ -387,6 +387,11 @@ class UserPreferencesManager:
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
+            # Добавляем недостающие колонки, если они отсутствуют
+            try:
+                conn.execute("ALTER TABLE user_preferences ADD COLUMN ui_mode INTEGER DEFAULT 0")
+            except sqlite3.OperationalError:
+                pass  # Колонка уже существует
             conn.execute('CREATE INDEX IF NOT EXISTS idx_ip ON user_preferences(ip_address)')
     
     def get_user_ip(self):
@@ -402,18 +407,39 @@ class UserPreferencesManager:
     def get_preferences(self, ip: str) -> Dict[str, Any]:
         """Получение предпочтений пользователя"""
         try:
+            # Сначала проверяем структуру таблицы
             with sqlite3.connect(self.db_path) as conn:
-                result = conn.execute(
-                    'SELECT language, theme, mobile_view FROM user_preferences WHERE ip_address = ?',
-                    (ip,)
-                ).fetchone()
+                # Получаем информацию о колонках таблицы
+                cursor = conn.execute("PRAGMA table_info(user_preferences)")
+                columns = [column[1] for column in cursor.fetchall()]
                 
-                if result:
-                    return {
-                        'language': result[0],
-                        'theme': result[1],
-                        'mobile_view': bool(result[2])
-                    }
+                # Формируем запрос в зависимости от доступных колонок
+                if 'ui_mode' in columns:
+                    # Старая схема с ui_mode
+                    result = conn.execute(
+                        'SELECT language, theme, ui_mode FROM user_preferences WHERE ip_address = ?',
+                        (ip,)
+                    ).fetchone()
+                    
+                    if result:
+                        return {
+                            'language': result[0],
+                            'theme': result[1],
+                            'mobile_view': bool(result[2]) if result[2] is not None else False
+                        }
+                else:
+                    # Новая схема с mobile_view
+                    result = conn.execute(
+                        'SELECT language, theme, mobile_view FROM user_preferences WHERE ip_address = ?',
+                        (ip,)
+                    ).fetchone()
+                    
+                    if result:
+                        return {
+                            'language': result[0],
+                            'theme': result[1],
+                            'mobile_view': bool(result[2])
+                        }
         except Exception as e:
             logger.error(f"Error getting preferences for {ip}: {e}")
         
@@ -427,16 +453,34 @@ class UserPreferencesManager:
         """Сохранение предпочтений пользователя"""
         try:
             with sqlite3.connect(self.db_path) as conn:
-                conn.execute('''
-                    INSERT OR REPLACE INTO user_preferences 
-                    (ip_address, language, theme, mobile_view, updated_at) 
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                ''', (
-                    ip,
-                    preferences.get('language', 'en'),
-                    preferences.get('theme', 'light'),
-                    int(preferences.get('mobile_view', False))
-                ))
+                # Проверяем структуру таблицы
+                cursor = conn.execute("PRAGMA table_info(user_preferences)")
+                columns = [column[1] for column in cursor.fetchall()]
+                
+                if 'ui_mode' in columns and 'mobile_view' not in columns:
+                    # Старая схема - обновляем ui_mode
+                    conn.execute('''
+                        INSERT OR REPLACE INTO user_preferences 
+                        (ip_address, language, theme, ui_mode, updated_at) 
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ''', (
+                        ip,
+                        preferences.get('language', 'en'),
+                        preferences.get('theme', 'light'),
+                        int(preferences.get('mobile_view', False))
+                    ))
+                else:
+                    # Новая схема или обновленная таблица
+                    conn.execute('''
+                        INSERT OR REPLACE INTO user_preferences 
+                        (ip_address, language, theme, mobile_view, updated_at) 
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    ''', (
+                        ip,
+                        preferences.get('language', 'en'),
+                        preferences.get('theme', 'light'),
+                        int(preferences.get('mobile_view', False))
+                    ))
         except Exception as e:
             logger.error(f"Error saving preferences for {ip}: {e}")
     
@@ -3501,3 +3545,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
