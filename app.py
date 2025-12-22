@@ -4043,8 +4043,22 @@ class CitationStyleApp:
         st.set_page_config(
             layout="wide", 
             page_title="Citation Style Constructor",
-            page_icon="🎓"
+            page_icon="🎓",
+            initial_sidebar_state="collapsed"
         )
+        
+        # Скрываем стандартный хедер Streamlit и добавляем отступ
+        st.markdown("""
+            <style>
+                header { visibility: hidden; }
+                .main .block-container {
+                    padding-top: 3rem;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        # Добавляем наш собственный отступ
+        st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
         
         # Загрузка пользовательских предпочтений
         self._load_user_preferences()
@@ -4346,6 +4360,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
