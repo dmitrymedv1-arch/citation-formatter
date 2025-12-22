@@ -733,10 +733,13 @@ def init_session_state():
         'style_management_initialized': False,
         'previous_states': [],
         'max_undo_steps': 10,
+        'show_stats': False,
         'timeline_elements': [],
         'dragged_element': None,
         'active_element_index': -1,
         'show_timeline_help': True,
+        'process_triggered': False,
+        'process_data': {},
     }
     
     for key, default in defaults.items():
@@ -4407,3 +4410,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
