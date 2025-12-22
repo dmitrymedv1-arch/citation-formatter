@@ -2780,12 +2780,8 @@ class ModernUIComponents:
                 if st.session_state.selected_preset == preset_id:
                     preset_class += " active"
                 
-                st.markdown(f"""
-                    <div class="{preset_class}" onclick="window.selectPreset('{preset_id}')">
-                        <div class="style-preset-name">{name}</div>
-                        <div class="style-preset-desc">{description}</div>
-                    </div>
-                """, unsafe_allow_html=True)
+                if st.button(name, key=f"preset_{preset_id}", use_container_width=True):
+                    self._apply_preset_style(preset_id)
         
         # Кнопка создания своего стиля
         st.markdown("<br>", unsafe_allow_html=True)
@@ -2901,11 +2897,8 @@ class ModernUIComponents:
             ]
             
             for icon_name, element_name in elements:
-                st.markdown(f"""
-                    <div class="element-pill" onclick="window.addElement('{element_name}')">
-                        {icon_name}
-                    </div>
-                """, unsafe_allow_html=True)
+                if st.button(icon_name, key=f"add_{element_name}", use_container_width=True):
+                    self._add_element_to_sequence(element_name)
         
         with col_sequence:
             st.markdown(f"**{get_text('drag_elements_here')}**")
@@ -4282,3 +4275,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
