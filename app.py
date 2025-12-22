@@ -2729,7 +2729,7 @@ class ModernUIComponents:
             self._render_step_2()
         elif st.session_state.current_step == 3:
             self._render_step_3()
-    
+
     def _render_progress_steps(self):
         """Рендер шагов прогресса"""
         steps = [
@@ -2738,22 +2738,91 @@ class ModernUIComponents:
             (get_text('step_3'), 3)
         ]
         
-        html_steps = ""
-        for i, (label, step_num) in enumerate(steps):
-            step_class = "step"
-            if step_num == st.session_state.current_step:
-                step_class += " active"
-            elif step_num < st.session_state.current_step:
-                step_class += " completed"
-            
-            html_steps += f"""
-                <div class="{step_class}">
-                    <div class="step-circle">{step_num}</div>
-                    <div class="step-label">{label}</div>
-                </div>
-            """
+        # Создаем колонки для каждого шага
+        cols = st.columns(len(steps))
         
-        st.markdown(f'<div class="step-progress">{html_steps}</div>', unsafe_allow_html=True)
+        for idx, (col, (label, step_num)) in enumerate(zip(cols, steps)):
+            with col:
+                # Определяем статус шага
+                is_active = step_num == st.session_state.current_step
+                is_completed = step_num < st.session_state.current_step
+                
+                # Определяем цвет и символ
+                if is_active:
+                    circle_color = "var(--primary-color)"
+                    circle_text = f"**{step_num}**"
+                    label_color = "var(--primary-color)"
+                elif is_completed:
+                    circle_color = "var(--success)"
+                    circle_text = "✓"
+                    label_color = "var(--success)"
+                else:
+                    circle_color = "var(--border)"
+                    circle_text = str(step_num)
+                    label_color = "var(--text-color-secondary)"
+                
+                # Отображаем круг шага
+                st.markdown(
+                    f"""
+                    <div style='
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        margin-bottom: 1rem;
+                    '>
+                        <div style='
+                            width: 40px;
+                            height: 40px;
+                            border-radius: 50%;
+                            background-color: {circle_color};
+                            color: white;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            font-weight: bold;
+                            font-size: 1.2rem;
+                            margin-bottom: 0.5rem;
+                            transition: all 0.3s ease;
+                        '>
+                            {circle_text}
+                        </div>
+                        <div style='
+                            font-size: 0.9rem;
+                            font-weight: 600;
+                            color: {label_color};
+                            text-align: center;
+                        '>
+                            {label}
+                        </div>
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
+        
+        # Линия прогресса под шагами
+        st.markdown(
+            """
+            <div style='
+                height: 3px;
+                background-color: var(--border);
+                margin: -10px 20px 20px 20px;
+                position: relative;
+            '>
+                <div style='
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    height: 100%;
+                    background-color: var(--primary-color);
+                    width: {}%;
+                    transition: width 0.5s ease;
+                '></div>
+            </div>
+            """.format(
+                (st.session_state.current_step - 1) * 50  # 0%, 50%, 100%
+            ),
+            unsafe_allow_html=True
+        )
     
     def _render_step_1(self):
         """Рендер шага 1: Выбор или создание стиля"""
@@ -4275,4 +4344,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
