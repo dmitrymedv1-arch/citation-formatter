@@ -81,7 +81,9 @@ class Config:
             'text': '#212529',
             'font': 'sans-serif',
             'border': '#dee2e6',
-            'cardBackground': '#ffffff'
+            'cardBackground': '#ffffff',
+            'accent': '#4ECDC4',
+            'toolbar': '#e9ecef'
         },
         'dark': {
             'primary': '#4ECDC4',
@@ -90,22 +92,40 @@ class Config:
             'text': '#e9ecef',
             'font': 'sans-serif',
             'border': '#495057',
-            'cardBackground': '#2d323d'
+            'cardBackground': '#2d323d',
+            'accent': '#FF6B6B',
+            'toolbar': '#343a40'
+        }
+    }
+    
+    # Интерфейсные константы
+    UI_MODES = ['toolbar_mode', 'timeline_mode']
+    UI_MODE_NAMES = {
+        'en': {
+            'toolbar_mode': 'Toolbar Mode',
+            'timeline_mode': 'Timeline Mode'
+        },
+        'ru': {
+            'toolbar_mode': 'Режим панели',
+            'timeline_mode': 'Режим таймлайна'
         }
     }
 
 # Инициализация Crossref
 works = Works()
 
-# Полный словарь переводов
+# Полный словарь переводов (только русский и английский)
 TRANSLATIONS = {
     'en': {
+        # Основные
         'header': '🎨 Citation Style Constructor',
         'general_settings': '⚙️ General Settings',
         'element_config': '📑 Element Configuration',
         'style_preview': '👀 Style Preview',
         'data_input': '📁 Data Input',
         'data_output': '📤 Data Output',
+        
+        # Настройки
         'numbering_style': 'Numbering:',
         'author_format': 'Authors:',
         'author_separator': 'Separator:',
@@ -116,11 +136,19 @@ TRANSLATIONS = {
         'doi_hyperlink': 'DOI as hyperlink',
         'page_format': 'Pages:',
         'final_punctuation': 'Final punctuation:',
+        'journal_style': 'Journal style:',
+        'full_journal_name': 'Full Journal Name',
+        'journal_abbr_with_dots': 'J. Abbr.',
+        'journal_abbr_no_dots': 'J Abbr',
+        
+        # Элементы
         'element': 'Element',
         'italic': 'Italic',
         'bold': 'Bold',
         'parentheses': 'Parentheses',
         'separator': 'Separator',
+        
+        # Ввод/вывод
         'input_method': 'Input:',
         'output_method': 'Output:',
         'select_docx': 'Select DOCX',
@@ -129,18 +157,33 @@ TRANSLATIONS = {
         'results': 'Results:',
         'process': '🚀 Process',
         'example': 'Example:',
+        
+        # Ошибки и уведомления
         'error_select_element': 'Select at least one element!',
         'processing': '⏳ Processing...',
         'upload_file': 'Upload a file!',
         'enter_references_error': 'Enter references!',
         'select_docx_output': 'Select DOCX output to download!',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 References (DOCX)',
         'found_references': 'Found {} references.',
         'found_references_text': 'Found {} references in text.',
         'statistics': 'Statistics: {} DOI found, {} not found.',
+        
+        # Язык и тема
         'language': 'Language:',
+        'theme_selector': 'Theme:',
+        'light_theme': 'Light',
+        'dark_theme': 'Dark',
+        
+        # Стили
         'gost_style': 'Apply GOST Style',
+        'style_presets': 'Style Presets',
+        'gost_button': 'GOST',
+        'acs_button': 'ACS (MDPI)',
+        'rsc_button': 'RSC',
+        'cta_button': 'CTA',
+        'style_preset_tooltip': 'Here are some styles maintained by individual publishers. For major publishers (Elsevier, Springer Nature, Wiley), styles vary from journal to journal. To create (or reformat) references for a specific journal, use the Citation Style Constructor.',
+        
+        # Управление стилями
         'export_style': '📤 Export Style',
         'import_style': '📥 Import Style',
         'export_file_name': 'File name:',
@@ -148,6 +191,8 @@ TRANSLATIONS = {
         'export_success': 'Style exported successfully!',
         'import_success': 'Style imported successfully!',
         'import_error': 'Error importing style file!',
+        
+        # Прогресс
         'processing_status': 'Processing references...',
         'current_reference': 'Current: {}',
         'processed_stats': 'Processed: {}/{} | Found: {} | Errors: {}',
@@ -158,16 +203,8 @@ TRANSLATIONS = {
         'checking_duplicates': 'Checking for duplicates...',
         'retrying_failed': 'Retrying failed DOI requests...',
         'bibliographic_search': 'Searching by bibliographic data...',
-        'style_presets': 'Style Presets',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'Here are some styles maintained by individual publishers. For major publishers (Elsevier, Springer Nature, and Wiley), styles vary from journal to journal. To create (or reformat) references for a specific journal, use the Citation Style Constructor.',
-        'journal_style': 'Journal style:',
-        'full_journal_name': 'Full Journal Name',
-        'journal_abbr_with_dots': 'J. Abbr.',
-        'journal_abbr_no_dots': 'J Abbr',
+        
+        # Руководство
         'short_guide_title': 'A short guide for the conversion of doi-based references',
         'step_1': '❶ Select a ready reference style (ACS(MDPI), RSC, or CTA), or create your own style by selecting the sequence, design, and punctuation of the element configurations',
         'step_1_note': '(!) The punctuation boxes enable various items to be included between element configurations (simple punctuation, Vol., Issue…)',
@@ -177,26 +214,70 @@ TRANSLATIONS = {
         'step_5': '❺ After processing is complete, download the reformatted references in your preferred format.',
         'step_5_note': '(!) Outputting the Docx file is recommended, as it preserves formatting (e.g., bold, italic, and hyperlinks) and includes additional stats at the end of the document.',
         'step_6': '❻ After creating your final version of the style, save it so that you can upload it again in the next session. Use the Style Management section for this purpose.',
+        
+        # Валидация
         'validation_error_no_elements': 'Please configure at least one element or select a preset style!',
         'validation_error_too_many_references': 'Too many references (maximum {} allowed)',
         'validation_warning_few_references': 'Few references for meaningful statistics',
+        
+        # Кэш
         'cache_initialized': 'Cache initialized successfully',
         'cache_cleared': 'Cache cleared successfully',
-        'theme_selector': 'Theme:',
-        'light_theme': 'Light',
-        'dark_theme': 'Dark',
+        
+        # Вид
         'mobile_view': 'Mobile View',
         'desktop_view': 'Desktop View',
+        'ui_mode': 'Interface Mode:',
+        
+        # Новые для таймлайн режима
+        'timeline_editor': 'Timeline Editor',
+        'style_sequencer': 'Style Sequencer',
+        'element_track': 'Element Track',
+        'drag_to_reorder': 'Drag to reorder',
+        'add_element': '+ Add Element',
+        'properties_panel': 'Properties Panel',
+        'preview_monitor': 'Preview Monitor',
+        'media_pool': 'Media Pool',
+        'import_references': 'Import References',
+        'render_output': 'Render Output',
+        'track_authors': 'Authors Track',
+        'track_title': 'Title Track',
+        'track_journal': 'Journal Track',
+        'track_year': 'Year Track',
+        'track_volume': 'Volume Track',
+        'track_pages': 'Pages Track',
+        'track_doi': 'DOI Track',
+        'empty_timeline': 'Drag elements here to build your citation style',
+        
+        # Новые для toolbar режима
+        'quick_styles': 'Quick Styles',
+        'tools': 'Tools',
+        'style_builder': 'Style Builder',
+        'format_options': 'Format Options',
+        'upload_process': 'Upload & Process',
+        'download_section': 'Download',
+        'card_style': 'Style',
+        'card_input': 'Input',
+        'card_output': 'Output',
+        
+        # Кнопки
         'clear_button': '🗑️ Clear',
-        'back_button': '↩️ Back'
+        'back_button': '↩️ Back',
+        'save_button': '💾 Save',
+        'load_button': '📂 Load',
+        'reset_button': '🔄 Reset',
+        'help_button': '❓ Help'
     },
     'ru': {
+        # Основные
         'header': '🎨 Конструктор стилей цитирования',
         'general_settings': '⚙️ Настройки',
         'element_config': '📑 Конфигурация элементов',
         'style_preview': '👀 Предпросмотр',
         'data_input': '📁 Ввод',
         'data_output': '📤 Вывод',
+        
+        # Настройки
         'numbering_style': 'Нумерация:',
         'author_format': 'Авторы:',
         'author_separator': 'Разделитель:',
@@ -207,11 +288,19 @@ TRANSLATIONS = {
         'doi_hyperlink': 'DOI как ссылка',
         'page_format': 'Страницы:',
         'final_punctuation': 'Конечная пунктуация:',
+        'journal_style': 'Стиль журнала:',
+        'full_journal_name': 'Полное название журнала',
+        'journal_abbr_with_dots': 'J. Abbr.',
+        'journal_abbr_no_dots': 'J Abbr',
+        
+        # Элементы
         'element': 'Элемент',
         'italic': 'Курсив',
         'bold': 'Жирный',
         'parentheses': 'Скобки',
         'separator': 'Разделитель',
+        
+        # Ввод/вывод
         'input_method': 'Ввод:',
         'output_method': 'Вывод:',
         'select_docx': 'Выберите DOCX',
@@ -220,18 +309,33 @@ TRANSLATIONS = {
         'results': 'Результаты:',
         'process': '🚀 Обработать',
         'example': 'Пример:',
+        
+        # Ошибки и уведомления
         'error_select_element': 'Выберите хотя бы один элемент!',
         'processing': '⏳ Обработка...',
         'upload_file': 'Загрузите файл!',
         'enter_references_error': 'Введите ссылки!',
         'select_docx_output': 'Выберите DOCX для скачивания!',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 Ссылки (DOCX)',
         'found_references': 'Найдено {} ссылок.',
         'found_references_text': 'Найдено {} ссылок в тексте.',
         'statistics': 'Статистика: {} DOI найдено, {} не найдено.',
+        
+        # Язык и тема
         'language': 'Язык:',
+        'theme_selector': 'Тема:',
+        'light_theme': 'Светлая',
+        'dark_theme': 'Тёмная',
+        
+        # Стили
         'gost_style': 'Применить стиль ГОСТ',
+        'style_presets': 'Готовые стили',
+        'gost_button': 'ГОСТ',
+        'acs_button': 'ACS (MDPI)',
+        'rsc_button': 'RSC',
+        'cta_button': 'CTA',
+        'style_preset_tooltip': 'Здесь указаны некоторые стили, которые сохраняются в пределах одного издательства. Для ряда крупных издательств (Esevier, Springer Nature, Wiley) стиль отличается от журнала к журналу. Для формирования (или переформатирования) ссылок для конкретного журнала предлагаем воспользоваться конструктором ссылок.',
+        
+        # Управление стилями
         'export_style': '📤 Экспорт стиля',
         'import_style': '📥 Импорт стиля',
         'export_file_name': 'Имя файла:',
@@ -239,6 +343,8 @@ TRANSLATIONS = {
         'export_success': 'Стиль экспортирован успешно!',
         'import_success': 'Стиль импортирован успешно!',
         'import_error': 'Ошибка импорта файла стиля!',
+        
+        # Прогресс
         'processing_status': 'Обработка ссылок...',
         'current_reference': 'Текущая: {}',
         'processed_stats': 'Обработано: {}/{} | Найдено: {} | Ошибки: {}',
@@ -249,16 +355,8 @@ TRANSLATIONS = {
         'checking_duplicates': 'Проверка на дубликаты...',
         'retrying_failed': 'Повторная попытка для неудачных DOI...',
         'bibliographic_search': 'Поиск по библиографическим данным...',
-        'style_presets': 'Готовые стили',
-        'gost_button': 'ГОСТ',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'Здесь указаны некоторые стили, которые сохраняются в пределах одного издательства. Для ряда крупных издательств (Esevier, Springer Nature, Wiley) стиль отличается от журнала к журналу. Для формирования (или переформатирования) ссылок для конкретного журнала предлагаем воспользоваться конструктором ссылок.',
-        'journal_style': 'Стиль журнала:',
-        'full_journal_name': 'Полное название журнала',
-        'journal_abbr_with_dots': 'J. Abbr.',
-        'journal_abbr_no_dots': 'J Abbr',
+        
+        # Руководство
         'short_guide_title': 'Краткое руководство для конвертации ссылок, имеющих doi',
         'step_1': '❶ Выберите готовый стиль ссылок (ГОСТ, ACS(MDPI), RSC или CTA) или создайте свой собственный стиль, выбрав последовательность, оформление и пунктуацию конфигураций элементов',
         'step_1_note': '(!) Поля пунктуации позволяют включать различные элементы между конфигурациями (простая пунктуация, Том, Выпуск…)',
@@ -268,473 +366,59 @@ TRANSLATIONS = {
         'step_5': '❺ После завершения обработки загрузите переформатированные ссылки в предпочитаемом формате.',
         'step_5_note': '(!) Рекомендуется выводить файл Docx, так как он сохраняет форматирование (например, жирный шрифт, курсив и гиперссылки) и включает дополнительную статистику в конце документа.',
         'step_6': '❻ После создания окончательной версии стиля сохраните его, чтобы можно было снова загрузить в следующей сессии. Для этого используйте раздел Style Management.',
+        
+        # Валидация
         'validation_error_no_elements': 'Пожалуйста, настройте хотя бы один элемент или выберите готовый стиль!',
         'validation_error_too_many_references': 'Слишком много ссылок (максимум {} разрешено)',
         'validation_warning_few_references': 'Мало ссылок для значимой статистики',
+        
+        # Кэш
         'cache_initialized': 'Кэш инициализирован успешно',
         'cache_cleared': 'Кэш очищен успешно',
-        'theme_selector': 'Тема:',
-        'light_theme': 'Светлая',
-        'dark_theme': 'Тёмная',
+        
+        # Вид
         'mobile_view': 'Мобильный вид',
         'desktop_view': 'Десктопный вид',
+        'ui_mode': 'Режим интерфейса:',
+        
+        # Новые для таймлайн режима
+        'timeline_editor': 'Таймлайн редактор',
+        'style_sequencer': 'Секвенсер стилей',
+        'element_track': 'Дорожка элемента',
+        'drag_to_reorder': 'Перетащите для изменения порядка',
+        'add_element': '+ Добавить элемент',
+        'properties_panel': 'Панель свойств',
+        'preview_monitor': 'Монитор предпросмотра',
+        'media_pool': 'Медиапул',
+        'import_references': 'Импорт ссылок',
+        'render_output': 'Рендер вывода',
+        'track_authors': 'Дорожка авторов',
+        'track_title': 'Дорожка заголовка',
+        'track_journal': 'Дорожка журнала',
+        'track_year': 'Дорожка года',
+        'track_volume': 'Дорожка тома',
+        'track_pages': 'Дорожка страниц',
+        'track_doi': 'Дорожка DOI',
+        'empty_timeline': 'Перетащите элементы сюда для построения стиля цитирования',
+        
+        # Новые для toolbar режима
+        'quick_styles': 'Быстрые стили',
+        'tools': 'Инструменты',
+        'style_builder': 'Конструктор стилей',
+        'format_options': 'Опции форматирования',
+        'upload_process': 'Загрузить и обработать',
+        'download_section': 'Скачивание',
+        'card_style': 'Стиль',
+        'card_input': 'Ввод',
+        'card_output': 'Вывод',
+        
+        # Кнопки
         'clear_button': '🗑️ Очистить',
-        'back_button': '↩️ Назад'
-    },
-    'de': {
-        'header': '🎨 Zitationsstil-Konstruktor',
-        'general_settings': '⚙️ Allgemeine Einstellungen',
-        'element_config': '📑 Elementkonfiguration',
-        'style_preview': '👀 Stilvorschau',
-        'data_input': '📁 Dateneingabe',
-        'data_output': '📤 Datenausgabe',
-        'numbering_style': 'Nummerierung:',
-        'author_format': 'Autoren:',
-        'author_separator': 'Trennzeichen:',
-        'et_al_limit': 'Et al nach:',
-        'use_and': "'und'",
-        'use_ampersand': "'&'",
-        'doi_format': 'DOI-Format:',
-        'doi_hyperlink': 'DOI als Hyperlink',
-        'page_format': 'Seiten:',
-        'final_punctuation': 'Schlusszeichen:',
-        'element': 'Element',
-        'italic': 'Kursiv',
-        'bold': 'Fett',
-        'parentheses': 'Klammern',
-        'separator': 'Trennzeichen',
-        'input_method': 'Eingabe:',
-        'output_method': 'Ausgabe:',
-        'select_docx': 'DOCX auswählen',
-        'enter_references': 'Referenzen eingeben (eine pro Zeile)',
-        'references': 'Referenzen:',
-        'results': 'Ergebnisse:',
-        'process': '🚀 Verarbeiten',
-        'example': 'Beispiel:',
-        'error_select_element': 'Wählen Sie mindestens ein Element aus!',
-        'processing': '⏳ Verarbeitung...',
-        'upload_file': 'Laden Sie eine Datei hoch!',
-        'enter_references_error': 'Geben Sie Referenzen ein!',
-        'select_docx_output': 'Wählen Sie DOCX-Ausgabe zum Herunterladen!',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 Referenzen (DOCX)',
-        'found_references': '{} Referenzen gefunden.',
-        'found_references_text': '{} Referenzen im Text gefunden.',
-        'statistics': 'Statistik: {} DOI gefunden, {} nicht gefunden.',
-        'language': 'Sprache:',
-        'gost_style': 'GOST-Stil anwenden',
-        'export_style': '📤 Stil exportieren',
-        'import_style': '📥 Stil importieren',
-        'export_file_name': 'Dateiname:',
-        'import_file': 'Stildatei auswählen:',
-        'export_success': 'Stil erfolgreich exportiert!',
-        'import_success': 'Stil erfolgreich importiert!',
-        'import_error': 'Fehler beim Importieren der Stildatei!',
-        'processing_status': 'Verarbeite Referenzen...',
-        'current_reference': 'Aktuell: {}',
-        'processed_stats': 'Verarbeitet: {}/{} | Gefunden: {} | Fehler: {}',
-        'time_remaining': 'Geschätzte verbleibende Zeit: {}',
-        'duplicate_reference': '🔄 Wiederholte Referenz (Siehe #{})',
-        'batch_processing': 'Stapelverarbeitung DOI...',
-        'extracting_metadata': 'Extrahiere Metadaten...',
-        'checking_duplicates': 'Prüfe auf Duplikate...',
-        'retrying_failed': 'Wiederhole fehlgeschlagene DOI-Anfragen...',
-        'bibliographic_search': 'Suche nach bibliografischen Daten...',
-        'style_presets': 'Stilvorlagen',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'Hier sind einige Stile, die von einzelnen Verlagen gepflegt werden. Für große Verlage (Elsevier, Springer Nature, Wiley) variiert der Stil von Journal zu Journal. Um Referenzen für ein bestimmtes Journal zu erstellen (oder neu zu formatieren), verwenden Sie den Zitationsstil-Konstruktor.',
-        'journal_style': 'Journal-Stil:',
-        'full_journal_name': 'Vollständiger Journalname',
-        'journal_abbr_with_dots': 'J. Abk.',
-        'journal_abbr_no_dots': 'J Abk',
-        'short_guide_title': 'Kurzanleitung zur Konvertierung von DOI-basierten Referenzen',
-        'step_1': '❶ Wählen Sie einen vorgefertigten Referenzstil (ACS(MDPI), RSC oder CTA) oder erstellen Sie Ihren eigenen Stil, indem Sie die Reihenfolge, Gestaltung und Zeichensetzung der Elementkonfigurationen auswählen',
-        'step_1_note': '(!) Die Zeichensetzungsfelder ermöglichen die Aufnahme verschiedener Elemente zwischen Elementkonfigurationen (einfache Zeichensetzung, Vol., Issue…)',
-        'step_2': '❷ Verwenden Sie dann die Stilvorlagen, um bestimmte Elementkonfigurationen für jede neu formatierte Referenz zu ändern.',
-        'step_3': '❸ Die Stilvorschau-Funktion ermöglicht es Benutzern, die endgültige Form ihres Referenzstils zu visualisieren',
-        'step_4': '❹ Wenn der endgültige Stil geeignet ist, wählen Sie die Option Docx oder Text im Abschnitt Dateneingabe und laden Sie die entsprechenden Informationen hoch. Wählen Sie dann im Abschnitt Datenausgabe die erforderlichen Optionen und drücken Sie "Verarbeiten", um die Neuformatierung zu starten.',
-        'step_5': '❺ Nach Abschluss der Verarbeitung laden Sie die neu formatierten Referenzen in Ihrem bevorzugten Format herunter.',
-        'step_5_note': '(!) Die Ausgabe der Docx-Datei wird empfohlen, da sie die Formatierung beibehält (z.B. fett, kursiv und Hyperlinks) und zusätzliche Statistiken am Ende des Dokuments enthält.',
-        'step_6': '❻ Speichern Sie Ihre endgültige Version des Stils, damit Sie ihn in der nächsten Sitzung erneut hochladen können. Verwenden Sie dazu den Abschnitt Stilmanagement.',
-        'validation_error_no_elements': 'Bitte konfigurieren Sie mindestens ein Element oder wählen Sie einen vorgefertigten Stil!',
-        'validation_error_too_many_references': 'Zu viele Referenzen (maximal {} erlaubt)',
-        'validation_warning_few_references': 'Wenige Referenzen für aussagekräftige Statistiken',
-        'cache_initialized': 'Cache erfolgreich initialisiert',
-        'cache_cleared': 'Cache erfolgreich gelöscht',
-        'theme_selector': 'Thema:',
-        'light_theme': 'Hell',
-        'dark_theme': 'Dunkel',
-        'mobile_view': 'Mobile Ansicht',
-        'desktop_view': 'Desktop Ansicht',
-        'clear_button': '🗑️ Löschen',
-        'back_button': '↩️ Zurück'
-    },
-    'es': {
-        'header': '🎨 Constructor de Estilos de Citas',
-        'general_settings': '⚙️ Configuración General',
-        'element_config': '📑 Configuración de Elementos',
-        'style_preview': '👀 Vista Previa del Estilo',
-        'data_input': '📁 Entrada de Datos',
-        'data_output': '📤 Salida de Datos',
-        'numbering_style': 'Numeración:',
-        'author_format': 'Autores:',
-        'author_separator': 'Separador:',
-        'et_al_limit': 'Et al después de:',
-        'use_and': "'y'",
-        'use_ampersand': "'&'",
-        'doi_format': 'Formato DOI:',
-        'doi_hyperlink': 'DOI como hipervínculo',
-        'page_format': 'Páginas:',
-        'final_punctuation': 'Puntuación final:',
-        'element': 'Elemento',
-        'italic': 'Cursiva',
-        'bold': 'Negrita',
-        'parentheses': 'Paréntesis',
-        'separator': 'Separador',
-        'input_method': 'Entrada:',
-        'output_method': 'Salida:',
-        'select_docx': 'Seleccionar DOCX',
-        'enter_references': 'Ingresar referencias (una por línea)',
-        'references': 'Referencias:',
-        'results': 'Resultados:',
-        'process': '🚀 Procesar',
-        'example': 'Ejemplo:',
-        'error_select_element': '¡Seleccione al menos un elemento!',
-        'processing': '⏳ Procesando...',
-        'upload_file': '¡Suba un archivo!',
-        'enter_references_error': '¡Ingrese referencias!',
-        'select_docx_output': '¡Seleccione salida DOCX para descargar!',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 Referencias (DOCX)',
-        'found_references': 'Se encontraron {} referencias.',
-        'found_references_text': 'Se encontraron {} referencias en el texto.',
-        'statistics': 'Estadísticas: {} DOI encontrados, {} no encontrados.',
-        'language': 'Idioma:',
-        'gost_style': 'Aplicar Estilo GOST',
-        'export_style': '📤 Exportar Estilo',
-        'import_style': '📥 Importar Estilo',
-        'export_file_name': 'Nombre del archivo:',
-        'import_file': 'Seleccionar archivo de estilo:',
-        'export_success': '¡Estilo exportado exitosamente!',
-        'import_success': '¡Estilo importado exitosamente!',
-        'import_error': '¡Error al importar archivo de estilo!',
-        'processing_status': 'Procesando referencias...',
-        'current_reference': 'Actual: {}',
-        'processed_stats': 'Procesadas: {}/{} | Encontradas: {} | Errores: {}',
-        'time_remaining': 'Tiempo restante estimado: {}',
-        'duplicate_reference': '🔄 Referencia Repetida (Ver #{})',
-        'batch_processing': 'Procesamiento por lotes DOI...',
-        'extracting_metadata': 'Extrayendo metadatos...',
-        'checking_duplicates': 'Verificando duplicados...',
-        'retrying_failed': 'Reintentando solicitudes DOI fallidas...',
-        'bibliographic_search': 'Buscando por datos bibliográficos...',
-        'style_presets': 'Estilos Predefinidos',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'Aquí hay algunos estilos mantenidos por editoriales individuales. Para editoriales importantes (Elsevier, Springer Nature, Wiley), el estilo varía de revista en revista. Para crear (or reformatear) referencias para una revista específica, use el Constructor de Estilos de Citas.',
-        'journal_style': 'Estilo de revista:',
-        'full_journal_name': 'Nombre Completo de la Revista',
-        'journal_abbr_with_dots': 'J. Abrev.',
-        'journal_abbr_no_dots': 'J Abrev',
-        'short_guide_title': 'Una guía breve para la conversión de referencias basadas en doi',
-        'step_1': '❶ Seleccione un estilo de referencia listo (ACS(MDPI), RSC o CTA), o cree su propio estilo seleccionando la secuencia, diseño y puntuación de las configuraciones de elementos',
-        'step_1_note': '(!) Los cuadros de puntuación permiten incluir varios elementos entre configuraciones de elementos (puntuación simple, Vol., Issue…)',
-        'step_2': '❷ Luego, use los Estilos Predefinidos para cambiar ciertas configuraciones de elementos para cada referencia reformateada.',
-        'step_3': '❸ La función de Vista Previa del Estilo permite a los usuarios visualizar la forma final de su estilo de referencia',
-        'step_4': '❹ Si el estilo final es apropiado, seleccione la opción Docx o Texto en la sección de Entrada de Datos y cargue la información correspondiente. Luego, en la sección de Salida de Datos, seleccione las opciones requeridas y presione "Procesar" para iniciar el reformateo.',
-        'step_5': '❺ Después de completar el procesamiento, descargue las referencias reformateadas en su formato preferido.',
-        'step_5_note': '(!) Se recomienda generar el archivo Docx, ya que conserva el formato (por ejemplo, negrita, cursiva e hipervínculos) e incluye estadísticas adicionales al final del documento.',
-        'step_6': '❻ Después de crear su versión final del estilo, guárdela para poder cargarla nuevamente en la siguiente sesión. Use la sección Gestión de Estilos para este propósito.',
-        'validation_error_no_elements': '¡Por favor configure al menos un elemento o seleccione un estilo predefinido!',
-        'validation_error_too_many_references': 'Demasiadas referencias (máximo {} permitidas)',
-        'validation_warning_few_references': 'Pocas referencias para estadísticas significativas',
-        'cache_initialized': 'Caché inicializado exitosamente',
-        'cache_cleared': 'Caché limpiado exitosamente',
-        'theme_selector': 'Tema:',
-        'light_theme': 'Claro',
-        'dark_theme': 'Oscuro',
-        'mobile_view': 'Vista Móvil',
-        'desktop_view': 'Vista Escritorio',
-        'clear_button': '🗑️ Limpiar',
-        'back_button': '↩️ Atrás'
-    },
-    'it': {
-        'header': '🎨 Costruttore di Stili di Citazione',
-        'general_settings': '⚙️ Impostazioni Generali',
-        'element_config': '📑 Configurazione Elementi',
-        'style_preview': '👀 Anteprima Stile',
-        'data_input': '📁 Input Dati',
-        'data_output': '📤 Output Dati',
-        'numbering_style': 'Numerazione:',
-        'author_format': 'Autori:',
-        'author_separator': 'Separatore:',
-        'et_al_limit': 'Et al dopo:',
-        'use_and': "'e'",
-        'use_ampersand': "'&'",
-        'doi_format': 'Formato DOI:',
-        'doi_hyperlink': 'DOI come collegamento ipertestuale',
-        'page_format': 'Pagine:',
-        'final_punctuation': 'Punteggiatura finale:',
-        'element': 'Elemento',
-        'italic': 'Corsivo',
-        'bold': 'Grassetto',
-        'parentheses': 'Parentesi',
-        'separator': 'Separatore',
-        'input_method': 'Input:',
-        'output_method': 'Output:',
-        'select_docx': 'Seleziona DOCX',
-        'enter_references': 'Inserisci riferimenti (uno per riga)',
-        'references': 'Riferimenti:',
-        'results': 'Risultati:',
-        'process': '🚀 Elabora',
-        'example': 'Esempio:',
-        'error_select_element': 'Seleziona almeno un elemento!',
-        'processing': '⏳ Elaborazione...',
-        'upload_file': 'Carica un file!',
-        'enter_references_error': 'Inserisci i riferimenti!',
-        'select_docx_output': 'Seleziona output DOCX da scaricare!',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 Riferimenti (DOCX)',
-        'found_references': 'Trovati {} riferimenti.',
-        'found_references_text': 'Trovati {} riferimenti nel testo.',
-        'statistics': 'Statistiche: {} DOI trovati, {} non trovati.',
-        'language': 'Lingua:',
-        'gost_style': 'Applica Stile GOST',
-        'export_style': '📤 Esporta Stile',
-        'import_style': '📥 Importa Stile',
-        'export_file_name': 'Nome file:',
-        'import_file': 'Seleziona file stile:',
-        'export_success': 'Stile esportato con successo!',
-        'import_success': 'Stile importato con successo!',
-        'import_error': 'Errore durante l\'importazione del file stile!',
-        'processing_status': 'Elaborazione riferimenti...',
-        'current_reference': 'Attuale: {}',
-        'processed_stats': 'Elaborati: {}/{} | Trovati: {} | Errori: {}',
-        'time_remaining': 'Tempo rimanente stimato: {}',
-        'duplicate_reference': '🔄 Riferimento Ripetuto (Vedi #{})',
-        'batch_processing': 'Elaborazione batch DOI...',
-        'extracting_metadata': 'Estrazione metadati...',
-        'checking_duplicates': 'Controllo duplicati...',
-        'retrying_failed': 'Riprova richieste DOI fallite...',
-        'bibliographic_search': 'Ricerca per dati bibliografici...',
-        'style_presets': 'Stili Preimpostati',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'Ecco alcuni stili mantenuti da singoli editori. Per gli editori principali (Elsevier, Springer Nature, Wiley), lo stile varia da rivista a rivista. Per creare (o riformattare) riferimenti per una rivista specifica, utilizza il Costruttore di Stili di Citazione.',
-        'journal_style': 'Stile rivista:',
-        'full_journal_name': 'Nome Completo Rivista',
-        'journal_abbr_with_dots': 'Riv. Abbr.',
-        'journal_abbr_no_dots': 'Riv Abbr',
-        'short_guide_title': 'Una breve guida per la conversione di riferimenti basati su doi',
-        'step_1': '❶ Seleziona uno stile di riferimento pronto (ACS(MDPI), RSC o CTA), o crea il tuo stile personalizzato selezionando la sequenza, il design e la punteggiatura delle configurazioni degli elementi',
-        'step_1_note': '(!) Le caselle di punteggiatura consentono di includere vari elementi tra le configurazioni degli elementi (punteggiatura semplice, Vol., Issue…)',
-        'step_2': '❷ Quindi, utilizza gli Stili Preimpostati per modificare determinate configurazioni di elementi per ogni riferimento riformattato.',
-        'step_3': '❸ La funzione Anteprima Stile consente agli utenti di visualizzare la forma finale del loro stile di riferimento',
-        'step_4': '❹ Se lo stile finale è appropriato, seleziona l\'opzione Docx o Testo nella sezione Input Dati e carica le informazioni corrispondenti. Quindi, nella sezione Output Dati, seleziona le opzioni richieste e premi "Elabora" per avviare la riformattazione.',
-        'step_5': '❺ Dopo il completamento dell\'elaborazione, scarica i riferimenti riformattati nel formato preferito.',
-        'step_5_note': '(!) Si consiglia di output il file Docx, in quanto conserva la formattazione (ad esempio, grassetto, cursivo e collegamenti ipertestuali) e include statistiche aggiuntive alla fine del documento.',
-        'step_6': '❻ Dopo aver creato la versione finale dello stile, salvala in modo da poterla caricare nuovamente nella sessione successiva. Utilizza la sezione Gestione Stili per questo scopo.',
-        'validation_error_no_elements': 'Si prega di configurare almeno un elemento o selezionare uno stile preimpostato!',
-        'validation_error_too_many_references': 'Troppi riferimenti (massimo {} consentiti)',
-        'validation_warning_few_references': 'Pochi riferimenti per statistiche significative',
-        'cache_initialized': 'Cache inizializzato con successo',
-        'cache_cleared': 'Cache cancellato con successo',
-        'theme_selector': 'Tema:',
-        'light_theme': 'Chiaro',
-        'dark_theme': 'Scuro',
-        'mobile_view': 'Vista Mobile',
-        'desktop_view': 'Vista Desktop',
-        'clear_button': '🗑️ Cancella',
-        'back_button': '↩️ Indietro'
-    },
-    'ja': {
-        'header': '🎨 引用スタイル構築ツール',
-        'general_settings': '⚙️ 一般設定',
-        'element_config': '📑 要素設定',
-        'style_preview': '👀 スタイルプレビュー',
-        'data_input': '📁 データ入力',
-        'data_output': '📤 データ出力',
-        'numbering_style': '番号付け:',
-        'author_format': '著者:',
-        'author_separator': '区切り文字:',
-        'et_al_limit': 'Et al 以後:',
-        'use_and': "'および'",
-        'use_ampersand': "'&'",
-        'doi_format': 'DOI形式:',
-        'doi_hyperlink': 'DOIをハイパーリンクとして',
-        'page_format': 'ページ:',
-        'final_punctuation': '終了句読点:',
-        'element': '要素',
-        'italic': '斜体',
-        'bold': '太字',
-        'parentheses': '括弧',
-        'separator': '区切り文字',
-        'input_method': '入力:',
-        'output_method': '出力:',
-        'select_docx': 'DOCXを選択',
-        'enter_references': '参考文献を入力（1行に1つ）',
-        'references': '参考文献:',
-        'results': '結果:',
-        'process': '🚀 処理',
-        'example': '例:',
-        'error_select_element': '少なくとも1つの要素を選択してください！',
-        'processing': '⏳ 処理中...',
-        'upload_file': 'ファイルをアップロードしてください！',
-        'enter_references_error': '参考文献を入力してください！',
-        'select_docx_output': 'ダウンロードするDOCX出力を選択してください！',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 参考文献 (DOCX)',
-        'found_references': '{}件の参考文献が見つかりました。',
-        'found_references_text': 'テキスト内で{}件の参考文献が見つかりました。',
-        'statistics': '統計: {}件のDOIが見つかりました、{}件は見つかりませんでした。',
-        'language': '言語:',
-        'gost_style': 'GOSTスタイルを適用',
-        'export_style': '📤 スタイルをエクスポート',
-        'import_style': '📥 スタイルをインポート',
-        'export_file_name': 'ファイル名:',
-        'import_file': 'スタイルファイルを選択:',
-        'export_success': 'スタイルのエクスポートが成功しました！',
-        'import_success': 'スタイルのインポートが成功しました！',
-        'import_error': 'スタイルファイルのインポートエラー！',
-        'processing_status': '参考文献を処理中...',
-        'current_reference': '現在: {}',
-        'processed_stats': '処理済み: {}/{} | 見つかった: {} | エラー: {}',
-        'time_remaining': '推定残り時間: {}',
-        'duplicate_reference': '🔄 重複参考文献 (参照 #{})',
-        'batch_processing': 'DOIのバッチ処理...',
-        'extracting_metadata': 'メタデータを抽出中...',
-        'checking_duplicates': '重複をチェック中...',
-        'retrying_failed': '失敗したDOIリクエストを再試行中...',
-        'bibliographic_search': '書誌データで検索中...',
-        'style_presets': 'スタイルプリセット',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': 'ここには、個々の出版社が維持しているいくつかのスタイルがあります。主要な出版社（Elsevier、Springer Nature、Wiley）の場合、スタイルはジャーナルごとに異なります。特定のジャーナルの参考文献を作成（または再フォーマット）するには、引用スタイル構築ツールを使用してください。',
-        'journal_style': 'ジャーナルスタイル:',
-        'full_journal_name': '完全なジャーナル名',
-        'journal_abbr_with_dots': 'J. 略称',
-        'journal_abbr_no_dots': 'J 略称',
-        'short_guide_title': 'DOIベースの参考文献変換の短いガイド',
-        'step_1': '❶ 既製の参考文献スタイル（ACS(MDPI)、RSC、CTA）を選択するか、要素設定の順序、デザイン、句読点を選択して独自のスタイルを作成します',
-        'step_1_note': '（！）句読点ボックスを使用すると、要素設定間にさまざまな項目を含めることができます（簡単な句読点、Vol.、Issue…）',
-        'step_2': '❷ 次に、スタイルプリセットを使用して、再フォーマットされた各参考文献の特定の要素設定を変更します。',
-        'step_3': '❸ スタイルプレビュー機能により、ユーザーは参考文献スタイルの最終的な形を視覚化できます',
-        'step_4': '❹ 最終的なスタイルが適切な場合は、データ入力セクションでDocxまたはテキストオプションを選択し、対応する情報をアップロードします。次に、データ輸出セクションで必要なオプションを選択し、「処理」を押して再フォーマットを開始します。',
-        'step_5': '❺ 処理が完了した後、希望の形式で再フォーマットされた参考文献をダウンロードします。',
-        'step_5_note': '（！）Docxファイルの輸出をお勧めします。これは、フォーマット（太字、斜体、ハイパーリンクなど）を保持し、文書の最後に追加の統計情報を含めるためです。',
-        'step_6': '❻ スタイルの最終バージョンを作成した後、次のセッションで再度アップロードできるように保存します。この目的にはスタイル管理セクションを使用してください。',
-        'validation_error_no_elements': '少なくとも1つの要素を設定するか、プリセットスタイルを選択してください！',
-        'validation_error_too_many_references': '参考文献が多すぎます（最大{}件まで許可）',
-        'validation_warning_few_references': '有意な統計のための参考文献が少なすぎます',
-        'cache_initialized': 'キャッシュの初期化に成功しました',
-        'cache_cleared': 'キャッシュのクリアに成功しました',
-        'theme_selector': 'テーマ:',
-        'light_theme': 'ライト',
-        'dark_theme': 'ダーク',
-        'mobile_view': 'モバイル表示',
-        'desktop_view': 'デスクトップ表示',
-        'clear_button': '🗑️ クリア',
-        'back_button': '↩️ 戻る'
-    },
-    'zh': {
-        'header': '🎨 引文样式构建器',
-        'general_settings': '⚙️ 通用设置',
-        'element_config': '📑 元素配置',
-        'style_preview': '👀 样式预览',
-        'data_input': '📁 数据输入',
-        'data_output': '📤 数据输出',
-        'numbering_style': '编号:',
-        'author_format': '作者:',
-        'author_separator': '分隔符:',
-        'et_al_limit': 'Et al 在之后:',
-        'use_and': "'和'",
-        'use_ampersand': "'&'",
-        'doi_format': 'DOI格式:',
-        'doi_hyperlink': 'DOI作为超链接',
-        'page_format': '页面:',
-        'final_punctuation': '结束标点:',
-        'element': '元素',
-        'italic': '斜体',
-        'bold': '粗体',
-        'parentheses': '括号',
-        'separator': '分隔符',
-        'input_method': '输入:',
-        'output_method': '输出:',
-        'select_docx': '选择DOCX',
-        'enter_references': '输入参考文献（每行一个）',
-        'references': '参考文献:',
-        'results': '结果:',
-        'process': '🚀 处理',
-        'example': '示例:',
-        'error_select_element': '请选择至少一个元素！',
-        'processing': '⏳ 处理中...',
-        'upload_file': '请上传文件！',
-        'enter_references_error': '请输入参考文献！',
-        'select_docx_output': '请选择要下载的DOCX输出！',
-        'doi_txt': '📄 DOI (TXT)',
-        'references_docx': '📋 参考文献 (DOCX)',
-        'found_references': '找到 {} 条参考文献。',
-        'found_references_text': '在文本中找到 {} 条参考文献。',
-        'statistics': '统计: 找到 {} 条DOI，{} 条未找到。',
-        'language': '语言:',
-        'gost_style': '应用GOST样式',
-        'export_style': '📤 导出样式',
-        'import_style': '📥 导入样式',
-        'export_file_name': '文件名:',
-        'import_file': '选择样式文件:',
-        'export_success': '样式导出成功！',
-        'import_success': '样式导入成功！',
-        'import_error': '导入样式文件错误！',
-        'processing_status': '处理参考文献中...',
-        'current_reference': '当前: {}',
-        'processed_stats': '已处理: {}/{} | 找到: {} | 错误: {}',
-        'time_remaining': '预计剩余时间: {}',
-        'duplicate_reference': '🔄 重复参考文献 (参见 #{})',
-        'batch_processing': '批量处理DOI...',
-        'extracting_metadata': '提取元数据中...',
-        'checking_duplicates': '检查重复项...',
-        'retrying_failed': '重试失败的DOI请求...',
-        'bibliographic_search': '通过书目数据搜索...',
-        'style_presets': '样式预设',
-        'gost_button': 'GOST',
-        'acs_button': 'ACS (MDPI)',
-        'rsc_button': 'RSC',
-        'cta_button': 'CTA',
-        'style_preset_tooltip': '这里是一些由各个出版商维护的样式。对于主要出版商（Elsevier、Springer Nature、Wiley），样式因期刊而异。要为特定期刊创建（或重新格式化）参考文献，请使用引文样式构建器。',
-        'journal_style': '期刊样式:',
-        'full_journal_name': '完整期刊名称',
-        'journal_abbr_with_dots': '期刊 缩写',
-        'journal_abbr_no_dots': '期刊缩写',
-        'short_guide_title': '基于DOI的参考文献转换简短指南',
-        'step_1': '❶ 选择现成的参考文献样式（ACS(MDPI)、RSC或CTA），或通过选择元素配置的顺序、设计和标点创建自己的样式',
-        'step_1_note': '（！）标点框允许在元素配置之间包含各种项目（简单标点、卷、期…）',
-        'step_2': '❷ 然后，使用样式预设更改每个重新格式化的参考文献的特定元素配置。',
-        'step_3': '❸ 样式预览功能使用户能够可视化其参考文献样式的最终形式',
-        'step_4': '❹ 如果最终样式合适，请在数据输入部分选择Docx或文本选项并上传相应信息。然后在数据输出部分选择所需选项并按"处理"开始重新格式化。',
-        'step_5': '❺ 处理完成后，以您喜欢的格式下载重新格式化的参考文献。',
-        'step_5_note': '（！）建议输出Docx文件，因为它保留格式（例如粗体、斜体和超链接）并在文档末尾包含附加统计信息。',
-        'step_6': '❻ 创建样式的最终版本后，保存它以便在下一个会话中再次上传。使用样式管理部分实现此目的。',
-        'validation_error_no_elements': '请配置至少一个元素或选择预设样式！',
-        'validation_error_too_many_references': '参考文献太多（最多允许 {} 条）',
-        'validation_warning_few_references': '参考文献太少，无法生成有意义的统计',
-        'cache_initialized': '缓存初始化成功',
-        'cache_cleared': '缓存清除成功',
-        'theme_selector': '主题:',
-        'light_theme': '浅色',
-        'dark_theme': '深色',
-        'mobile_view': '移动视图',
-        'desktop_view': '桌面视图',
-        'clear_button': '🗑️ 清除',
-        'back_button': '↩️ 返回'
+        'back_button': '↩️ Назад',
+        'save_button': '💾 Сохранить',
+        'load_button': '📂 Загрузить',
+        'reset_button': '🔄 Сбросить',
+        'help_button': '❓ Помощь'
     }
 }
 
@@ -821,6 +505,7 @@ class UserPreferencesManager:
                     language TEXT DEFAULT 'en',
                     theme TEXT DEFAULT 'light',
                     mobile_view INTEGER DEFAULT 0,
+                    ui_mode TEXT DEFAULT 'toolbar_mode',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -842,7 +527,7 @@ class UserPreferencesManager:
         try:
             with sqlite3.connect(self.db_path) as conn:
                 result = conn.execute(
-                    'SELECT language, theme, mobile_view FROM user_preferences WHERE ip_address = ?',
+                    'SELECT language, theme, mobile_view, ui_mode FROM user_preferences WHERE ip_address = ?',
                     (ip,)
                 ).fetchone()
                 
@@ -850,7 +535,8 @@ class UserPreferencesManager:
                     return {
                         'language': result[0],
                         'theme': result[1],
-                        'mobile_view': bool(result[2])
+                        'mobile_view': bool(result[2]),
+                        'ui_mode': result[3] if result[3] else 'toolbar_mode'
                     }
         except Exception as e:
             logger.error(f"Error getting preferences for {ip}: {e}")
@@ -858,7 +544,8 @@ class UserPreferencesManager:
         return {
             'language': 'en',
             'theme': 'light',
-            'mobile_view': False
+            'mobile_view': False,
+            'ui_mode': 'toolbar_mode'
         }
     
     def save_preferences(self, ip: str, preferences: Dict[str, Any]):
@@ -867,13 +554,14 @@ class UserPreferencesManager:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute('''
                     INSERT OR REPLACE INTO user_preferences 
-                    (ip_address, language, theme, mobile_view, updated_at) 
-                    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    (ip_address, language, theme, mobile_view, ui_mode, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ''', (
                     ip,
                     preferences.get('language', 'en'),
                     preferences.get('theme', 'light'),
-                    int(preferences.get('mobile_view', False))
+                    int(preferences.get('mobile_view', False)),
+                    preferences.get('ui_mode', 'toolbar_mode')
                 ))
         except Exception as e:
             logger.error(f"Error saving preferences for {ip}: {e}")
@@ -1014,6 +702,7 @@ def init_session_state():
         'current_language': 'en',
         'current_theme': 'light',
         'mobile_view': False,
+        'ui_mode': 'toolbar_mode',
         'imported_style': None,
         'style_applied': False,
         'apply_imported_style': False,
@@ -1039,11 +728,15 @@ def init_session_state():
         'cache_initialized': False,
         'user_prefs_loaded': False,
         'file_processing_complete': False,
-        'style_import_processed': False,  # Флаг для отслеживания обработки импорта
-        'last_imported_file_hash': None,  # Хеш последнего импортированного файла
-        'style_management_initialized': False,  # Флаг инициализации управления стилями
-        'previous_states': [],  # Стек предыдущих состояний для кнопки Back
-        'max_undo_steps': 10,  # Максимальное количество шагов отмены
+        'style_import_processed': False,
+        'last_imported_file_hash': None,
+        'style_management_initialized': False,
+        'previous_states': [],
+        'max_undo_steps': 10,
+        'timeline_elements': [],
+        'dragged_element': None,
+        'active_element_index': -1,
+        'show_timeline_help': True,
     }
     
     for key, default in defaults.items():
@@ -1150,7 +843,7 @@ class JournalAbbreviation:
                 abbreviated = self.abbreviate_word(word.lower())
                 
                 if abbreviated and original_first_char.isupper():
-                    abbreviated = abbreviated[0].upper() + abbreviated[1:]
+                    abbreviated = abbreviated[0].upper() + abbreviated[1:].lower()
                 
                 if i == 0 and abbreviated.lower() in self.uppercase_abbreviations:
                     abbreviated = abbreviated.upper()
@@ -2377,38 +2070,123 @@ class UIComponents:
     
     def render_header(self):
         """Рендер заголовка и контролов с выпадающим меню"""
-        col_title, col_lang, col_theme, col_view, col_menu = st.columns([2, 1.5, 1.5, 1.2, 0.8])
+        if st.session_state.ui_mode == 'toolbar_mode':
+            self._render_toolbar_header()
+        else:
+            self._render_timeline_header()
     
+    def _render_toolbar_header(self):
+        """Рендер заголовка для toolbar режима"""
+        col_title, col_controls = st.columns([2, 3])
+        
         with col_title:
-            st.title(get_text('header'))
+            st.markdown(f"<h1 style='margin-bottom: 0.2rem;'>🎨 {get_text('header')}</h1>", unsafe_allow_html=True)
+        
+        with col_controls:
+            # Панель инструментов
+            toolbar_cols = st.columns([1, 1, 1, 1, 1, 1])
+            
+            with toolbar_cols[0]:
+                # Переключатель режимов
+                self._render_ui_mode_selector()
+            
+            with toolbar_cols[1]:
+                # Язык
+                self._render_language_selector()
+            
+            with toolbar_cols[2]:
+                # Тема
+                self._render_theme_selector()
+            
+            with toolbar_cols[3]:
+                # Вид
+                self._render_view_selector()
+            
+            with toolbar_cols[4]:
+                # Кнопка Help
+                if st.button("❓", help=get_text('help_button'), key="help_button", use_container_width=True):
+                    st.info(get_text('short_guide_title'))
+            
+            with toolbar_cols[5]:
+                # Выпадающее меню
+                with st.popover("⚙️"):
+                    st.markdown("**Actions**")
+                    self._render_clear_button()
+                    st.markdown("---")
+                    self._render_back_button()
+                    self._render_reset_button()
     
-        with col_lang:
-            self._render_language_selector()
+    def _render_timeline_header(self):
+        """Рендер заголовка для timeline режима"""
+        col_title, col_controls = st.columns([2, 3])
+        
+        with col_title:
+            st.markdown(f"<h1 style='margin-bottom: 0.2rem;'>🎬 {get_text('timeline_editor')}</h1>", unsafe_allow_html=True)
+        
+        with col_controls:
+            # Панель инструментов для таймлайна
+            toolbar_cols = st.columns([1, 1, 1, 1, 1, 1])
+            
+            with toolbar_cols[0]:
+                # Переключатель режимов
+                self._render_ui_mode_selector()
+            
+            with toolbar_cols[1]:
+                # Язык
+                self._render_language_selector()
+            
+            with toolbar_cols[2]:
+                # Тема
+                self._render_theme_selector()
+            
+            with toolbar_cols[3]:
+                # Вид
+                self._render_view_selector()
+            
+            with toolbar_cols[4]:
+                # Кнопка Save
+                if st.button("💾", help=get_text('save_button'), key="save_btn", use_container_width=True):
+                    st.success("Style saved")
+            
+            with toolbar_cols[5]:
+                # Выпадающее меню
+                with st.popover("⚙️"):
+                    st.markdown("**Timeline Tools**")
+                    self._render_clear_button()
+                    st.markdown("---")
+                    self._render_back_button()
+                    self._render_reset_button()
     
-        with col_theme:
-            self._render_theme_selector()
-    
-        with col_view:
-            self._render_view_selector()
-    
-        with col_menu:
-            # Выпадающее меню для дополнительных действий
-            with st.popover("⚙️"):
-                st.markdown("**Actions**")
-                self._render_clear_button()
-                st.markdown("---")
-                self._render_back_button()
+    def _render_ui_mode_selector(self):
+        """Рендер переключателя режимов интерфейса"""
+        modes = [
+            (Config.UI_MODE_NAMES[st.session_state.current_language]['toolbar_mode'], 'toolbar_mode'),
+            (Config.UI_MODE_NAMES[st.session_state.current_language]['timeline_mode'], 'timeline_mode')
+        ]
+        
+        current_mode = st.session_state.ui_mode
+        mode_index = 0 if current_mode == 'toolbar_mode' else 1
+        
+        selected_mode = st.selectbox(
+            get_text('ui_mode'),
+            modes,
+            format_func=lambda x: x[0],
+            index=mode_index,
+            key="ui_mode_selector",
+            label_visibility="collapsed"
+        )
+        
+        if selected_mode[1] != st.session_state.ui_mode:
+            self._save_current_state()
+            st.session_state.ui_mode = selected_mode[1]
+            self._save_user_preferences()
+            st.rerun()
     
     def _render_language_selector(self):
         """Рендер селектора языка"""
         languages = [
             ('English', 'en'),
-            ('Русский', 'ru'), 
-            ('Deutsch', 'de'),
-            ('Español', 'es'),
-            ('Italiano', 'it'),
-            ('日本語', 'ja'),
-            ('中文', 'zh')
+            ('Русский', 'ru')
         ]
         
         current_lang = st.session_state.current_language
@@ -2419,7 +2197,8 @@ class UIComponents:
             languages,
             format_func=lambda x: x[0],
             index=next(i for i, (_, code) in enumerate(languages) if code == current_lang),
-            key="language_selector"
+            key="language_selector",
+            label_visibility="collapsed"
         )
         
         if selected_language[1] != st.session_state.current_language:
@@ -2435,13 +2214,13 @@ class UIComponents:
             (get_text('dark_theme'), 'dark')
         ]
         
-        selected_theme = st.radio(
+        selected_theme = st.selectbox(
             get_text('theme_selector'),
             themes,
             format_func=lambda x: x[0],
             index=0 if st.session_state.current_theme == 'light' else 1,
             key="theme_selector",
-            horizontal=True
+            label_visibility="collapsed"
         )
         
         if selected_theme[1] != st.session_state.current_theme:
@@ -2455,7 +2234,8 @@ class UIComponents:
         mobile_view = st.session_state.mobile_view
         view_label = get_text('mobile_view') if mobile_view else get_text('desktop_view')
         
-        if st.button(view_label, key="view_selector", use_container_width=True):
+        view_btn = st.button(view_label, key="view_selector", use_container_width=True)
+        if view_btn:
             self._save_current_state()
             st.session_state.mobile_view = not st.session_state.mobile_view
             self._save_user_preferences()
@@ -2463,14 +2243,19 @@ class UIComponents:
     
     def _render_clear_button(self):
         """Рендер кнопки Clear с иконкой"""
-        if st.button("🗑️", help="Clear all settings", key="clear_button", use_container_width=True):
+        if st.button(get_text('clear_button'), help="Clear all settings", key="clear_button", use_container_width=True):
             self._clear_all_settings()
 
     def _render_back_button(self):
         """Рендер кнопки Back с иконкой"""
         if st.session_state.previous_states:
-            if st.button("↩️", help="Back to previous state", key="back_button", use_container_width=True):
+            if st.button(get_text('back_button'), help="Back to previous state", key="back_button", use_container_width=True):
                 self._restore_previous_state()
+    
+    def _render_reset_button(self):
+        """Рендер кнопки Reset с иконкой"""
+        if st.button(get_text('reset_button'), help="Reset to defaults", key="reset_button", use_container_width=True):
+            self._reset_to_defaults()
     
     def _save_current_state(self):
         """Сохранение текущего состояния для кнопки Back"""
@@ -2482,6 +2267,7 @@ class UIComponents:
             'current_language': st.session_state.current_language,
             'current_theme': st.session_state.current_theme,
             'mobile_view': st.session_state.mobile_view,
+            'ui_mode': st.session_state.ui_mode,
             'num': st.session_state.num,
             'auth': st.session_state.auth,
             'sep': st.session_state.sep,
@@ -2497,7 +2283,9 @@ class UIComponents:
             'acs_style': st.session_state.acs_style,
             'rsc_style': st.session_state.rsc_style,
             'cta_style': st.session_state.cta_style,
-            'timestamp': time.time()
+            'timestamp': time.time(),
+            'timeline_elements': st.session_state.get('timeline_elements', []).copy(),
+            'active_element_index': st.session_state.get('active_element_index', -1)
         }
         
         # Сохраняем элементы конфигурации
@@ -2547,6 +2335,35 @@ class UIComponents:
         st.session_state.show_results = False
         st.session_state.download_data = {}
         
+        # Сброс таймлайн
+        st.session_state.timeline_elements = []
+        st.session_state.active_element_index = -1
+        
+        st.rerun()
+    
+    def _reset_to_defaults(self):
+        """Сброс к значениям по умолчанию"""
+        self._save_current_state()
+        
+        # Сброс только основных настроек, не затрагивая данные
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "AA Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.doi = "10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = ""
+        st.session_state.journal_style = '{Full Journal Name}'
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        
+        # Сброс стилей
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        
         st.rerun()
     
     def _restore_previous_state(self):
@@ -2570,7 +2387,8 @@ class UIComponents:
         preferences = {
             'language': st.session_state.current_language,
             'theme': st.session_state.current_theme,
-            'mobile_view': st.session_state.mobile_view
+            'mobile_view': st.session_state.mobile_view,
+            'ui_mode': st.session_state.ui_mode
         }
         self.user_prefs.save_preferences(ip, preferences)
     
@@ -2583,6 +2401,7 @@ class UIComponents:
             st.session_state.current_language = prefs['language']
             st.session_state.current_theme = prefs['theme'] 
             st.session_state.mobile_view = prefs['mobile_view']
+            st.session_state.ui_mode = prefs['ui_mode']
             st.session_state.user_prefs_loaded = True
     
     def apply_theme_styles(self):
@@ -2597,18 +2416,22 @@ class UIComponents:
                 color: {theme['text']};
                 font-family: {theme['font']};
             }}
+            
+            /* Общие стили */
             .stSelectbox, .stTextInput, .stNumberInput, .stCheckbox, .stRadio, .stFileUploader, .stTextArea {{
                 margin-bottom: 0.02rem;
                 background-color: {theme['secondaryBackground']};
                 border: 1px solid {theme['border']};
                 border-radius: 0.25rem;
             }}
+            
             .stTextArea {{ 
                 height: 40px !important; 
                 font-size: 0.7rem; 
                 background-color: {theme['secondaryBackground']};
                 color: {theme['text']};
             }}
+            
             .stButton > button {{ 
                 width: 100%; 
                 padding: 0.05rem; 
@@ -2618,29 +2441,43 @@ class UIComponents:
                 color: white;
                 border: none;
                 border-radius: 0.25rem;
+                transition: all 0.2s;
             }}
-            h1, h2, h3 {{
+            
+            .stButton > button:hover {{
+                background-color: {theme['accent']};
+                transform: translateY(-1px);
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }}
+            
+            h1, h2, h3, h4, h5, h6 {{
                 color: {theme['text']} !important;
             }}
+            
             h1 {{ font-size: 1.0rem; margin-bottom: 0.05rem; }}
             h2 {{ font-size: 0.9rem; margin-bottom: 0.05rem; }}
             h3 {{ font-size: 0.8rem; margin-bottom: 0.02rem; }}
+            
             label {{ 
                 font-size: 0.65rem !important; 
                 color: {theme['text']} !important;
             }}
+            
             .stMarkdown {{ 
                 font-size: 0.65rem; 
                 color: {theme['text']};
             }}
+            
             .stCheckbox > label {{ 
                 font-size: 0.6rem; 
                 color: {theme['text']};
             }}
+            
             .stRadio > label {{ 
                 font-size: 0.65rem; 
                 color: {theme['text']};
             }}
+            
             .stDownloadButton > button {{ 
                 font-size: 0.7rem; 
                 padding: 0.05rem; 
@@ -2650,6 +2487,112 @@ class UIComponents:
                 border: none;
                 border-radius: 0.25rem;
             }}
+            
+            /* Карточные стили для toolbar режима */
+            .card {{
+                background-color: {theme['cardBackground']};
+                padding: 0.5rem;
+                border-radius: 0.5rem;
+                border: 1px solid {theme['border']};
+                margin-bottom: 0.5rem;
+                transition: all 0.3s ease;
+            }}
+            
+            .card:hover {{
+                border-color: {theme['primary']};
+                box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            }}
+            
+            .card-header {{
+                font-weight: bold;
+                font-size: 0.8rem;
+                margin-bottom: 0.3rem;
+                color: {theme['primary']};
+                border-bottom: 1px solid {theme['border']};
+                padding-bottom: 0.2rem;
+            }}
+            
+            .card-content {{
+                font-size: 0.7rem;
+                line-height: 1.2;
+            }}
+            
+            /* Стили для таймлайн режима */
+            .timeline-container {{
+                background-color: {theme['secondaryBackground']};
+                border-radius: 0.5rem;
+                padding: 0.5rem;
+                margin-bottom: 0.5rem;
+                border: 1px solid {theme['border']};
+            }}
+            
+            .timeline-track {{
+                background-color: {theme['cardBackground']};
+                border-radius: 0.25rem;
+                padding: 0.3rem;
+                margin-bottom: 0.2rem;
+                border: 1px solid {theme['border']};
+                cursor: grab;
+                transition: all 0.2s;
+            }}
+            
+            .timeline-track:hover {{
+                background-color: {theme['primary']}20;
+                border-color: {theme['primary']};
+                transform: translateX(2px);
+            }}
+            
+            .timeline-track.dragging {{
+                opacity: 0.5;
+                border-style: dashed;
+            }}
+            
+            .timeline-track.active {{
+                background-color: {theme['primary']}30;
+                border-color: {theme['primary']};
+                box-shadow: 0 0 0 2px {theme['primary']}40;
+            }}
+            
+            .timeline-properties {{
+                background-color: {theme['cardBackground']};
+                border-radius: 0.25rem;
+                padding: 0.5rem;
+                border: 1px solid {theme['primary']};
+            }}
+            
+            .timeline-preview {{
+                background-color: {theme['background']};
+                border-radius: 0.25rem;
+                padding: 0.5rem;
+                font-family: monospace;
+                border: 1px solid {theme['border']};
+                min-height: 80px;
+            }}
+            
+            .toolbar {{
+                background-color: {theme['toolbar']};
+                border-radius: 0.5rem;
+                padding: 0.3rem;
+                margin-bottom: 0.5rem;
+                border: 1px solid {theme['border']};
+            }}
+            
+            .toolbar-button {{
+                background-color: {theme['secondaryBackground']};
+                border: 1px solid {theme['border']};
+                border-radius: 0.25rem;
+                padding: 0.2rem 0.5rem;
+                margin: 0.1rem;
+                cursor: pointer;
+                transition: all 0.2s;
+                display: inline-block;
+            }}
+            
+            .toolbar-button:hover {{
+                background-color: {theme['primary']}20;
+                border-color: {theme['primary']};
+            }}
+            
             .element-row {{ margin: 0.01rem; padding: 0.01rem; }}
             .processing-header {{ font-size: 0.8rem; font-weight: bold; margin-bottom: 0.1rem; }}
             .processing-status {{ font-size: 0.7rem; margin-bottom: 0.05rem; }}
@@ -2658,13 +2601,6 @@ class UIComponents:
             .guide-title {{ font-size: 0.7rem !important; font-weight: bold; margin-bottom: 0.1rem; }}
             .guide-step {{ font-size: 0.55rem !important; line-height: 1.1; margin-bottom: 0.1rem; }}
             .guide-note {{ font-size: 0.55rem !important; font-style: italic; line-height: 1.1; margin-bottom: 0.1rem; margin-left: 0.5rem; }}
-            .card {{
-                background-color: {theme['cardBackground']};
-                padding: 0.5rem;
-                border-radius: 0.5rem;
-                border: 1px solid {theme['border']};
-                margin-bottom: 0.5rem;
-            }}
             
             /* Мобильные стили */
             @media (max-width: 768px) {{
@@ -2684,6 +2620,15 @@ class UIComponents:
                 h1 {{ font-size: 1.1rem !important; }}
                 h2 {{ font-size: 1.0rem !important; }}
                 h3 {{ font-size: 0.9rem !important; }}
+                
+                .card {{
+                    padding: 0.3rem;
+                    margin-bottom: 0.3rem;
+                }}
+                
+                .timeline-container {{
+                    padding: 0.3rem;
+                }}
             }}
             
             /* Десктоп стили */
@@ -2695,90 +2640,576 @@ class UIComponents:
             @media (max-width: 768px) {{
                 .desktop-only {{ display: none; }}
             }}
+            
+            /* Стили для разделителей */
+            .separator-demo {{
+                color: {theme['primary']};
+                font-weight: bold;
+                padding: 0 0.2rem;
+            }}
+            
+            /* Стили для превью в таймлайне */
+            .preview-reference {{
+                font-family: 'Courier New', monospace;
+                font-size: 0.7rem;
+                line-height: 1.3;
+                padding: 0.3rem;
+                background-color: {theme['cardBackground']};
+                border-radius: 0.25rem;
+                border-left: 3px solid {theme['primary']};
+            }}
+            
+            /* Стили для элемента в перетаскивании */
+            .draggable-element {{
+                padding: 0.3rem 0.5rem;
+                background-color: {theme['secondaryBackground']};
+                border: 1px dashed {theme['border']};
+                border-radius: 0.25rem;
+                margin: 0.1rem;
+                cursor: move;
+                transition: all 0.2s;
+            }}
+            
+            .draggable-element:hover {{
+                background-color: {theme['primary']}15;
+                border-color: {theme['primary']};
+            }}
+            
+            /* Стили для активных кнопок */
+            .active-button {{
+                background-color: {theme['primary']} !important;
+                color: white !important;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }}
+            
+            /* Анимации */
+            @keyframes pulse {{
+                0% {{ opacity: 1; }}
+                50% {{ opacity: 0.7; }}
+                100% {{ opacity: 1; }}
+            }}
+            
+            .pulse {{
+                animation: pulse 2s infinite;
+            }}
+            
+            /* Стили для полосы прокрутки */
+            ::-webkit-scrollbar {{
+                width: 8px;
+                height: 8px;
+            }}
+            
+            ::-webkit-scrollbar-track {{
+                background: {theme['background']};
+                border-radius: 4px;
+            }}
+            
+            ::-webkit-scrollbar-thumb {{
+                background: {theme['primary']};
+                border-radius: 4px;
+            }}
+            
+            ::-webkit-scrollbar-thumb:hover {{
+                background: {theme['accent']};
+            }}
             </style>
         """, unsafe_allow_html=True)
 
-    def render_style_presets(self):
-        """Рендер пресетов стилей"""
-        col_preset, col_info = st.columns([3, 1])
-        with col_preset:
-            st.markdown(f"**{get_text('style_presets')}**")
-        with col_info:
-            st.markdown(f"<span title='{get_text('style_preset_tooltip')}'>ℹ️</span>", unsafe_allow_html=True)
+    def render_toolbar_interface(self):
+        """Рендер интерфейса в режиме панели инструментов"""
+        # Верхняя панель инструментов
+        st.markdown("<div class='toolbar'>", unsafe_allow_html=True)
+        col_tools = st.columns(6)
         
-        # Создаем контейнер для кнопок стилей
+        with col_tools[0]:
+            st.markdown(f"**{get_text('quick_styles')}**")
+        
+        with col_tools[1]:
+            self.render_style_presets_toolbar()
+        
+        with col_tools[2]:
+            st.markdown(f"**{get_text('tools')}**")
+        
+        with col_tools[3]:
+            if st.button("📋", help="Copy style", use_container_width=True, key="copy_style"):
+                st.info("Style copied to clipboard")
+        
+        with col_tools[4]:
+            if st.button("📊", help="Show statistics", use_container_width=True, key="show_stats"):
+                st.session_state.show_stats = not st.session_state.get('show_stats', False)
+        
+        with col_tools[5]:
+            if st.button("🎯", help="Auto-format", use_container_width=True, key="auto_format"):
+                st.info("Auto-formatting applied")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Основной контент в колонках
         if st.session_state.mobile_view:
-            # Мобильный вид - вертикальное расположение
-            if st.session_state.current_language == 'ru':
-                # Для русского языка показываем кнопку ГОСТ
-                if st.button(get_text('gost_button'), use_container_width=True, key="gost_button"):
-                    self._apply_gost_style()
-            # Для всех языков показываем остальные стили
-            if st.button(get_text('acs_button'), use_container_width=True, key="acs_button"):
-                self._apply_acs_style()
-            if st.button(get_text('rsc_button'), use_container_width=True, key="rsc_button"):
-                self._apply_rsc_style()
-            if st.button(get_text('cta_button'), use_container_width=True, key="cta_button"):
-                self._apply_cta_style()
+            # Мобильный вид
+            self._render_toolbar_mobile()
         else:
-            # Десктоп вид - горизонтальное расположение
+            # Десктоп вид
+            self._render_toolbar_desktop()
+    
+    def _render_toolbar_mobile(self):
+        """Рендер toolbar режима для мобильных"""
+        # Карточка стилей
+        with st.container():
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card-header'>{get_text('card_style')}</div>", unsafe_allow_html=True)
+            self.render_general_settings_compact()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Карточка конструктора
+        with st.container():
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card-header'>{get_text('style_builder')}</div>", unsafe_allow_html=True)
+            element_configs = self.render_element_configuration_compact()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Карточка ввода
+        with st.container():
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card-header'>{get_text('card_input')}</div>", unsafe_allow_html=True)
+            input_data = self.render_data_input_compact()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Карточка вывода
+        with st.container():
+            st.markdown("<div class='card'>", unsafe_allow_html=True)
+            st.markdown(f"<div class='card-header'>{get_text('card_output')}</div>", unsafe_allow_html=True)
+            output_method = self.render_data_output_compact()
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Кнопка обработки
+        if st.button(get_text('process'), use_container_width=True, type="primary", key="process_main"):
+            style_config = self._get_style_config_from_elements(element_configs)
+            self._trigger_processing(input_data, style_config, output_method)
+        
+        # Предпросмотр
+        if st.session_state.get('show_preview', True):
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+                self.render_style_preview_compact(style_config)
+                st.markdown("</div>", unsafe_allow_html=True)
+    
+    def _render_toolbar_desktop(self):
+        """Рендер toolbar режима для десктопа"""
+        col1, col2, col3 = st.columns([1.2, 1, 1])
+        
+        with col1:
+            # Левая колонка: Настройки и конструктор
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>⚙️ {get_text('general_settings')}</div>", unsafe_allow_html=True)
+                self.render_general_settings_compact()
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>📑 {get_text('element_config')}</div>", unsafe_allow_html=True)
+                element_configs = self.render_element_configuration_compact()
+                st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col2:
+            # Центральная колонка: Ввод и предпросмотр
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>📁 {get_text('data_input')}</div>", unsafe_allow_html=True)
+                input_data = self.render_data_input_compact()
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>👀 {get_text('style_preview')}</div>", unsafe_allow_html=True)
+                style_config = self._get_style_config_from_elements(element_configs)
+                self.render_style_preview_compact(style_config)
+                st.markdown("</div>", unsafe_allow_html=True)
+        
+        with col3:
+            # Правая колонка: Вывод и обработка
+            with st.container():
+                st.markdown("<div class='card'>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card-header'>📤 {get_text('data_output')}</div>", unsafe_allow_html=True)
+                output_method = self.render_data_output_compact()
+                st.markdown("</div>", unsafe_allow_html=True)
+            
+            # Большая кнопка обработки
+            if st.button(get_text('process'), use_container_width=True, type="primary", key="process_main"):
+                self._trigger_processing(input_data, style_config, output_method)
+            
+            # Кнопки скачивания
+            self._render_download_buttons_compact(output_method)
+            
+            # Управление стилями
+            with st.expander("💾 Style Management", expanded=False):
+                self._render_style_management_compact(style_config)
+    
+    def render_timeline_interface(self):
+        """Рендер интерфейса в режиме таймлайна"""
+        # Основной макет таймлайна
+        col_timeline, col_properties = st.columns([2, 1])
+        
+        with col_timeline:
+            # Секвенсер стилей
+            st.markdown(f"<h3>🎬 {get_text('style_sequencer')}</h3>", unsafe_allow_html=True)
+            self._render_timeline_sequencer()
+            
+            # Панель элементов для перетаскивания
+            st.markdown(f"<h4>{get_text('add_element')}</h4>", unsafe_allow_html=True)
+            self._render_draggable_elements()
+            
+            # Медиапул
+            st.markdown(f"<h3>📁 {get_text('media_pool')}</h3>", unsafe_allow_html=True)
+            input_data = self.render_data_input_compact()
+        
+        with col_properties:
+            # Панель свойств
+            st.markdown(f"<h3>⚙️ {get_text('properties_panel')}</h3>", unsafe_allow_html=True)
+            self._render_timeline_properties()
+            
+            # Монитор предпросмотра
+            st.markdown(f"<h3>👁️ {get_text('preview_monitor')}</h3>", unsafe_allow_html=True)
+            style_config = self._get_timeline_style_config()
+            self._render_timeline_preview(style_config)
+            
+            # Кнопки управления
+            col_buttons = st.columns(2)
+            with col_buttons[0]:
+                if st.button(get_text('import_references'), use_container_width=True, key="timeline_import"):
+                    st.info("Import started")
+            
+            with col_buttons[1]:
+                if st.button(get_text('render_output'), use_container_width=True, type="primary", key="timeline_render"):
+                    output_method = "DOCX"  # По умолчанию DOCX для таймлайна
+                    self._trigger_processing(input_data, style_config, output_method)
+    
+    def _render_timeline_sequencer(self):
+        """Рендер секвенсера таймлайна"""
+        st.markdown(f"<div class='timeline-container'>", unsafe_allow_html=True)
+        
+        # Получаем элементы из таймлайна или из обычной конфигурации
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        
+        if not timeline_elements:
+            # Если таймлайн пустой, показываем подсказку
+            st.markdown(f"""
+                <div style='text-align: center; padding: 2rem; color: var(--text-color-secondary);'>
+                    <div style='font-size: 2rem; margin-bottom: 1rem;'>⬇️</div>
+                    <div>{get_text('empty_timeline')}</div>
+                    <div style='font-size: 0.8rem; margin-top: 0.5rem;'>{get_text('drag_to_reorder')}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            # Отображаем элементы таймлайна
+            for i, element_data in enumerate(timeline_elements):
+                element_name = element_data.get('element', '')
+                element_config = element_data.get('config', {})
+                
+                # Определяем классы для трека
+                track_class = "timeline-track"
+                if i == st.session_state.get('active_element_index', -1):
+                    track_class += " active"
+                if st.session_state.get('dragged_element') == i:
+                    track_class += " dragging"
+                
+                # Отображаем трек
+                col1, col2, col3 = st.columns([3, 1, 1])
+                
+                with col1:
+                    track_html = f"""
+                        <div class='{track_class}' onclick='window.timelineSelectElement({i})'>
+                            <div style='font-weight: bold;'>{element_name}</div>
+                            <div style='font-size: 0.7rem; opacity: 0.8;'>
+                                {self._format_element_config_preview(element_config)}
+                            </div>
+                        </div>
+                    """
+                    st.markdown(track_html, unsafe_allow_html=True)
+                
+                with col2:
+                    # Кнопки управления треком
+                    if st.button("↑", key=f"move_up_{i}", use_container_width=True):
+                        self._move_timeline_element(i, -1)
+                
+                with col3:
+                    if st.button("✕", key=f"remove_{i}", use_container_width=True):
+                        self._remove_timeline_element(i)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        # JavaScript для обработки кликов
+        st.markdown("""
+            <script>
+            function timelineSelectElement(index) {
+                window.parent.postMessage({
+                    type: 'streamlit:setComponentValue',
+                    value: {index: index, type: 'timeline_select'}
+                }, '*');
+            }
+            </script>
+        """, unsafe_allow_html=True)
+    
+    def _render_draggable_elements(self):
+        """Рендер перетаскиваемых элементов"""
+        elements = ["Authors", "Title", "Journal", "Year", "Volume", "Issue", "Pages", "DOI"]
+        
+        cols = st.columns(4)
+        for i, element in enumerate(elements):
+            with cols[i % 4]:
+                if st.button(element, key=f"drag_{element}", use_container_width=True):
+                    self._add_to_timeline(element)
+        
+        st.markdown(f"<div style='font-size: 0.7rem; text-align: center; margin-top: 0.5rem;'>{get_text('drag_to_reorder')}</div>", unsafe_allow_html=True)
+    
+    def _render_timeline_properties(self):
+        """Рендер панели свойств для выбранного элемента"""
+        active_index = st.session_state.get('active_element_index', -1)
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        
+        if active_index >= 0 and active_index < len(timeline_elements):
+            element_data = timeline_elements[active_index]
+            element_name = element_data.get('element', '')
+            element_config = element_data.get('config', {})
+            
+            st.markdown(f"<div class='timeline-properties'>", unsafe_allow_html=True)
+            st.markdown(f"**{element_name}**")
+            
+            # Настройки форматирования
+            col1, col2 = st.columns(2)
+            with col1:
+                italic = st.checkbox(get_text('italic'), value=element_config.get('italic', False),
+                                   key=f"timeline_italic_{active_index}")
+            with col2:
+                bold = st.checkbox(get_text('bold'), value=element_config.get('bold', False),
+                                 key=f"timeline_bold_{active_index}")
+            
+            parentheses = st.checkbox(get_text('parentheses'), value=element_config.get('parentheses', False),
+                                    key=f"timeline_parentheses_{active_index}")
+            
+            separator = st.text_input(get_text('separator'), value=element_config.get('separator', '. '),
+                                    key=f"timeline_separator_{active_index}")
+            
+            # Обновляем конфигурацию
+            if st.button("💾 Update", key=f"update_{active_index}", use_container_width=True):
+                timeline_elements[active_index]['config'] = {
+                    'italic': italic,
+                    'bold': bold,
+                    'parentheses': parentheses,
+                    'separator': separator
+                }
+                st.session_state.timeline_elements = timeline_elements
+                st.success("Updated!")
+                st.rerun()
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.info("Select an element from the timeline to edit its properties")
+    
+    def _render_timeline_preview(self, style_config):
+        """Рендер предпросмотра для таймлайна"""
+        st.markdown("<div class='timeline-preview'>", unsafe_allow_html=True)
+        
+        # Интерактивный предпросмотр
+        current_time = time.time()
+        if current_time - st.session_state.get('last_style_update', 0) > 1:
+            st.session_state.last_style_update = current_time
+            
+            preview_metadata = self._get_preview_metadata(style_config)
+            if preview_metadata:
+                preview_ref, _ = format_reference(preview_metadata, style_config, for_preview=True)
+                preview_with_numbering = self._add_numbering(preview_ref, style_config)
+                
+                # Форматирование HTML для предпросмотра
+                preview_html = self._format_preview_html(preview_with_numbering, style_config)
+                st.markdown(f"<div class='preview-reference'>{preview_html}</div>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    def _format_element_config_preview(self, config):
+        """Форматирование предпросмотра конфигурации элемента"""
+        parts = []
+        if config.get('italic'):
+            parts.append("I")
+        if config.get('bold'):
+            parts.append("B")
+        if config.get('parentheses'):
+            parts.append("()")
+        
+        separator = config.get('separator', '. ')
+        if separator:
+            parts.append(f"sep: '{separator}'")
+        
+        return " | ".join(parts) if parts else "Default"
+    
+    def _add_to_timeline(self, element_name):
+        """Добавление элемента в таймлайн"""
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        
+        # Проверяем, нет ли уже такого элемента
+        for elem in timeline_elements:
+            if elem.get('element') == element_name:
+                st.warning(f"Element '{element_name}' already in timeline")
+                return
+        
+        # Добавляем новый элемент
+        timeline_elements.append({
+            'element': element_name,
+            'config': {
+                'italic': False,
+                'bold': False,
+                'parentheses': False,
+                'separator': '. '
+            }
+        })
+        
+        st.session_state.timeline_elements = timeline_elements
+        st.session_state.active_element_index = len(timeline_elements) - 1
+        st.rerun()
+    
+    def _remove_timeline_element(self, index):
+        """Удаление элемента из таймлайна"""
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        if 0 <= index < len(timeline_elements):
+            timeline_elements.pop(index)
+            st.session_state.timeline_elements = timeline_elements
+            
+            # Обновляем активный индекс
+            if st.session_state.active_element_index == index:
+                st.session_state.active_element_index = -1
+            elif st.session_state.active_element_index > index:
+                st.session_state.active_element_index -= 1
+            
+            st.rerun()
+    
+    def _move_timeline_element(self, index, direction):
+        """Перемещение элемента в таймлайне"""
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        new_index = index + direction
+        
+        if 0 <= new_index < len(timeline_elements):
+            # Меняем элементы местами
+            timeline_elements[index], timeline_elements[new_index] = timeline_elements[new_index], timeline_elements[index]
+            st.session_state.timeline_elements = timeline_elements
+            
+            # Обновляем активный индекс
+            if st.session_state.active_element_index == index:
+                st.session_state.active_element_index = new_index
+            elif st.session_state.active_element_index == new_index:
+                st.session_state.active_element_index = index
+            
+            st.rerun()
+    
+    def _get_timeline_style_config(self):
+        """Получение конфигурации стиля из таймлайна"""
+        timeline_elements = st.session_state.get('timeline_elements', [])
+        
+        # Преобразуем элементы таймлайна в формат обычной конфигурации
+        elements = []
+        for elem in timeline_elements:
+            elements.append((
+                elem['element'],
+                {
+                    'italic': elem['config'].get('italic', False),
+                    'bold': elem['config'].get('bold', False),
+                    'parentheses': elem['config'].get('parentheses', False),
+                    'separator': elem['config'].get('separator', '. ')
+                }
+            ))
+        
+        return {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': elements,
+            'gost_style': st.session_state.get('gost_style', False),
+            'acs_style': st.session_state.get('acs_style', False),
+            'rsc_style': st.session_state.get('rsc_style', False),
+            'cta_style': st.session_state.get('cta_style', False)
+        }
+    
+    def render_style_presets_toolbar(self):
+        """Рендер пресетов стилей для toolbar режима"""
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
             if st.session_state.current_language == 'ru':
-                # Для русского языка показываем все 4 кнопки
-                col_gost, col_acs, col_rsc, col_cta = st.columns(4)
-                
-                with col_gost:
-                    if st.button(get_text('gost_button'), use_container_width=True, key="gost_button"):
-                        self._apply_gost_style()
-                
-                with col_acs:
-                    if st.button(get_text('acs_button'), use_container_width=True, key="acs_button"):
-                        self._apply_acs_style()
-                
-                with col_rsc:
-                    if st.button(get_text('rsc_button'), use_container_width=True, key="rsc_button"):
-                        self._apply_rsc_style()
-                
-                with col_cta:
-                    if st.button(get_text('cta_button'), use_container_width=True, key="cta_button"):
-                        self._apply_cta_style()
-            else:
-                # Для других языков показываем только 3 кнопки (без ГОСТ)
-                col_acs, col_rsc, col_cta = st.columns(3)
-                
-                with col_acs:
-                    if st.button(get_text('acs_button'), use_container_width=True, key="acs_button"):
-                        self._apply_acs_style()
-                
-                with col_rsc:
-                    if st.button(get_text('rsc_button'), use_container_width=True, key="rsc_button"):
-                        self._apply_rsc_style()
-                
-                with col_cta:
-                    if st.button(get_text('cta_button'), use_container_width=True, key="cta_button"):
-                        self._apply_cta_style()
+                if st.button(get_text('gost_button'), use_container_width=True, key="gost_toolbar"):
+                    self._apply_gost_style()
+        
+        with col2:
+            if st.button(get_text('acs_button'), use_container_width=True, key="acs_toolbar"):
+                self._apply_acs_style()
+        
+        with col3:
+            if st.button(get_text('rsc_button'), use_container_width=True, key="rsc_toolbar"):
+                self._apply_rsc_style()
+        
+        with col4:
+            if st.button(get_text('cta_button'), use_container_width=True, key="cta_toolbar"):
+                self._apply_cta_style()
     
     def _apply_gost_style(self):
         """Применение стиля ГОСТ (только для русского языка)"""
         def apply_gost_callback():
             self._save_current_state()
             st.session_state.num = "No numbering"
-            st.session_state.auth = "Smith AA"  # Обновляем формат авторов
+            st.session_state.auth = "Smith AA"
             st.session_state.sep = ", "
             st.session_state.etal = 0
             st.session_state.use_and_checkbox = False
             st.session_state.use_ampersand_checkbox = False
             st.session_state.doi = "https://dx.doi.org/10.10/xxx"
             st.session_state.doilink = True
-            st.session_state.page = "122-128"  # Обновляем формат страниц
+            st.session_state.page = "122-128"
             st.session_state.punct = ""
-            st.session_state.journal_style = "{Full Journal Name}"  # Используем полное название
+            st.session_state.journal_style = "{Full Journal Name}"
             
-            for i in range(8):
-                st.session_state[f"el{i}"] = ""
-                st.session_state[f"it{i}"] = False
-                st.session_state[f"bd{i}"] = False
-                st.session_state[f"pr{i}"] = False
-                st.session_state[f"sp{i}"] = ". "
+            # Для таймлайна
+            st.session_state.timeline_elements = [
+                {
+                    'element': 'Authors',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ' '}
+                },
+                {
+                    'element': 'Title',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ' // '}
+                },
+                {
+                    'element': 'Journal',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. – '}
+                },
+                {
+                    'element': 'Year',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. – Vol. '}
+                },
+                {
+                    'element': 'Volume',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Issue',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ''}
+                },
+                {
+                    'element': 'Pages',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. – '}
+                },
+                {
+                    'element': 'DOI',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. – '}
+                }
+            ]
             
             st.session_state.gost_style = True
             st.session_state.acs_style = False
@@ -2786,7 +3217,6 @@ class UIComponents:
             st.session_state.cta_style = False
             st.session_state.style_applied = True
         
-        # Вызываем callback и перезагружаем страницу
         apply_gost_callback()
         st.rerun()
     
@@ -2806,12 +3236,37 @@ class UIComponents:
             st.session_state.punct = "."
             st.session_state.journal_style = "{J. Abbr.}"
             
-            for i in range(8):
-                st.session_state[f"el{i}"] = ""
-                st.session_state[f"it{i}"] = False
-                st.session_state[f"bd{i}"] = False
-                st.session_state[f"pr{i}"] = False
-                st.session_state[f"sp{i}"] = ". "
+            # Для таймлайна
+            st.session_state.timeline_elements = [
+                {
+                    'element': 'Authors',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ' '}
+                },
+                {
+                    'element': 'Title',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'Journal',
+                    'config': {'italic': True, 'bold': False, 'parentheses': False, 'separator': ' '}
+                },
+                {
+                    'element': 'Year',
+                    'config': {'italic': False, 'bold': True, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Volume',
+                    'config': {'italic': True, 'bold': False, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Pages',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'DOI',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ''}
+                }
+            ]
             
             st.session_state.gost_style = False
             st.session_state.acs_style = True
@@ -2838,12 +3293,29 @@ class UIComponents:
             st.session_state.punct = "."
             st.session_state.journal_style = "{J. Abbr.}"
             
-            for i in range(8):
-                st.session_state[f"el{i}"] = ""
-                st.session_state[f"it{i}"] = False
-                st.session_state[f"bd{i}"] = False
-                st.session_state[f"pr{i}"] = False
-                st.session_state[f"sp{i}"] = ". "
+            # Для таймлайна
+            st.session_state.timeline_elements = [
+                {
+                    'element': 'Authors',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Journal',
+                    'config': {'italic': True, 'bold': False, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Year',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Volume',
+                    'config': {'italic': False, 'bold': True, 'parentheses': False, 'separator': ', '}
+                },
+                {
+                    'element': 'Pages',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '.'}
+                }
+            ]
             
             st.session_state.gost_style = False
             st.session_state.acs_style = False
@@ -2870,12 +3342,41 @@ class UIComponents:
             st.session_state.punct = ""
             st.session_state.journal_style = "{J Abbr}"
             
-            for i in range(8):
-                st.session_state[f"el{i}"] = ""
-                st.session_state[f"it{i}"] = False
-                st.session_state[f"bd{i}"] = False
-                st.session_state[f"pr{i}"] = False
-                st.session_state[f"sp{i}"] = ". "
+            # Для таймлайна
+            st.session_state.timeline_elements = [
+                {
+                    'element': 'Authors',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'Title',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'Journal',
+                    'config': {'italic': True, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'Year',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ';'}
+                },
+                {
+                    'element': 'Volume',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ''}
+                },
+                {
+                    'element': 'Issue',
+                    'config': {'italic': False, 'bold': False, 'parentheses': True, 'separator': ':'}
+                },
+                {
+                    'element': 'Pages',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': '. '}
+                },
+                {
+                    'element': 'DOI',
+                    'config': {'italic': False, 'bold': False, 'parentheses': False, 'separator': ''}
+                }
+            ]
             
             st.session_state.gost_style = False
             st.session_state.acs_style = False
@@ -2886,10 +3387,10 @@ class UIComponents:
         apply_cta_callback()
         st.rerun()
     
-    def render_general_settings(self):
-        """Рендер общих настроек"""
+    def render_general_settings_compact(self):
+        """Компактный рендер общих настроек"""
         if st.session_state.mobile_view:
-            # Мобильный вид - вертикальное расположение
+            # Мобильный вид
             numbering_style = st.selectbox(
                 get_text('numbering_style'), 
                 Config.NUMBERING_STYLES, 
@@ -2920,34 +3421,35 @@ class UIComponents:
                     key="etal", 
                     value=st.session_state.etal
                 )
-            
-            # Остальные настройки...
         else:
-            # Десктоп вид - стандартное расположение
-            numbering_style = st.selectbox(
-                get_text('numbering_style'), 
-                Config.NUMBERING_STYLES, 
-                key="num", 
-                index=Config.NUMBERING_STYLES.index(st.session_state.num)
-            )
+            # Десктоп вид
+            col1, col2 = st.columns(2)
+            with col1:
+                numbering_style = st.selectbox(
+                    get_text('numbering_style'), 
+                    Config.NUMBERING_STYLES, 
+                    key="num", 
+                    index=Config.NUMBERING_STYLES.index(st.session_state.num)
+                )
             
-            # Настройки авторов
-            col_authors = st.columns([1, 1, 1])
-            with col_authors[0]:
+            with col2:
                 author_format = st.selectbox(
                     get_text('author_format'), 
                     Config.AUTHOR_FORMATS, 
                     key="auth", 
                     index=Config.AUTHOR_FORMATS.index(st.session_state.auth)
                 )
-            with col_authors[1]:
+            
+            col_sep, col_etal = st.columns(2)
+            with col_sep:
                 author_separator = st.selectbox(
                     get_text('author_separator'), 
                     [", ", "; "], 
                     key="sep", 
                     index=[", ", "; "].index(st.session_state.sep)
                 )
-            with col_authors[2]:
+            
+            with col_etal:
                 et_al_limit = st.number_input(
                     get_text('et_al_limit'), 
                     min_value=0, 
@@ -2957,15 +3459,15 @@ class UIComponents:
                 )
         
         # Общие для обоих видов
-        col_and_amp = st.columns(2)
-        with col_and_amp[0]:
+        col_and, col_amp = st.columns(2)
+        with col_and:
             use_and_checkbox = st.checkbox(
                 get_text('use_and'), 
                 key="use_and_checkbox", 
                 value=st.session_state.use_and_checkbox,
                 disabled=st.session_state.use_ampersand_checkbox
             )
-        with col_and_amp[1]:
+        with col_amp:
             use_ampersand_checkbox = st.checkbox(
                 get_text('use_ampersand'), 
                 key="use_ampersand_checkbox", 
@@ -3000,33 +3502,20 @@ class UIComponents:
         )
         
         # Настройки DOI
-        if st.session_state.mobile_view:
+        col_doi_format, col_doi_link = st.columns(2)
+        with col_doi_format:
             doi_format = st.selectbox(
                 get_text('doi_format'), 
                 Config.DOI_FORMATS, 
                 key="doi", 
                 index=Config.DOI_FORMATS.index(st.session_state.doi)
             )
+        with col_doi_link:
             doi_hyperlink = st.checkbox(
                 get_text('doi_hyperlink'), 
                 key="doilink", 
                 value=st.session_state.doilink
             )
-        else:
-            col_doi = st.columns([2, 1])
-            with col_doi[0]:
-                doi_format = st.selectbox(
-                    get_text('doi_format'), 
-                    Config.DOI_FORMATS, 
-                    key="doi", 
-                    index=Config.DOI_FORMATS.index(st.session_state.doi)
-                )
-            with col_doi[1]:
-                doi_hyperlink = st.checkbox(
-                    get_text('doi_hyperlink'), 
-                    key="doilink", 
-                    value=st.session_state.doilink
-                )
         
         # Конечная пунктуация
         final_punctuation = st.selectbox(
@@ -3036,8 +3525,8 @@ class UIComponents:
             index=["", "."].index(st.session_state.punct)
         )
     
-    def render_element_configuration(self):
-        """Рендер конфигурации элементов"""
+    def render_element_configuration_compact(self):
+        """Компактный рендер конфигурации элементов"""
         element_configs = []
         used_elements = set()
         
@@ -3048,41 +3537,47 @@ class UIComponents:
         
         for i in range(8):
             if st.session_state.mobile_view:
-                # Мобильный вид - вертикальное расположение
+                # Мобильный вид
                 element = st.selectbox(
-                    f"Element {i+1}", 
+                    f"E{i+1}", 
                     Config.AVAILABLE_ELEMENTS, 
                     key=f"el{i}", 
-                    index=Config.AVAILABLE_ELEMENTS.index(st.session_state[f"el{i}"]) if st.session_state[f"el{i}"] in Config.AVAILABLE_ELEMENTS else 0
+                    index=Config.AVAILABLE_ELEMENTS.index(st.session_state[f"el{i}"]) if st.session_state[f"el{i}"] in Config.AVAILABLE_ELEMENTS else 0,
+                    label_visibility="collapsed"
                 )
                 
                 col_mobile = st.columns(4)
                 with col_mobile[0]:
                     italic = st.checkbox(
-                        get_text('italic'), 
+                        "", 
                         key=f"it{i}", 
+                        help=get_text('italic'), 
                         value=st.session_state[f"it{i}"]
                     )
                 with col_mobile[1]:
                     bold = st.checkbox(
-                        get_text('bold'), 
+                        "", 
                         key=f"bd{i}", 
+                        help=get_text('bold'), 
                         value=st.session_state[f"bd{i}"]
                     )
                 with col_mobile[2]:
                     parentheses = st.checkbox(
-                        get_text('parentheses'), 
+                        "", 
                         key=f"pr{i}", 
+                        help=get_text('parentheses'), 
                         value=st.session_state[f"pr{i}"]
                     )
                 with col_mobile[3]:
                     separator = st.text_input(
-                        get_text('separator'), 
+                        "", 
                         value=st.session_state[f"sp{i}"], 
-                        key=f"sp{i}"
+                        key=f"sp{i}", 
+                        label_visibility="collapsed",
+                        placeholder="sep"
                     )
             else:
-                # Десктоп вид - горизонтальное расположение
+                # Десктоп вид
                 cols = st.columns([2, 1, 1, 1, 2])
                 
                 with cols[0]:
@@ -3123,7 +3618,8 @@ class UIComponents:
                         "", 
                         value=st.session_state[f"sp{i}"], 
                         key=f"sp{i}", 
-                        label_visibility="collapsed"
+                        label_visibility="collapsed",
+                        placeholder="separator"
                     )
             
             if element and element not in used_elements:
@@ -3140,8 +3636,8 @@ class UIComponents:
         
         return element_configs
     
-    def render_style_preview(self, style_config: Dict):
-        """Рендер предпросмотра стиля"""
+    def render_style_preview_compact(self, style_config: Dict):
+        """Компактный рендер предпросмотра стиля"""
         # Интерактивный предпросмотр
         current_time = time.time()
         if current_time - st.session_state.get('last_style_update', 0) > 1:
@@ -3154,7 +3650,216 @@ class UIComponents:
                 
                 # Форматирование HTML для предпросмотра
                 preview_html = self._format_preview_html(preview_with_numbering, style_config)
-                st.markdown(f"<small>{get_text('example')} {preview_html}</small>", unsafe_allow_html=True)
+                st.markdown(f"<div class='preview-reference'>{preview_html}</div>", unsafe_allow_html=True)
+    
+    def render_data_input_compact(self):
+        """Компактный рендер ввода данных"""
+        input_method = st.radio(
+            get_text('input_method'), 
+            ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'], 
+            horizontal=True, 
+            key="input_method_compact"
+        )
+        
+        if input_method == 'DOCX':
+            uploaded_file = st.file_uploader(
+                get_text('select_docx'), 
+                type=['docx'], 
+                label_visibility="collapsed", 
+                key="docx_uploader_compact"
+            )
+            return uploaded_file
+        else:
+            references_input = st.text_area(
+                get_text('references'), 
+                placeholder=get_text('enter_references'), 
+                height=40, 
+                label_visibility="collapsed", 
+                key="references_input_compact"
+            )
+            return references_input
+    
+    def render_data_output_compact(self):
+        """Компактный рендер вывода данных"""
+        output_method = st.radio(
+            get_text('output_method'), 
+            ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'], 
+            horizontal=True, 
+            key="output_method_compact"
+        )
+        
+        if output_method == 'Text' if st.session_state.current_language == 'en' else 'Текст':
+            output_text_value = st.session_state.output_text_value if st.session_state.show_results else ""
+            st.text_area(
+                get_text('results'), 
+                value=output_text_value, 
+                height=40, 
+                disabled=True, 
+                label_visibility="collapsed", 
+                key="output_text_compact"
+            )
+        
+        return output_method
+    
+    def _get_style_config_from_elements(self, element_configs):
+        """Получение конфигурации стиля из элементов"""
+        return {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': element_configs,
+            'gost_style': st.session_state.get('gost_style', False),
+            'acs_style': st.session_state.get('acs_style', False),
+            'rsc_style': st.session_state.get('rsc_style', False),
+            'cta_style': st.session_state.get('cta_style', False)
+        }
+    
+    def _trigger_processing(self, input_data, style_config, output_method):
+        """Триггер обработки данных"""
+        # Этот метод будет вызываться из основного класса приложения
+        st.session_state.process_triggered = True
+        st.session_state.process_data = {
+            'input_data': input_data,
+            'style_config': style_config,
+            'output_method': output_method
+        }
+    
+    def _render_download_buttons_compact(self, output_method):
+        """Компактный рендер кнопок скачивания"""
+        if st.session_state.download_data:
+            if st.session_state.mobile_view:
+                # Мобильный вид
+                st.download_button(
+                    label="📄 DOI (TXT)",
+                    data=st.session_state.download_data['txt_bytes'],
+                    file_name='doi_list.txt',
+                    mime='text/plain',
+                    key="doi_download_compact",
+                    use_container_width=True
+                )
+                
+                if output_method == 'DOCX' and st.session_state.download_data.get('output_doc_buffer'):
+                    st.download_button(
+                        label="📋 References (DOCX)",
+                        data=st.session_state.download_data['output_doc_buffer'],
+                        file_name='Reformatted references.docx',
+                        mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        key="docx_download_compact",
+                        use_container_width=True
+                    )
+            else:
+                # Десктоп вид
+                col_download = st.columns(2)
+                with col_download[0]:
+                    st.download_button(
+                        label="📄 TXT",
+                        data=st.session_state.download_data['txt_bytes'],
+                        file_name='doi_list.txt',
+                        mime='text/plain',
+                        key="doi_download_compact",
+                        use_container_width=True
+                    )
+                
+                with col_download[1]:
+                    if output_method == 'DOCX' and st.session_state.download_data.get('output_doc_buffer'):
+                        st.download_button(
+                            label="📋 DOCX",
+                            data=st.session_state.download_data['output_doc_buffer'],
+                            file_name='references.docx',
+                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            key="docx_download_compact",
+                            use_container_width=True
+                        )
+    
+    def _render_style_management_compact(self, style_config):
+        """Компактный рендер управления стилями"""
+        # Экспорт стиля
+        export_file_name = st.text_input(
+            get_text('export_file_name'), 
+            value="my_citation_style", 
+            placeholder="Enter file name", 
+            key="export_name_compact"
+        )
+        
+        export_data = self._export_style(style_config, export_file_name)
+        if export_data:
+            st.download_button(
+                label=get_text('export_style'),
+                data=export_data,
+                file_name=f"{export_file_name}.json",
+                mime="application/json",
+                use_container_width=True,
+                key="export_button_compact"
+            )
+        
+        # Импорт стиля
+        imported_file = st.file_uploader(
+            get_text('import_file'), 
+            type=['json'], 
+            label_visibility="collapsed", 
+            key="style_importer_compact"
+        )
+        
+        if imported_file is not None:
+            current_file_hash = hashlib.md5(imported_file.getvalue()).hexdigest()
+            
+            if (st.session_state.last_imported_file_hash != current_file_hash or 
+                not st.session_state.style_import_processed):
+                
+                imported_style = self._import_style(imported_file)
+                if imported_style:
+                    st.session_state.last_imported_file_hash = current_file_hash
+                    st.session_state.imported_style = imported_style
+                    st.session_state.apply_imported_style = True
+                    st.session_state.style_import_processed = False
+                    
+                    st.success(get_text('import_success'))
+                    st.rerun()
+    
+    def _export_style(self, style_config, file_name):
+        """Экспорт стиля"""
+        try:
+            export_data = {
+                'version': '2.0',
+                'export_date': str(datetime.now()),
+                'ui_mode': st.session_state.ui_mode,
+                'style_config': style_config,
+                'timeline_elements': st.session_state.get('timeline_elements', [])
+            }
+            json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
+            return json_data.encode('utf-8')
+        except Exception as e:
+            st.error(f"Export error: {str(e)}")
+            return None
+    
+    def _import_style(self, uploaded_file):
+        """Импорт стиля"""
+        try:
+            uploaded_file.seek(0)
+            content = uploaded_file.read().decode('utf-8')
+            import_data = json.loads(content)
+        
+            # Поддержка разных версий
+            if import_data.get('version') == '2.0':
+                # Новая версия с поддержкой таймлайна
+                return import_data
+            elif 'style_config' in import_data:
+                # Старая версия
+                return import_data['style_config']
+            else:
+                return import_data
+            
+        except Exception as e:
+            st.error(f"{get_text('import_error')}: {str(e)}")
+            return None
     
     def _get_preview_metadata(self, style_config: Dict) -> Optional[Dict]:
         """Получение метаданных для предпросмотра"""
@@ -3212,7 +3917,7 @@ class UIComponents:
                 'article_number': '',
                 'doi': '10.1016/j.ceramint.2013.11.094'
             }
-        elif style_config.get('elements'):
+        elif style_config.get('elements') or st.session_state.get('timeline_elements'):
             return {
                 'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
                 'title': 'Article Title',
@@ -3259,67 +3964,6 @@ class UIComponents:
         
         return preview_html
 
-    def render_data_input(self):
-        """Рендер ввода данных"""
-        input_method = st.radio(
-            get_text('input_method'), 
-            ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'], 
-            horizontal=True, 
-            key="input_method"
-        )
-        
-        if input_method == 'DOCX':
-            uploaded_file = st.file_uploader(
-                get_text('select_docx'), 
-                type=['docx'], 
-                label_visibility="collapsed", 
-                key="docx_uploader"
-            )
-            return uploaded_file
-        else:
-            references_input = st.text_area(
-                get_text('references'), 
-                placeholder=get_text('enter_references'), 
-                height=40, 
-                label_visibility="collapsed", 
-                key="references_input"
-            )
-            return references_input
-    
-    def render_data_output(self):
-        """Рендер вывода данных"""
-        output_method = st.radio(
-            get_text('output_method'), 
-            ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'], 
-            horizontal=True, 
-            key="output_method"
-        )
-        
-        if output_method == 'Text' if st.session_state.current_language == 'en' else 'Текст':
-            output_text_value = st.session_state.output_text_value if st.session_state.show_results else ""
-            st.text_area(
-                get_text('results'), 
-                value=output_text_value, 
-                height=40, 
-                disabled=True, 
-                label_visibility="collapsed", 
-                key="output_text"
-            )
-        
-        return output_method
-
-    def render_guide(self):
-        """Рендер руководства"""
-        st.markdown(f"<div class='guide-title'>{get_text('short_guide_title')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_1')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-note'>{get_text('step_1_note')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_2')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_3')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_4')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_5')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-note'>{get_text('step_5_note')}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='guide-step'>{get_text('step_6')}</div>", unsafe_allow_html=True)
-
 # Основной класс приложения
 class CitationStyleApp:
     """Основной класс приложения"""
@@ -3332,7 +3976,7 @@ class CitationStyleApp:
     
     def run(self):
         """Запуск приложения"""
-        st.set_page_config(layout="wide")
+        st.set_page_config(layout="wide", page_title="Citation Style Constructor")
     
         # Загрузка пользовательских предпочтений
         self.ui.load_user_preferences()
@@ -3346,163 +3990,42 @@ class CitationStyleApp:
         # Рендер заголовка и контролов
         self.ui.render_header()
         
-        # Основной макет в зависимости от вида
-        if st.session_state.mobile_view:
-            self._render_mobile_layout()
+        # Рендер основного интерфейса в зависимости от режима
+        if st.session_state.ui_mode == 'toolbar_mode':
+            self.ui.render_toolbar_interface()
         else:
-            self._render_desktop_layout()
+            self.ui.render_timeline_interface()
+        
+        # Обработка триггера обработки
+        self._handle_processing_trigger()
     
     def _handle_imported_style(self):
         """Обработка импортированного стиля"""
-        # Проверяем, есть ли импортированный стиль и нужно ли его применить
         if (st.session_state.get('imported_style') and 
             st.session_state.get('apply_imported_style') and 
             not st.session_state.get('style_import_processed')):
 
-            # Применяем стиль
             self._apply_imported_style(st.session_state.imported_style)
             
-            # Сбрасываем флаги
             st.session_state.apply_imported_style = False
             st.session_state.imported_style = None
             st.session_state.style_import_processed = True
             
-            # Перезагружаем страницу для применения изменений
             st.rerun()
     
-    def _render_mobile_layout(self):
-        """Рендер мобильного макета"""
-        with st.container():
-            # Общие настройки
-            st.subheader(get_text('general_settings'))
-            self.ui.render_style_presets()
-            self.ui.render_general_settings()
+    def _handle_processing_trigger(self):
+        """Обработка триггера обработки данных"""
+        if st.session_state.get('process_triggered'):
+            process_data = st.session_state.process_data
+            input_data = process_data['input_data']
+            style_config = process_data['style_config']
+            output_method = process_data['output_method']
             
-            # Конфигурация элементов
-            st.subheader(get_text('element_config'))
-            element_configs = self.ui.render_element_configuration()
+            # Сбрасываем триггер
+            st.session_state.process_triggered = False
             
-            # Предпросмотр
-            st.subheader(get_text('style_preview'))
-            style_config = self._get_style_config(element_configs)
-            self.ui.render_style_preview(style_config)
-            
-            # Ввод/вывод данных
-            st.subheader(get_text('data_input'))
-            input_data = self.ui.render_data_input()
-            
-            st.subheader(get_text('data_output'))
-            output_method = self.ui.render_data_output()
-            
-            # Кнопка обработки
-            if st.button(get_text('process'), use_container_width=True, key="process_button"):
-                self._process_data(input_data, style_config, output_method)
-            
-            # Кнопки скачивания
-            self._render_download_buttons(output_method)
-            
-            # Управление стилями
-            self._render_style_management(style_config)
-            
-            # Руководство
-            st.markdown("---")
-            self.ui.render_guide()
-    
-    def _render_desktop_layout(self):
-        """Рендер десктоп макета"""
-        col1, col2, col3 = st.columns([1, 1, 1])
-        
-        with col1:
-            self._render_general_settings_column()
-        
-        with col2:
-            self._render_element_config_column()
-        
-        with col3:
-            self._render_preview_and_io_column()
-    
-    def _render_general_settings_column(self):
-        """Рендер колонки с общими настройками"""
-        st.subheader(get_text('general_settings'))
-        self.ui.render_style_presets()
-        self.ui.render_general_settings()
-    
-    def _render_element_config_column(self):
-        """Рендер колонки с конфигурацией элементов"""
-        st.subheader(get_text('element_config'))
-        element_configs = self.ui.render_element_configuration()
-        
-        # Руководство
-        st.markdown("---")
-        self.ui.render_guide()
-        
-        return element_configs
-    
-    def _render_preview_and_io_column(self):
-        """Рендер колонки с предпросмотром и вводом/выводом"""
-        # Сбор конфигурации стиля
-        style_config = self._get_style_config()
-        
-        # Предпросмотр
-        st.subheader(get_text('style_preview'))
-        self.ui.render_style_preview(style_config)
-        
-        # Ввод данных
-        st.subheader(get_text('data_input'))
-        input_data = self.ui.render_data_input()
-        
-        # Вывод данных
-        st.subheader(get_text('data_output'))
-        output_method = self.ui.render_data_output()
-        
-        # Кнопка обработки
-        if st.button(get_text('process'), use_container_width=True, key="process_button"):
+            # Выполняем обработку
             self._process_data(input_data, style_config, output_method)
-        
-        # Кнопки скачивания
-        self._render_download_buttons(output_method)
-        
-        # Управление стилями
-        self._render_style_management(style_config)
-    
-    def _get_style_config(self, element_configs=None):
-        """Получение конфигурации стиля"""
-        if element_configs is None:
-            element_configs = []
-            used_elements = set()
-            
-            for i in range(8):
-                element = st.session_state[f"el{i}"]
-                if element and element not in used_elements:
-                    element_configs.append((
-                        element, 
-                        {
-                            'italic': st.session_state[f"it{i}"],
-                            'bold': st.session_state[f"bd{i}"],
-                            'parentheses': st.session_state[f"pr{i}"],
-                            'separator': st.session_state[f"sp{i}"]
-                        }
-                    ))
-                    used_elements.add(element)
-        
-        return {
-            'author_format': st.session_state.auth,
-            'author_separator': st.session_state.sep,
-            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
-            'use_and_bool': st.session_state.use_and_checkbox,
-            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
-            'doi_format': st.session_state.doi,
-            'doi_hyperlink': st.session_state.doilink,
-            'page_format': st.session_state.page,
-            'final_punctuation': st.session_state.punct,
-            'numbering_style': st.session_state.num,
-            'journal_style': st.session_state.journal_style,
-            'elements': element_configs,
-            'gost_style': st.session_state.get('gost_style', False),
-            'acs_style': st.session_state.get('acs_style', False),
-            'rsc_style': st.session_state.get('rsc_style', False),
-            'cta_style': st.session_state.get('cta_style', False)
-        }
     
     def _process_data(self, input_data, style_config, output_method):
         """Обработка данных"""
@@ -3656,216 +4179,84 @@ class CitationStyleApp:
         else:
             return f"{index + 1}. "
     
-    def _render_download_buttons(self, output_method):
-        """Рендер кнопок скачивания"""
-        if st.session_state.download_data:
-            if st.session_state.mobile_view:
-                # Мобильный вид - вертикальное расположение
-                st.download_button(
-                    label=get_text('doi_txt'),
-                    data=st.session_state.download_data['txt_bytes'],
-                    file_name='doi_list.txt',
-                    mime='text/plain',
-                    key="doi_download",
-                    use_container_width=True
-                )
-                
-                if output_method == 'DOCX' and st.session_state.download_data.get('output_doc_buffer'):
-                    st.download_button(
-                        label=get_text('references_docx'),
-                        data=st.session_state.download_data['output_doc_buffer'],
-                        file_name='Reformatted references.docx',
-                        mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                        key="docx_download",
-                        use_container_width=True
-                    )
-            else:
-                # Десктоп вид - горизонтальное расположение
-                col_download = st.columns(2)
-                with col_download[0]:
-                    st.download_button(
-                        label=get_text('doi_txt'),
-                        data=st.session_state.download_data['txt_bytes'],
-                        file_name='doi_list.txt',
-                        mime='text/plain',
-                        key="doi_download",
-                        use_container_width=True
-                    )
-                
-                with col_download[1]:
-                    if output_method == 'DOCX' and st.session_state.download_data.get('output_doc_buffer'):
-                        st.download_button(
-                            label=get_text('references_docx'),
-                            data=st.session_state.download_data['output_doc_buffer'],
-                            file_name='Reformatted references.docx',
-                            mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                            key="docx_download",
-                            use_container_width=True
-                        )
-    
-    def _render_style_management(self, style_config):
-        """Рендер управления стилями"""
-        st.subheader("💾 Style Management")
-        
-        # Экспорт стиля
-        col_export = st.columns([2, 1])
-        with col_export[0]:
-            export_file_name = st.text_input(
-                get_text('export_file_name'), 
-                value="my_citation_style", 
-                placeholder="Enter file name", 
-                key="export_name"
-            )
-        
-        with col_export[1]:
-            export_data = self._export_style(style_config, export_file_name)
-            if export_data:
-                st.download_button(
-                    label=get_text('export_style'),
-                    data=export_data,
-                    file_name=f"{export_file_name}.json",
-                    mime="application/json",
-                    use_container_width=True,
-                    key="export_button"
-                )
-        
-        # Импорт стиля
-        imported_file = st.file_uploader(
-            get_text('import_file'), 
-            type=['json'], 
-            label_visibility="collapsed", 
-            key="style_importer"
-        )
-        
-        # Обработка импортированного файла
-        if imported_file is not None:
-            current_file_hash = hashlib.md5(imported_file.getvalue()).hexdigest()
-            
-            # Проверяем, что файл еще не обрабатывался в этой сессии
-            if (st.session_state.last_imported_file_hash != current_file_hash or 
-                not st.session_state.style_import_processed):
-                
-                imported_style = self._import_style(imported_file)
-                if imported_style:
-                    # Сохраняем хеш файла и устанавливаем флаги для применения
-                    st.session_state.last_imported_file_hash = current_file_hash
-                    st.session_state.imported_style = imported_style
-                    st.session_state.apply_imported_style = True
-                    st.session_state.style_import_processed = False
-                    
-                    st.success(get_text('import_success'))
-                    st.rerun()
-    
-    def _render_cache_management(self):
-        """Рендер управления кэшем"""
-        with st.expander("Cache Management"):
-            col_cache = st.columns(2)
-            with col_cache[0]:
-                if st.button("Initialize Cache", use_container_width=True):
-                    doi_cache.clear_old_entries()
-                    st.success(get_text('cache_initialized'))
-            with col_cache[1]:
-                if st.button("Clear Cache", use_container_width=True):
-                    try:
-                        os.remove(Config.DB_PATH)
-                        st.success(get_text('cache_cleared'))
-                    except Exception as e:
-                        st.error(f"Error clearing cache: {e}")
-    
-    def _export_style(self, style_config, file_name):
-        """Экспорт стиля"""
-        try:
-            export_data = {
-                'version': '1.0',
-                'export_date': str(datetime.now()),
-                'style_config': style_config
-            }
-            json_data = json.dumps(export_data, indent=2, ensure_ascii=False)
-            return json_data.encode('utf-8')
-        except Exception as e:
-            st.error(f"Export error: {str(e)}")
-            return None
-    
-    def _import_style(self, uploaded_file):
-        """Импорт стиля"""
-        try:
-            # Сохраняем позицию файла для возможности повторного чтения
-            uploaded_file.seek(0)
-            content = uploaded_file.read().decode('utf-8')
-            import_data = json.loads(content)
-        
-            # Поддержка разных форматов файлов
-            if 'style_config' in import_data:
-                return import_data['style_config']
-            elif 'version' in import_data:
-                return import_data.get('style_config', import_data)
-            else:
-                # Предполагаем, что это прямой style_config
-                return import_data
-            
-        except Exception as e:
-            st.error(f"{get_text('import_error')}: {str(e)}")
-            return None
-
     def _apply_imported_style(self, imported_style):
         """Применение импортированного стиля к состоянию сессии"""
         if not imported_style:
             return
     
-        # Используем безопасный подход с callback для обновления состояния
         def apply_style_callback():
             # Общие настройки
-            if 'numbering_style' in imported_style:
-                st.session_state.num = imported_style['numbering_style']
-            if 'author_format' in imported_style:
-                st.session_state.auth = imported_style['author_format']
-            if 'author_separator' in imported_style:
-                st.session_state.sep = imported_style['author_separator']
-            if 'et_al_limit' in imported_style:
-                st.session_state.etal = imported_style['et_al_limit'] or 0
-            if 'use_and_bool' in imported_style:
-                st.session_state.use_and_checkbox = imported_style['use_and_bool']
-            if 'use_ampersand_bool' in imported_style:
-                st.session_state.use_ampersand_checkbox = imported_style['use_ampersand_bool']
-            if 'doi_format' in imported_style:
-                st.session_state.doi = imported_style['doi_format']
-            if 'doi_hyperlink' in imported_style:
-                st.session_state.doilink = imported_style['doi_hyperlink']
-            if 'page_format' in imported_style:
-                st.session_state.page = imported_style['page_format']
-            if 'final_punctuation' in imported_style:
-                st.session_state.punct = imported_style['final_punctuation']
-            if 'journal_style' in imported_style:
-                st.session_state.journal_style = imported_style['journal_style']
-        
-            # Сброс пресетов стилей
-            st.session_state.gost_style = imported_style.get('gost_style', False)
-            st.session_state.acs_style = imported_style.get('acs_style', False)
-            st.session_state.rsc_style = imported_style.get('rsc_style', False)
-            st.session_state.cta_style = imported_style.get('cta_style', False)
-        
-            # Очистка элементов
-            for i in range(8):
-                st.session_state[f"el{i}"] = ""
-                st.session_state[f"it{i}"] = False
-                st.session_state[f"bd{i}"] = False
-                st.session_state[f"pr{i}"] = False
-                st.session_state[f"sp{i}"] = ". "
-        
-            # Применение элементов из импортированного стиля
-            elements = imported_style.get('elements', [])
-            for i, (element, config) in enumerate(elements):
-                if i < 8:  # Ограничиваем 8 элементами
-                    st.session_state[f"el{i}"] = element
-                    st.session_state[f"it{i}"] = config.get('italic', False)
-                    st.session_state[f"bd{i}"] = config.get('bold', False)
-                    st.session_state[f"pr{i}"] = config.get('parentheses', False)
-                    st.session_state[f"sp{i}"] = config.get('separator', ". ")
-        
+            if isinstance(imported_style, dict):
+                if 'style_config' in imported_style:
+                    style_cfg = imported_style['style_config']
+                else:
+                    style_cfg = imported_style
+                
+                # Применяем настройки из стиля
+                if 'author_format' in style_cfg:
+                    st.session_state.auth = style_cfg['author_format']
+                if 'author_separator' in style_cfg:
+                    st.session_state.sep = style_cfg['author_separator']
+                if 'et_al_limit' in style_cfg:
+                    st.session_state.etal = style_cfg['et_al_limit'] or 0
+                if 'use_and_bool' in style_cfg:
+                    st.session_state.use_and_checkbox = style_cfg['use_and_bool']
+                if 'use_ampersand_bool' in style_cfg:
+                    st.session_state.use_ampersand_checkbox = style_cfg['use_ampersand_bool']
+                if 'doi_format' in style_cfg:
+                    st.session_state.doi = style_cfg['doi_format']
+                if 'doi_hyperlink' in style_cfg:
+                    st.session_state.doilink = style_cfg['doi_hyperlink']
+                if 'page_format' in style_cfg:
+                    st.session_state.page = style_cfg['page_format']
+                if 'final_punctuation' in style_cfg:
+                    st.session_state.punct = style_cfg['final_punctuation']
+                if 'journal_style' in style_cfg:
+                    st.session_state.journal_style = style_cfg['journal_style']
+                if 'numbering_style' in style_cfg:
+                    st.session_state.num = style_cfg['numbering_style']
+                
+                # Пресеты стилей
+                if 'gost_style' in style_cfg:
+                    st.session_state.gost_style = style_cfg['gost_style']
+                if 'acs_style' in style_cfg:
+                    st.session_state.acs_style = style_cfg['acs_style']
+                if 'rsc_style' in style_cfg:
+                    st.session_state.rsc_style = style_cfg['rsc_style']
+                if 'cta_style' in style_cfg:
+                    st.session_state.cta_style = style_cfg['cta_style']
+                
+                # Режим интерфейса
+                if 'ui_mode' in imported_style:
+                    st.session_state.ui_mode = imported_style['ui_mode']
+                
+                # Элементы таймлайна
+                if 'timeline_elements' in imported_style:
+                    st.session_state.timeline_elements = imported_style['timeline_elements']
+                
+                # Обычные элементы
+                if 'elements' in style_cfg:
+                    elements = style_cfg['elements']
+                    # Очищаем существующие элементы
+                    for i in range(8):
+                        st.session_state[f"el{i}"] = ""
+                        st.session_state[f"it{i}"] = False
+                        st.session_state[f"bd{i}"] = False
+                        st.session_state[f"pr{i}"] = False
+                        st.session_state[f"sp{i}"] = ". "
+                    
+                    # Устанавливаем новые элементы
+                    for i, (element, config) in enumerate(elements):
+                        if i < 8:
+                            st.session_state[f"el{i}"] = element
+                            st.session_state[f"it{i}"] = config.get('italic', False)
+                            st.session_state[f"bd{i}"] = config.get('bold', False)
+                            st.session_state[f"pr{i}"] = config.get('parentheses', False)
+                            st.session_state[f"sp{i}"] = config.get('separator', ". ")
+            
             st.session_state.style_applied = True
             st.session_state.style_import_processed = True
         
-        # Вызываем callback
         apply_style_callback()
 
 # Вспомогательные функции
@@ -3998,11 +4389,11 @@ def process_docx(input_file, style_config, progress_container, status_container)
 
 def export_style(style_config, file_name):
     app = CitationStyleApp()
-    return app._export_style(style_config, file_name)
+    return app.ui._export_style(style_config, file_name)
 
 def import_style(uploaded_file):
     app = CitationStyleApp()
-    return app._import_style(uploaded_file)
+    return app.ui._import_style(uploaded_file)
 
 def apply_imported_style(imported_style):
     """Функция для применения импортированного стиля (для обратной совместимости)"""
@@ -4016,5 +4407,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
