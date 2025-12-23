@@ -2860,7 +2860,7 @@ class CreatePage:
             st.markdown('<div class="table-row">', unsafe_allow_html=True)
             st.markdown('<div class="table-cell table-label">DOI ссылка</div>', unsafe_allow_html=True)
             st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
-            st.checkbox("", key="doilink", value=st.session_state.doilink, 
+            st.checkbox("", value=st.session_state.doilink, 
                        label_visibility="collapsed", key="doilink_checkbox")
             st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -3823,3 +3823,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
