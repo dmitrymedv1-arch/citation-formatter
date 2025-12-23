@@ -2300,7 +2300,7 @@ class NewUIComponents:
             <div class="step-container">
                 {html_steps}
             </div>
-        """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)  # Ключевое изменение здесь
         
     def render_start_page(self):
         """Рендер стартовой страницы"""
@@ -3174,6 +3174,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
