@@ -2739,13 +2739,26 @@ class ModernUIComponents:
                 </div>
                 """
             })
+
+        # Простая альтернатива без drag-and-drop
+        sorted_items = items
         
-        # Используем компонент drag-and-drop
-        sorted_items = sort_items(
-            items,
-            direction="vertical",
-            key="style_elements_dnd"
-        )
+        # Добавляем селекты для изменения порядка
+        st.markdown("**Change element order:**")
+        for i, elem in enumerate(st.session_state.style_elements):
+            if elem['enabled']:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown(f"▪️ {get_text(f'element_{elem['name'].lower()}')}")
+                with col2:
+                    if st.button("↑", key=f"up_{elem['id']}", disabled=i==0):
+                        # Переместить вверх
+                        st.session_state.style_elements[i], st.session_state.style_elements[i-1] = st.session_state.style_elements[i-1], st.session_state.style_elements[i]
+                        st.rerun()
+                    if st.button("↓", key=f"down_{elem['id']}", disabled=i==len(st.session_state.style_elements)-1):
+                        # Переместить вниз
+                        st.session_state.style_elements[i], st.session_state.style_elements[i+1] = st.session_state.style_elements[i+1], st.session_state.style_elements[i]
+                        st.rerun()
         
         # Обновляем порядок элементов
         if sorted_items:
@@ -3601,3 +3614,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
