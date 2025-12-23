@@ -2404,7 +2404,7 @@ class ModernUIComponents:
             if theme_map[theme] != st.session_state.current_theme:
                 st.session_state.current_theme = theme_map[theme]
                 st.rerun()
-    
+
     def render_step_indicator(self):
         """Рендер индикатора шагов"""
         steps = [
@@ -2417,26 +2417,51 @@ class ModernUIComponents:
         
         current_step_index = st.session_state.current_step
         
-        html = f"""
-        <div class="step-indicator">
-        """
+        # Используем колонки вместо чистого HTML
+        cols = st.columns(len(steps))
         
         for i, step in enumerate(steps):
-            status = ""
-            if i == current_step_index:
-                status = "active"
-            elif i < current_step_index:
-                status = "completed"
-            
-            html += f"""
-            <div class="step {status}">
-                <div class="step-circle">{i+1}</div>
-                <div class="step-label">{step}</div>
-            </div>
-            """
-        
-        html += "</div>"
-        st.markdown(html, unsafe_allow_html=True)
+            with cols[i]:
+                # Определяем статус шага
+                if i == current_step_index:
+                    circle_color = Config.THEMES[st.session_state.current_theme]['primary']
+                    text_color = Config.THEMES[st.session_state.current_theme]['primary']
+                    circle_text = f"{i+1}"
+                elif i < current_step_index:
+                    circle_color = Config.THEMES[st.session_state.current_theme]['success']
+                    text_color = Config.THEMES[st.session_state.current_theme]['textSecondary']
+                    circle_text = "✓"
+                else:
+                    circle_color = Config.THEMES[st.session_state.current_theme]['secondaryBackground']
+                    text_color = Config.THEMES[st.session_state.current_theme]['textSecondary']
+                    circle_text = f"{i+1}"
+                
+                # Создаем кружок с числом
+                st.markdown(f"""
+                    <div style="
+                        text-align: center;
+                        margin-bottom: 0.5rem;
+                    ">
+                        <div style="
+                            width: 32px;
+                            height: 32px;
+                            border-radius: 50%;
+                            background-color: {circle_color};
+                            color: white;
+                            display: flex;
+                            align-items: center;
+                            justify-content: center;
+                            margin: 0 auto 0.5rem;
+                            font-weight: 600;
+                            border: 2px solid {circle_color};
+                        ">{circle_text}</div>
+                        <div style="
+                            font-size: 0.875rem;
+                            color: {text_color};
+                            font-weight: {'600' if i == current_step_index else '400'};
+                        ">{step}</div>
+                    </div>
+                """, unsafe_allow_html=True)
     
     def render_navigation_buttons(self):
         """Рендер кнопок навигации"""
@@ -2495,7 +2520,7 @@ class ModernUIComponents:
         # Инициализируем заново
         init_session_state()
         st.rerun()
-    
+        
     def render_step_start(self):
         """Рендер стартового шага"""
         st.markdown(f"<h2>{get_text('welcome')}</h2>", unsafe_allow_html=True)
@@ -2504,25 +2529,22 @@ class ModernUIComponents:
         col1, col2 = st.columns(2)
         
         with col1:
-            if st.button(f"""
-                <div style='text-align: center; padding: 2rem;'>
-                    <div style='font-size: 3rem; margin-bottom: 1rem;'>🎨</div>
-                    <h3 style='margin: 0 0 0.5rem 0;'>{get_text('create_new_style')}</h3>
-                    <p style='color: #666; margin: 0; font-size: 0.9rem;'>{get_text('create_new_desc')}</p>
-                </div>
-            """, use_container_width=True, key="btn_create_new"):
+            # Используем обычные Streamlit кнопки вместо HTML
+            if st.button(
+                f"🎨 **{get_text('create_new_style')}**\n\n{get_text('create_new_desc')}",
+                use_container_width=True,
+                key="btn_create_new"
+            ):
                 st.session_state.create_custom_style = True
                 st.session_state.current_step = 2  # Переходим к созданию стиля
                 st.rerun()
         
         with col2:
-            if st.button(f"""
-                <div style='text-align: center; padding: 2rem;'>
-                    <div style='font-size: 3rem; margin-bottom: 1rem;'>📚</div>
-                    <h3 style='margin: 0 0 0.5rem 0;'>{get_text('choose_preset')}</h3>
-                    <p style='color: #666; margin: 0; font-size: 0.9rem;'>{get_text('choose_preset_desc')}</p>
-                </div>
-            """, use_container_width=True, key="btn_choose_preset"):
+            if st.button(
+                f"📚 **{get_text('choose_preset')}**\n\n{get_text('choose_preset_desc')}",
+                use_container_width=True,
+                key="btn_choose_preset"
+            ):
                 st.session_state.create_custom_style = False
                 st.session_state.current_step = 1  # Переходим к выбору стиля
                 st.rerun()
@@ -2593,7 +2615,7 @@ class ModernUIComponents:
             st.session_state.doi_hyperlink = style_config['doi_hyperlink']
         if 'numbering_style' in style_config:
             st.session_state.numbering_style = style_config['numbering_style']
-    
+        
     def render_step_style_select(self):
         """Рендер шага выбора готового стиля"""
         st.markdown(f"<h2>{get_text('select_preset_title')}</h2>", unsafe_allow_html=True)
@@ -2601,32 +2623,32 @@ class ModernUIComponents:
         
         # Фильтруем стили по языку
         if st.session_state.current_language == 'ru':
-            # Для русского показываем ГОСТ и международные стили
             preset_keys = ['gost', 'apa', 'vancouver', 'ieee', 'harvard', 'acs', 'rsc', 'chicago']
         else:
-            # Для английского показываем все, кроме ГОСТ
             preset_keys = ['apa', 'vancouver', 'ieee', 'harvard', 'acs', 'rsc', 'chicago']
         
         # Создаем сетку 2x4
-        cols = st.columns(2)
-        
-        for idx, preset_key in enumerate(preset_keys):
-            with cols[idx % 2]:
-                preset = Config.PRESET_STYLES[preset_key]
-                
-                if st.button(f"""
-                    <div style='text-align: center; padding: 1.5rem;'>
-                        <div style='font-size: 2rem; margin-bottom: 0.5rem;'>
-                            {'🇷🇺' if preset_key == 'gost' else '🌐'}
-                        </div>
-                        <h3 style='margin: 0 0 0.5rem 0;'>{preset['name']}</h3>
-                        <p style='color: #666; margin: 0; font-size: 0.8rem;'>{preset['description']}</p>
-                    </div>
-                """, use_container_width=True, key=f"preset_{preset_key}"):
-                    st.session_state.selected_preset = preset_key
-                    self._apply_preset_style(preset_key)
-                    st.session_state.current_step = 3  # Переходим к вводу данных
-                    st.rerun()
+        for i in range(0, len(preset_keys), 2):
+            cols = st.columns(2)
+            
+            for j in range(2):
+                idx = i + j
+                if idx < len(preset_keys):
+                    with cols[j]:
+                        preset_key = preset_keys[idx]
+                        preset = Config.PRESET_STYLES[preset_key]
+                        
+                        # Используем обычные Streamlit кнопки
+                        icon = '🇷🇺' if preset_key == 'gost' else '🌐'
+                        if st.button(
+                            f"{icon} **{preset['name']}**\n\n{preset['description']}",
+                            use_container_width=True,
+                            key=f"preset_{preset_key}"
+                        ):
+                            st.session_state.selected_preset = preset_key
+                            self._apply_preset_style(preset_key)
+                            st.session_state.current_step = 3  # Переходим к вводу данных
+                            st.rerun()
         
         # Предпросмотр выбранного стиля
         if st.session_state.selected_preset:
@@ -2636,7 +2658,14 @@ class ModernUIComponents:
             
             preview_text = self._get_preset_preview(st.session_state.selected_preset)
             st.markdown(f"""
-                <div class="preview-box">
+                <div style="
+                    background-color: {Config.THEMES[st.session_state.current_theme]['secondaryBackground']};
+                    border: 1px solid {Config.THEMES[st.session_state.current_theme]['border']};
+                    border-radius: 8px;
+                    padding: 1rem;
+                    margin-top: 1rem;
+                    font-style: italic;
+                ">
                     {preview_text}
                 </div>
             """, unsafe_allow_html=True)
@@ -3613,5 +3642,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
