@@ -2296,11 +2296,23 @@ class NewUIComponents:
                 </div>
             """
         
+        # Debug: покажем что генерируется
+        # print(f"Generated HTML: {html_steps}")
+        
+        # Используем markdown с unsafe_allow_html=True
         st.markdown(f"""
             <div class="step-container">
                 {html_steps}
             </div>
-        """, unsafe_allow_html=True)  # Ключевое изменение здесь
+        """, unsafe_allow_html=True)
+        
+        # Альтернатива: использовать st.components.v1.html для большего контроля
+        # import streamlit.components.v1 as components
+        # components.html(f"""
+        #     <div class="step-container">
+        #         {html_steps}
+        #     </div>
+        # """, height=100)
         
     def render_start_page(self):
         """Рендер стартовой страницы"""
@@ -3174,6 +3186,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
