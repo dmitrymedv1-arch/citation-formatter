@@ -695,15 +695,15 @@ class ProgressManager:
 def init_session_state():
     """Инициализация состояния сессии"""
     defaults = {
-        # Язык и тема
         'current_language': 'ru',
         'current_theme': 'light',
         'current_stage': 'start',
-        
-        # Настройки стиля
         'imported_style': None,
         'style_applied': False,
         'apply_imported_style': False,
+        'output_text_value': "",
+        'show_results': False,
+        'download_data': {},
         'use_and_checkbox': False,
         'use_ampersand_checkbox': False,
         'journal_style': '{Full Journal Name}',
@@ -728,110 +728,41 @@ def init_session_state():
         'style_management_initialized': False,
         'previous_states': [],
         'max_undo_steps': 10,
-        
-        # Навигация и история
         'stage_history': ['start'],
         'selected_preset': None,
         'custom_style_created': False,
         'style_config': None,
-        
-        # Input/Output настройки
+        'processing_start_time': None,
+        'processing_results': None,
         'input_method': 'DOCX',
         'output_method': 'DOCX',
         'uploaded_file': None,
         'text_input': '',
         'style_export_name': 'my_citation_style',
-        
-        # Результаты обработки
         'show_statistics': False,
         'processing_complete': False,
-        'processing_start_time': None,
         'duplicates_info': {},
         'doi_found_count': 0,
         'doi_not_found_count': 0,
         'formatted_refs': [],
         'txt_buffer': None,
-        'docx_buffer': None,
-        
-        # UI элементы
-        'output_text_value': "",
-        'show_results': False,
-        'download_data': {},
-        
-        # Флаги состояния
-        'processing_results': None,
+        'docx_buffer': None
     }
     
-    # Устанавливаем значения по умолчанию для всех ключей
     for key, default in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = default
     
-    # Инициализация элементов конфигурации стиля (8 элементов)
     for i in range(8):
         for prop in ['el', 'it', 'bd', 'pr', 'sp']:
             key = f"{prop}{i}"
             if key not in st.session_state:
                 if prop == 'sp':
-                    # Разделитель по умолчанию
                     st.session_state[key] = ". "
                 elif prop == 'el':
-                    # Элемент по умолчанию - пустая строка
                     st.session_state[key] = ""
                 else:
-                    # Флаги форматирования по умолчанию - False
                     st.session_state[key] = False
-    
-    # Дополнительные проверки и инициализация
-    if 'stage_history' not in st.session_state or not st.session_state.stage_history:
-        st.session_state.stage_history = ['start']
-    
-    if 'current_stage' not in st.session_state:
-        st.session_state.current_stage = 'start'
-    
-    if 'style_config' not in st.session_state:
-        st.session_state.style_config = None
-    
-    if 'custom_style_created' not in st.session_state:
-        st.session_state.custom_style_created = False
-    
-    if 'processing_complete' not in st.session_state:
-        st.session_state.processing_complete = False
-    
-    if 'formatted_refs' not in st.session_state:
-        st.session_state.formatted_refs = []
-    
-    if 'duplicates_info' not in st.session_state:
-        st.session_state.duplicates_info = {}
-    
-    if 'doi_found_count' not in st.session_state:
-        st.session_state.doi_found_count = 0
-    
-    if 'doi_not_found_count' not in st.session_state:
-        st.session_state.doi_not_found_count = 0
-    
-    # Инициализация буферов файлов
-    if 'txt_buffer' not in st.session_state:
-        st.session_state.txt_buffer = None
-    
-    if 'docx_buffer' not in st.session_state:
-        st.session_state.docx_buffer = None
-    
-    # Инициализация времени обработки
-    if 'processing_start_time' not in st.session_state:
-        st.session_state.processing_start_time = None
-    
-    # Инициализация статистики
-    if 'show_statistics' not in st.session_state:
-        st.session_state.show_statistics = False
-    
-    # Проверка загруженности пользовательских предпочтений
-    if 'user_prefs_loaded' not in st.session_state:
-        st.session_state.user_prefs_loaded = False
-    
-    # Проверка инициализации кэша
-    if 'cache_initialized' not in st.session_state:
-        st.session_state.cache_initialized = False
 
 def get_text(key: str) -> str:
     """Получение перевода по ключу"""
@@ -2085,7 +2016,7 @@ class ReferenceProcessor:
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
 
-# Новые классы для многостраничной структуры   
+# Новые классы для многостраничной структуры
 class ThemeManager:
     """Менеджер тем оформления"""
     
@@ -2293,163 +2224,6 @@ class ThemeManager:
             .download-button:hover {{
                 background-color: {theme['secondary']} !important;
             }}
-            
-            /* НОВЫЕ СТИЛИ для горизонтальной компоновки Input/Output */
-            .io-container {{
-                display: flex;
-                flex-direction: column;
-                gap: 15px;
-            }}
-            
-            .io-header {{
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                padding: 10px;
-                background-color: {theme['secondaryBackground']};
-                border-radius: 8px;
-                margin-bottom: 10px;
-            }}
-            
-            .io-panel {{
-                display: flex;
-                gap: 20px;
-                flex-wrap: wrap;
-            }}
-            
-            @media (min-width: 768px) {{
-                .io-panel {{
-                    flex-wrap: nowrap;
-                }}
-            }}
-            
-            .io-column {{
-                flex: 1;
-                min-width: 300px;
-            }}
-            
-            .io-card {{
-                background-color: {theme['cardBackground']};
-                border-radius: 10px;
-                padding: 20px;
-                box-shadow: {theme['shadow']};
-                border: 1px solid {theme['border']};
-                height: 100%;
-                display: flex;
-                flex-direction: column;
-            }}
-            
-            .io-card-title {{
-                color: {theme['primary']};
-                font-weight: bold;
-                font-size: 1.1rem;
-                margin-bottom: 15px;
-                padding-bottom: 8px;
-                border-bottom: 2px solid {theme['border']};
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            }}
-            
-            .io-section {{
-                margin-bottom: 20px;
-            }}
-            
-            .io-section-title {{
-                font-weight: 600;
-                color: {theme['text']};
-                margin-bottom: 10px;
-                font-size: 0.95rem;
-                opacity: 0.9;
-            }}
-            
-            .resizable-textarea {{
-                resize: vertical !important;
-                min-height: 150px !important;
-                max-height: 400px !important;
-            }}
-            
-            .stats-grid {{
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 10px;
-                margin-top: 15px;
-            }}
-            
-            .stat-item {{
-                background-color: {theme['secondaryBackground']};
-                padding: 12px;
-                border-radius: 6px;
-                text-align: center;
-                border: 1px solid {theme['border']};
-            }}
-            
-            .stat-number {{
-                font-size: 1.2rem;
-                font-weight: bold;
-                color: {theme['primary']};
-                margin-bottom: 4px;
-            }}
-            
-            .stat-text {{
-                font-size: 0.8rem;
-                color: {theme['text']};
-                opacity: 0.8;
-            }}
-            
-            .format-selector {{
-                display: flex;
-                gap: 15px;
-                margin-bottom: 15px;
-                flex-wrap: wrap;
-            }}
-            
-            .format-option {{
-                display: flex;
-                align-items: center;
-                gap: 5px;
-                padding: 8px 12px;
-                background-color: {theme['secondaryBackground']};
-                border-radius: 6px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                border: 1px solid {theme['border']};
-            }}
-            
-            .format-option:hover {{
-                background-color: {theme['primary']}15;
-            }}
-            
-            .format-option.active {{
-                background-color: {theme['primary']};
-                color: white;
-                border-color: {theme['primary']};
-            }}
-            
-            .action-buttons {{
-                display: flex;
-                gap: 10px;
-                margin-top: 20px;
-                justify-content: center;
-            }}
-            
-            .file-info {{
-                background-color: {theme['secondaryBackground']};
-                padding: 10px;
-                border-radius: 6px;
-                margin-top: 10px;
-                font-size: 0.9rem;
-                border-left: 3px solid {theme['accent']};
-            }}
-            
-            .drag-hint {{
-                text-align: center;
-                color: {theme['text']};
-                opacity: 0.7;
-                font-size: 0.8rem;
-                margin-top: 5px;
-                font-style: italic;
-            }}
             </style>
         """
     
@@ -2457,7 +2231,7 @@ class ThemeManager:
     def apply_theme(theme_name: str):
         """Применение темы к приложению"""
         st.markdown(ThemeManager.get_theme_css(theme_name), unsafe_allow_html=True)
-        
+
 class StageManager:
     """Менеджер этапов приложения"""
     
@@ -3182,390 +2956,79 @@ class CreatePage:
         except Exception as e:
             st.error(f"Export error: {str(e)}")
             return None
-    
+
 class InputOutputPage:
-    """Страница Input/Output - горизонтальная компоновка"""
+    """Страница Input/Output"""
     
     @staticmethod
     def render():
-        """Рендер страницы Input/Output в горизонтальном формате"""
+        """Рендер страницы Input/Output"""
         st.markdown(f"<h1>{get_text('io_title')}</h1>", unsafe_allow_html=True)
-        
-        # Информационная панель
-        st.markdown(f"""
-            <div style='background-color: {Config.THEMES[st.session_state.current_theme]['secondaryBackground']}; 
-                        padding: 12px; border-radius: 8px; margin-bottom: 20px; 
-                        border-left: 4px solid {Config.THEMES[st.session_state.current_theme]['primary']};'>
-            <div style='display: flex; align-items: center; gap: 10px;'>
-                <span style='font-size: 1.2rem;'>💡</span>
-                <span style='font-size: 0.9rem;'>{get_text('io_description')}</span>
-            </div>
-            </div>
-        """, unsafe_allow_html=True)
+        st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('io_description')}</p>", unsafe_allow_html=True)
         
         # Проверка наличия конфигурации стиля
         if not hasattr(st.session_state, 'style_config') or not st.session_state.style_config:
             st.warning(get_text('validation_error_no_elements'))
-            col_back = st.columns([1])
-            with col_back[0]:
-                if st.button(get_text('back_to_start'), use_container_width=True):
-                    StageManager.navigate_to('start')
+            if st.button(get_text('back_to_start'), use_container_width=True):
+                StageManager.navigate_to('start')
             return
         
-        # Основной контейнер Input/Output
-        st.markdown('<div class="io-container">', unsafe_allow_html=True)
-        
-        # Панель Input/Output
-        st.markdown('<div class="io-panel">', unsafe_allow_html=True)
-        
-        # --- ЛЕВАЯ КОЛОНКА: INPUT ---
-        with st.container():
-            st.markdown('<div class="io-column">', unsafe_allow_html=True)
-            InputOutputPage._render_input_column()
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # --- ПРАВАЯ КОЛОНКА: OUTPUT ---
-        with st.container():
-            st.markdown('<div class="io-column">', unsafe_allow_html=True)
-            InputOutputPage._render_output_column()
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем io-panel
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем io-container
-        
-        # Кнопки действий
-        InputOutputPage._render_action_buttons()
-    
-    @staticmethod
-    def _render_input_column():
-        """Рендер колонки Input"""
-        st.markdown("""
-            <div class="io-card">
-                <div class="io-card-title">
-                    <span>📥 Input</span>
-                </div>
-        """, unsafe_allow_html=True)
-        
-        # Секция выбора формата
-        st.markdown('<div class="io-section">', unsafe_allow_html=True)
-        st.markdown('<div class="io-section-title">Format</div>', unsafe_allow_html=True)
+        # Ввод данных
+        st.markdown(f"<div class='card'><div class='card-title'>{get_text('data_input')}</div>", unsafe_allow_html=True)
         
         input_method = st.radio(
-            "",
+            get_text('input_method'),
             ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'],
             horizontal=True,
-            key="input_method_io",
-            label_visibility="collapsed"
+            key="input_method"
         )
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем секцию формата
-        
-        # Секция данных
-        st.markdown('<div class="io-section">', unsafe_allow_html=True)
-        st.markdown('<div class="io-section-title">Data</div>', unsafe_allow_html=True)
         
         if input_method == 'DOCX':
             uploaded_file = st.file_uploader(
-                "Choose a DOCX file",
+                get_text('select_docx'),
                 type=['docx'],
                 label_visibility="collapsed",
-                key="docx_uploader_io",
-                help=get_text('select_docx')
+                key="docx_uploader_io"
             )
             st.session_state.uploaded_file = uploaded_file
-            
-            if uploaded_file:
-                st.markdown(f"""
-                    <div class="file-info">
-                    <strong>📄 File selected:</strong> {uploaded_file.name}<br>
-                    <small>Size: {uploaded_file.size // 1024} KB</small>
-                    </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                    <div style="text-align: center; padding: 20px; color: {Config.THEMES[st.session_state.current_theme]['text']}70;">
-                    <div style="font-size: 3rem; margin-bottom: 10px;">📄</div>
-                    <div>{get_text('no_file_selected')}</div>
-                    </div>
-                """, unsafe_allow_html=True)
         else:
-            # Растягиваемое текстовое поле
             text_input = st.text_area(
-                "",
+                get_text('references'),
                 placeholder=get_text('enter_references'),
-                height=200,
+                height=150,
                 label_visibility="collapsed",
-                key="text_input_io",
-                help="Enter one reference per line. You can resize this field by dragging the bottom-right corner."
+                key="text_input_io"
             )
             st.session_state.text_input = text_input
-            
-            # Подсказка о растягивании
-            st.markdown('<div class="drag-hint">↕ Drag to resize</div>', unsafe_allow_html=True)
-            
-            if text_input:
-                lines = [line.strip() for line in text_input.split('\n') if line.strip()]
-                st.markdown(f"""
-                    <div class="file-info">
-                    <strong>📝 Text input:</strong> {len(lines)} references detected
-                    </div>
-                """, unsafe_allow_html=True)
         
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем секцию данных
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем io-card
-    
-    @staticmethod
-    def _render_output_column():
-        """Рендер колонки Output"""
-        st.markdown("""
-            <div class="io-card">
-                <div class="io-card-title">
-                    <span>📤 Output</span>
-                </div>
-        """, unsafe_allow_html=True)
-        
-        # Секция выбора формата вывода
-        st.markdown('<div class="io-section">', unsafe_allow_html=True)
-        st.markdown('<div class="io-section-title">Format</div>', unsafe_allow_html=True)
+        # Вывод данных
+        st.markdown(f"<div class='card'><div class='card-title'>{get_text('data_output')}</div>", unsafe_allow_html=True)
         
         output_method = st.radio(
-            "",
+            get_text('output_method'),
             ['DOCX', 'Text' if st.session_state.current_language == 'en' else 'Текст'],
             horizontal=True,
-            key="output_method_io",
-            label_visibility="collapsed"
+            key="output_method_io"
         )
         
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем секцию формата
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        # Секция результатов
-        st.markdown('<div class="io-section">', unsafe_allow_html=True)
-        st.markdown('<div class="io-section-title">Results</div>', unsafe_allow_html=True)
-        
-        if st.session_state.processing_complete:
-            # Показать результаты если обработка завершена
-            results_text = InputOutputPage._format_results_preview()
-            
-            # Растягиваемое поле для результатов
-            st.text_area(
-                "",
-                value=results_text,
-                height=200,
-                label_visibility="collapsed",
-                key="results_display",
-                disabled=True
-            )
-            
-            st.markdown('<div class="drag-hint">↕ Drag to resize</div>', unsafe_allow_html=True)
-            
-            # Статистика
-            InputOutputPage._render_statistics()
-            
-            # Кнопки скачивания
-            InputOutputPage._render_download_buttons(output_method)
-        else:
-            # Сообщение до обработки
-            st.markdown(f"""
-                <div style="text-align: center; padding: 30px; color: {Config.THEMES[st.session_state.current_theme]['text']}70;">
-                    <div style="font-size: 3rem; margin-bottom: 15px;">⏳</div>
-                    <div style="font-weight: 500; margin-bottom: 10px;">{get_text('processing')}</div>
-                    <div style="font-size: 0.9rem;">{get_text('processing_status')}</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Статистика по умолчанию
-            InputOutputPage._render_default_statistics()
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем секцию результатов
-        
-        st.markdown('</div>', unsafe_allow_html=True)  # закрываем io-card
-    
-    @staticmethod
-    def _render_statistics():
-        """Рендер статистики"""
-        if hasattr(st.session_state, 'doi_found_count') and hasattr(st.session_state, 'doi_not_found_count'):
-            st.markdown('<div class="stats-grid">', unsafe_allow_html=True)
-            
-            # Всего ссылок
-            total_refs = len(st.session_state.formatted_refs) if hasattr(st.session_state, 'formatted_refs') else 0
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number">{total_refs}</div>
-                    <div class="stat-text">Total</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # DOI найдено
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number" style="color: #2ca02c;">{st.session_state.doi_found_count}</div>
-                    <div class="stat-text">DOI Found</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # DOI не найдено
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number" style="color: #ff7f0e;">{st.session_state.doi_not_found_count}</div>
-                    <div class="stat-text">DOI Missing</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Дубликаты
-            dup_count = len(st.session_state.duplicates_info) if hasattr(st.session_state, 'duplicates_info') else 0
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number" style="color: #4ECDC4;">{dup_count}</div>
-                    <div class="stat-text">Duplicates</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Успешность
-            success_rate = 0
-            if total_refs > 0:
-                success_rate = int((st.session_state.doi_found_count / total_refs) * 100)
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number" style="color: #1f77b4;">{success_rate}%</div>
-                    <div class="stat-text">Success Rate</div>
-                </div>
-            """, unsafe_allow_html=True)
-            
-            # Время обработки
-            if hasattr(st.session_state, 'processing_start_time'):
-                elapsed = time.time() - st.session_state.processing_start_time
-                st.markdown(f"""
-                    <div class="stat-item">
-                        <div class="stat-number" style="color: #9467bd;">{elapsed:.1f}s</div>
-                        <div class="stat-text">Time</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            
-            st.markdown('</div>', unsafe_allow_html=True)  # закрываем stats-grid
-    
-    @staticmethod
-    def _render_default_statistics():
-        """Рендер статистики по умолчанию (до обработки)"""
-        st.markdown('<div class="stats-grid">', unsafe_allow_html=True)
-        
-        stats = [
-            ("0", "Total", "#1f77b4"),
-            ("0", "DOI Found", "#2ca02c"),
-            ("0", "DOI Missing", "#ff7f0e"),
-            ("0", "Duplicates", "#4ECDC4"),
-            ("0%", "Success Rate", "#9467bd"),
-            ("0s", "Time", "#8c564b")
-        ]
-        
-        for value, label, color in stats:
-            st.markdown(f"""
-                <div class="stat-item">
-                    <div class="stat-number" style="color: {color}70;">{value}</div>
-                    <div class="stat-text" style="opacity: 0.5;">{label}</div>
-                </div>
-            """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    @staticmethod
-    def _format_results_preview() -> str:
-        """Форматирование превью результатов"""
-        if not hasattr(st.session_state, 'formatted_refs') or not st.session_state.formatted_refs:
-            return get_text('processing')
-        
-        preview_lines = []
-        preview_limit = min(5, len(st.session_state.formatted_refs))
-        
-        for i in range(preview_limit):
-            elements, is_error, metadata = st.session_state.formatted_refs[i]
-            
-            if is_error:
-                preview_lines.append(f"⚠️ {str(elements)[:100]}...")
-            elif i in st.session_state.duplicates_info:
-                original_index = st.session_state.duplicates_info[i] + 1
-                preview_lines.append(f"🔄 Duplicate of #{original_index}")
-            else:
-                if isinstance(elements, str):
-                    preview_lines.append(f"✓ {elements[:100]}...")
-                else:
-                    ref_str = ""
-                    for j, element_data in enumerate(elements):
-                        value, _, _, separator, _, _ = element_data
-                        ref_str += value
-                        if separator and j < len(elements) - 1:
-                            ref_str += separator
-                    preview_lines.append(f"✓ {ref_str[:100]}...")
-        
-        if len(st.session_state.formatted_refs) > preview_limit:
-            preview_lines.append(f"... and {len(st.session_state.formatted_refs) - preview_limit} more references")
-        
-        return "\n".join(preview_lines)
-    
-    @staticmethod
-    def _render_download_buttons(output_method: str):
-        """Рендер кнопок скачивания"""
-        st.markdown('<div style="margin-top: 20px;">', unsafe_allow_html=True)
-        st.markdown('<div class="io-section-title">Download</div>', unsafe_allow_html=True)
-        
-        col_dl1, col_dl2 = st.columns(2)
-        
-        with col_dl1:
-            if hasattr(st.session_state, 'txt_buffer') and st.session_state.txt_buffer:
-                st.download_button(
-                    label="📄 Download TXT",
-                    data=st.session_state.txt_buffer.getvalue(),
-                    file_name='doi_list.txt',
-                    mime='text/plain',
-                    use_container_width=True,
-                    key="download_txt_horizontal"
-                )
-        
-        with col_dl2:
-            if hasattr(st.session_state, 'docx_buffer') and st.session_state.docx_buffer:
-                st.download_button(
-                    label="📋 Download DOCX",
-                    data=st.session_state.docx_buffer.getvalue(),
-                    file_name='Reformatted references.docx',
-                    mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                    use_container_width=True,
-                    key="download_docx_horizontal"
-                )
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    @staticmethod
-    def _render_action_buttons():
-        """Рендер кнопок действий"""
-        st.markdown('<div class="action-buttons">', unsafe_allow_html=True)
-        
-        col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
+        # Кнопки действий
+        col1, col2, col3 = st.columns([1, 2, 1])
         
         with col1:
-            if st.button("↩️", help=get_text('back_button'), use_container_width=True, key="back_io_compact"):
+            if st.button(get_text('back_button'), use_container_width=True, key="back_from_io"):
                 StageManager.navigate_to('start')
         
         with col2:
-            if st.button("🔄", help="Reload page", use_container_width=True, key="reload_io"):
-                st.rerun()
-        
-        with col3:
-            if st.button("🚀 " + get_text('process_references'), use_container_width=True, key="process_io_compact"):
+            if st.button(get_text('process_references'), use_container_width=True, key="process_io"):
                 InputOutputPage._process_data()
         
-        with col4:
-            if st.button("📊", help="Show statistics", use_container_width=True, key="stats_io"):
-                if hasattr(st.session_state, 'show_statistics'):
-                    st.session_state.show_statistics = not st.session_state.show_statistics
-                else:
-                    st.session_state.show_statistics = True
-                st.rerun()
-        
-        with col5:
-            if st.button("🗑️", help=get_text('clear_all'), use_container_width=True, key="clear_io_compact"):
+        with col3:
+            if st.button(get_text('clear_all'), use_container_width=True, key="clear_io"):
                 StageManager.clear_all()
-        
-        st.markdown('</div>', unsafe_allow_html=True)
     
     @staticmethod
     def _process_data():
@@ -3586,10 +3049,6 @@ class InputOutputPage:
                 st.error(get_text('enter_references_error'))
                 return
             references = [ref.strip() for ref in st.session_state.text_input.split('\n') if ref.strip()]
-        
-        # Показать количество найденных ссылок
-        if references:
-            st.info(f"📚 Found {len(references)} references to process")
         
         # Обработка ссылок
         processor = ReferenceProcessor()
@@ -3616,8 +3075,8 @@ class InputOutputPage:
             st.session_state.processing_complete = True
             st.session_state.processing_start_time = time.time()
             
-            # Обновление страницы
-            st.rerun()
+            # Переход к результатам
+            StageManager.navigate_to('results')
     
     @staticmethod
     def _extract_references_from_docx(uploaded_file) -> List[str]:
@@ -4068,4 +3527,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
