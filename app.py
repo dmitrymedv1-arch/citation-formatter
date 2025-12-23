@@ -2264,7 +2264,7 @@ class NewUIComponents:
                     {'language': st.session_state.current_language, 'theme': selected_theme[1]}
                 )
                 st.rerun()
-    
+
     def render_step_indicator(self):
         """Рендер индикатора шагов"""
         steps = ['start', 'style', 'create', 'io', 'results']
@@ -2301,7 +2301,7 @@ class NewUIComponents:
                 {html_steps}
             </div>
         """, unsafe_allow_html=True)
-    
+        
     def render_start_page(self):
         """Рендер стартовой страницы"""
         st.markdown(f"""
@@ -2423,7 +2423,7 @@ class NewUIComponents:
                     st.rerun()
                 else:
                     st.warning(get_text('no_style_selected'))
-    
+
     def render_create_page(self):
         """Рендер страницы создания стиля"""
         st.markdown(f"""
@@ -3174,3 +3174,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
