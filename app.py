@@ -1959,7 +1959,7 @@ class NewUIComponents:
     
     def __init__(self):
         self.user_prefs = UserPreferencesManager()
-    
+           
     def apply_theme_styles(self):
         """Применение стилей выбранной темы"""
         theme = Config.THEMES[st.session_state.current_theme]
@@ -3174,4 +3174,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
