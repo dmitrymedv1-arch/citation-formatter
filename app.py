@@ -1748,7 +1748,7 @@ class DOIProcessor:
         except Exception as e:
             logger.error(f"Error extracting metadata for DOI {doi}: {e}")
             return None
-    
+
     def _normalize_name(self, name: str) -> str:
         """Нормализует имя автора"""
         if not name:
@@ -2224,6 +2224,225 @@ class ThemeManager:
             .download-button:hover {{
                 background-color: {theme['secondary']} !important;
             }}
+            
+            /* Стили для панелей с иконками */
+            .settings-panel {{
+                background-color: {theme['secondaryBackground']};
+                border: 2px solid {theme['border']};
+                border-radius: 10px;
+                padding: 15px;
+                margin-bottom: 20px;
+                box-shadow: {theme['shadow']};
+            }}
+            
+            .panel-with-icon {{
+                display: flex;
+                align-items: flex-start;
+                margin-bottom: 0;
+            }}
+            
+            .panel-icon {{
+                font-size: 24px;
+                margin-right: 15px;
+                margin-top: 5px;
+                flex-shrink: 0;
+            }}
+            
+            .panel-content {{
+                flex: 1;
+            }}
+            
+            .compact-table {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px 20px;
+                margin-top: 10px;
+            }}
+            
+            .table-row {{
+                display: contents;
+            }}
+            
+            .table-cell {{
+                padding: 5px 0;
+            }}
+            
+            .table-label {{
+                font-weight: 500;
+                color: {theme['text']};
+                opacity: 0.9;
+            }}
+            
+            .table-value {{
+                color: {theme['text']};
+            }}
+            
+            .element-grid {{
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 15px;
+                margin-top: 10px;
+            }}
+            
+            .element-column {{
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }}
+            
+            .element-row {{
+                display: grid;
+                grid-template-columns: 30px 150px 30px 30px 30px 1fr;
+                gap: 8px;
+                align-items: center;
+                background-color: {theme['background']};
+                padding: 8px;
+                border-radius: 5px;
+                border: 1px solid {theme['border']};
+            }}
+            
+            .element-number {{
+                font-weight: bold;
+                color: {theme['primary']};
+                text-align: center;
+            }}
+            
+            .element-controls {{
+                display: flex;
+                gap: 5px;
+            }}
+            
+            .element-checkbox {{
+                margin: 0;
+            }}
+            
+            .element-separator {{
+                width: 100%;
+            }}
+            
+            .preview-box {{
+                background-color: {theme['background']};
+                border: 2px solid {theme['border']};
+                border-radius: 8px;
+                padding: 20px;
+                font-family: monospace;
+                font-size: 14px;
+                line-height: 1.5;
+                white-space: pre-wrap;
+                word-break: break-word;
+                max-height: 200px;
+                overflow-y: auto;
+                margin-top: 10px;
+            }}
+            
+            .preview-header {{
+                color: {theme['primary']};
+                font-weight: bold;
+                margin-bottom: 10px;
+                font-size: 16px;
+            }}
+            
+            /* Стили для шапки панели */
+            .panel-header {{
+                display: flex;
+                align-items: center;
+                margin-bottom: 15px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid {theme['border']};
+            }}
+            
+            .panel-header-text {{
+                font-weight: bold;
+                color: {theme['text']};
+                font-size: 18px;
+                margin-left: 10px;
+            }}
+            
+            /* Улучшенные стили для чекбоксов и селектов в таблице */
+            .compact-select select {{
+                padding: 5px 8px !important;
+                font-size: 14px !important;
+            }}
+            
+            .compact-checkbox {{
+                margin: 0 !important;
+                padding: 0 !important;
+            }}
+            
+            .compact-number {{
+                padding: 5px 8px !important;
+                font-size: 14px !important;
+            }}
+            
+            /* Стили для заголовка страницы */
+            .page-header {{
+                background: linear-gradient(135deg, {theme['primary']} 0%, {theme['secondary']} 100%);
+                color: white;
+                padding: 20px;
+                border-radius: 10px;
+                margin-bottom: 20px;
+                text-align: center;
+            }}
+            
+            .page-header h1 {{
+                color: white !important;
+                border-bottom: none !important;
+                margin-bottom: 10px !important;
+                font-size: 28px !important;
+            }}
+            
+            .page-header p {{
+                color: rgba(255, 255, 255, 0.9) !important;
+                font-size: 16px;
+                max-width: 800px;
+                margin: 0 auto;
+            }}
+            
+            /* Стили для кнопок навигации */
+            .nav-buttons {{
+                display: flex;
+                justify-content: space-between;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid {theme['border']};
+            }}
+            
+            .nav-button-left {{
+                background-color: {theme['secondaryBackground']} !important;
+                color: {theme['text']} !important;
+                border: 1px solid {theme['border']} !important;
+            }}
+            
+            .nav-button-center {{
+                background-color: {theme['accent']} !important;
+                color: white !important;
+            }}
+            
+            .nav-button-right {{
+                background-color: {theme['primary']} !important;
+                color: white !important;
+            }}
+            
+            /* Стили для рамки превью */
+            .preview-frame {{
+                border: 1px solid {theme['border']};
+                border-radius: 5px;
+                padding: 15px;
+                background-color: {theme['background']};
+                position: relative;
+            }}
+            
+            .preview-frame::before {{
+                content: 'Превью';
+                position: absolute;
+                top: -10px;
+                left: 15px;
+                background-color: {theme['background']};
+                padding: 0 10px;
+                font-size: 12px;
+                color: {theme['text']};
+                opacity: 0.8;
+            }}
             </style>
         """
     
@@ -2573,198 +2792,255 @@ class CreatePage:
     
     @staticmethod
     def render():
-        """Рендер страницы Create"""
-        st.markdown(f"<h1>{get_text('create_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('create_description')}</p>", unsafe_allow_html=True)
+        """Рендер страницы Create с новым дизайном панелей"""
+        # Заголовок страницы с улучшенным оформлением
+        st.markdown("""
+            <div class="page-header">
+                <h1>Create Custom Style</h1>
+                <p>Настройте свой стиль цитирования. Все изменения отображаются в превью.</p>
+            </div>
+        """, unsafe_allow_html=True)
         
-        # Контейнер для настроек
-        with st.container():
-            CreatePage._render_general_settings()
-            CreatePage._render_element_configuration()
-            CreatePage._render_style_preview()
-            CreatePage._render_action_buttons()
+        # Панель 1: Общие настройки с иконкой 🎨
+        CreatePage._render_general_settings_panel()
+        
+        # Панель 2: Конфигурация элементов с иконкой 📑
+        CreatePage._render_element_configuration_panel()
+        
+        # Панель 3: Превью стиля с иконкой 👀
+        CreatePage._render_style_preview_panel()
+        
+        # Кнопки навигации
+        CreatePage._render_action_buttons()
     
     @staticmethod
-    def _render_general_settings():
-        """Рендер общих настроек в формате 3x4"""
-        st.markdown(f"<div class='card'><div class='card-title'>{get_text('general_settings')}</div>", unsafe_allow_html=True)
+    def _render_general_settings_panel():
+        """Рендер панели общих настроек в формате таблицы 2x4"""
+        st.markdown("""
+            <div class="settings-panel">
+                <div class="panel-header">
+                    <div class="panel-icon">🎨</div>
+                    <div class="panel-header-text">General Settings</div>
+                </div>
+        """, unsafe_allow_html=True)
+        
+        # Таблица настроек 2x4
+        st.markdown('<div class="compact-table">', unsafe_allow_html=True)
         
         # Строка 1
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2 = st.columns(2)
         
         with col1:
-            st.selectbox(
-                get_text('numbering_style'),
-                Config.NUMBERING_STYLES,
-                key="num",
-                index=Config.NUMBERING_STYLES.index(st.session_state.num)
-            )
+            CreatePage._render_setting_row("Нумерация", "num", Config.NUMBERING_STYLES, 
+                                         Config.NUMBERING_STYLES.index(st.session_state.num))
         
         with col2:
-            st.selectbox(
-                get_text('author_format'),
-                Config.AUTHOR_FORMATS,
-                key="auth",
-                index=Config.AUTHOR_FORMATS.index(st.session_state.auth)
-            )
-        
-        with col3:
-            st.selectbox(
-                get_text('author_separator'),
-                [", ", "; "],
-                key="sep",
-                index=[", ", "; "].index(st.session_state.sep)
-            )
-        
-        with col4:
-            st.number_input(
-                get_text('et_al_limit'),
-                min_value=0,
-                step=1,
-                key="etal",
-                value=st.session_state.etal
-            )
+            CreatePage._render_setting_row("Страницы", "page", Config.PAGE_FORMATS,
+                                         Config.PAGE_FORMATS.index(st.session_state.page))
         
         # Строка 2
-        col5, col6, col7, col8 = st.columns(4)
+        col3, col4 = st.columns(2)
         
-        with col5:
-            st.checkbox(
-                get_text('use_and'),
-                key="use_and_checkbox",
-                value=st.session_state.use_and_checkbox
-            )
+        with col3:
+            CreatePage._render_setting_row("Авторы", "auth", Config.AUTHOR_FORMATS,
+                                         Config.AUTHOR_FORMATS.index(st.session_state.auth))
         
-        with col6:
-            st.checkbox(
-                get_text('use_ampersand'),
-                key="use_ampersand_checkbox",
-                value=st.session_state.use_ampersand_checkbox
-            )
-        
-        with col7:
-            st.selectbox(
-                get_text('journal_style'),
-                Config.JOURNAL_STYLES,
-                key="journal_style",
-                index=Config.JOURNAL_STYLES.index(st.session_state.journal_style),
-                format_func=lambda x: {
-                    "{Full Journal Name}": get_text('full_journal_name'),
-                    "{J. Abbr.}": get_text('journal_abbr_with_dots'),
-                    "{J Abbr}": get_text('journal_abbr_no_dots')
-                }[x]
-            )
-        
-        with col8:
-            current_page = st.session_state.page
-            page_index = 3
-            if current_page in Config.PAGE_FORMATS:
-                page_index = Config.PAGE_FORMATS.index(current_page)
-            
-            st.selectbox(
-                get_text('page_format'),
-                Config.PAGE_FORMATS,
-                key="page",
-                index=page_index
-            )
+        with col4:
+            CreatePage._render_setting_row("Формат DOI", "doi", Config.DOI_FORMATS,
+                                         Config.DOI_FORMATS.index(st.session_state.doi))
         
         # Строка 3
-        col9, col10, col11, col12 = st.columns(4)
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            CreatePage._render_setting_row("Разделитель", "sep", [", ", "; "],
+                                         [", ", "; "].index(st.session_state.sep))
+        
+        with col6:
+            st.markdown('<div class="table-row">', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-label">DOI ссылка</div>', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
+            st.checkbox("", key="doilink", value=st.session_state.doilink, 
+                       label_visibility="collapsed", key="doilink_checkbox")
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Строка 4
+        col7, col8 = st.columns(2)
+        
+        with col7:
+            st.markdown('<div class="table-row">', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-label">Et al после</div>', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
+            st.number_input("", min_value=0, step=1, key="etal", 
+                          value=st.session_state.etal, label_visibility="collapsed")
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        with col8:
+            CreatePage._render_setting_row("Конеч. пункт", "punct", ["", "."],
+                                         ["", "."].index(st.session_state.punct))
+        
+        # Дополнительные настройки
+        col9, col10 = st.columns(2)
         
         with col9:
-            st.selectbox(
-                get_text('doi_format'),
-                Config.DOI_FORMATS,
-                key="doi",
-                index=Config.DOI_FORMATS.index(st.session_state.doi)
-            )
+            st.markdown('<div class="table-row">', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-label">Исп. \'и\'</div>', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
+            st.checkbox("", key="use_and_checkbox", value=st.session_state.use_and_checkbox,
+                       label_visibility="collapsed", key="use_and_checkbox_small")
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
         
         with col10:
-            st.checkbox(
-                get_text('doi_hyperlink'),
-                key="doilink",
-                value=st.session_state.doilink
-            )
+            st.markdown('<div class="table-row">', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-label">Исп. \'&\'</div>', unsafe_allow_html=True)
+            st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
+            st.checkbox("", key="use_ampersand_checkbox", value=st.session_state.use_ampersand_checkbox,
+                       label_visibility="collapsed", key="use_ampersand_checkbox_small")
+            st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+        
+        # Стиль журнала
+        col11, col12 = st.columns(2)
         
         with col11:
-            st.selectbox(
-                get_text('final_punctuation'),
-                ["", "."],
-                key="punct",
-                index=["", "."].index(st.session_state.punct)
-            )
+            journal_style_options = ["{Full Journal Name}", "{J. Abbr.}", "{J Abbr}"]
+            journal_style_labels = {
+                "{Full Journal Name}": "Полное название",
+                "{J. Abbr.}": "J. Abbr.",
+                "{J Abbr}": "J Abbr"
+            }
+            CreatePage._render_setting_row("Стиль журнала", "journal_style", journal_style_options,
+                                         journal_style_options.index(st.session_state.journal_style),
+                                         format_func=lambda x: journal_style_labels[x])
         
         with col12:
-            # Пустая колонка для выравнивания
-            st.write("")
+            # Пустая ячейка для выравнивания
+            st.markdown('<div class="table-row"></div>', unsafe_allow_html=True)
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)  # Закрываем compact-table
+        st.markdown('</div>', unsafe_allow_html=True)  # Закрываем settings-panel
     
     @staticmethod
-    def _render_element_configuration():
-        """Рендер конфигурации элементов в формате 5 колонок"""
-        st.markdown(f"<div class='card'><div class='card-title'>{get_text('element_config')}</div>", unsafe_allow_html=True)
+    def _render_setting_row(label, key, options, index, format_func=None):
+        """Рендер строки настройки в таблице"""
+        st.markdown('<div class="table-row">', unsafe_allow_html=True)
+        st.markdown(f'<div class="table-cell table-label">{label}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
+        
+        if format_func:
+            st.selectbox("", options, key=key, index=index, 
+                        label_visibility="collapsed", format_func=format_func)
+        else:
+            st.selectbox("", options, key=key, index=index, 
+                        label_visibility="collapsed")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    @staticmethod
+    def _render_element_configuration_panel():
+        """Рендер панели конфигурации элементов в формате 2 колонки по 4 элемента"""
+        st.markdown("""
+            <div class="settings-panel">
+                <div class="panel-header">
+                    <div class="panel-icon">📑</div>
+                    <div class="panel-header-text">Element Configuration (8 элементов)</div>
+                </div>
+        """, unsafe_allow_html=True)
         
         # Заголовки колонок
-        cols = st.columns([2, 1, 1, 1, 2])
+        cols = st.columns([1, 1])
+        
         with cols[0]:
-            st.markdown(f"<small><b>{get_text('element')}</b></small>", unsafe_allow_html=True)
+            st.markdown("""
+                <div style="display: grid; grid-template-columns: 30px 150px 30px 30px 30px 1fr; gap: 8px; margin-bottom: 10px;">
+                    <div style="font-weight: bold; text-align: center;">#</div>
+                    <div style="font-weight: bold;">Элемент</div>
+                    <div style="font-weight: bold; text-align: center;" title="Курсив">К</div>
+                    <div style="font-weight: bold; text-align: center;" title="Жирный">Ж</div>
+                    <div style="font-weight: bold; text-align: center;" title="Скобки">С</div>
+                    <div style="font-weight: bold;">Разделитель</div>
+                </div>
+            """, unsafe_allow_html=True)
+        
         with cols[1]:
-            st.markdown(f"<small><b>{get_text('italic')}</b></small>", unsafe_allow_html=True)
-        with cols[2]:
-            st.markdown(f"<small><b>{get_text('bold')}</b></small>", unsafe_allow_html=True)
-        with cols[3]:
-            st.markdown(f"<small><b>{get_text('parentheses')}</b></small>", unsafe_allow_html=True)
-        with cols[4]:
-            st.markdown(f"<small><b>{get_text('separator')}</b></small>", unsafe_allow_html=True)
+            st.markdown("""
+                <div style="display: grid; grid-template-columns: 30px 150px 30px 30px 30px 1fr; gap: 8px; margin-bottom: 10px;">
+                    <div style="font-weight: bold; text-align: center;">#</div>
+                    <div style="font-weight: bold;">Элемент</div>
+                    <div style="font-weight: bold; text-align: center;" title="Курсив">К</div>
+                    <div style="font-weight: bold; text-align: center;" title="Жирный">Ж</div>
+                    <div style="font-weight: bold; text-align: center;" title="Скобки">С</div>
+                    <div style="font-weight: bold;">Разделитель</div>
+                </div>
+            """, unsafe_allow_html=True)
         
-        # Элементы конфигурации
-        for i in range(8):
-            cols = st.columns([2, 1, 1, 1, 2])
-            
-            with cols[0]:
-                st.selectbox(
-                    "",
-                    Config.AVAILABLE_ELEMENTS,
-                    key=f"el{i}",
-                    label_visibility="collapsed",
-                    index=Config.AVAILABLE_ELEMENTS.index(st.session_state[f"el{i}"]) if st.session_state[f"el{i}"] in Config.AVAILABLE_ELEMENTS else 0
-                )
-            
-            with cols[1]:
-                st.checkbox(
-                    "",
-                    key=f"it{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with cols[2]:
-                st.checkbox(
-                    "",
-                    key=f"bd{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with cols[3]:
-                st.checkbox(
-                    "",
-                    key=f"pr{i}",
-                    label_visibility="collapsed"
-                )
-            
-            with cols[4]:
-                st.text_input(
-                    "",
-                    value=st.session_state[f"sp{i}"],
-                    key=f"sp{i}",
-                    label_visibility="collapsed"
-                )
+        # Две колонки с элементами
+        col_left, col_right = st.columns([1, 1])
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        with col_left:
+            # Элементы 1-4
+            for i in range(4):
+                CreatePage._render_element_row(i)
+        
+        with col_right:
+            # Элементы 5-8
+            for i in range(4, 8):
+                CreatePage._render_element_row(i)
+        
+        st.markdown('</div>', unsafe_allow_html=True)  # Закрываем settings-panel
     
     @staticmethod
-    def _render_style_preview():
-        """Рендер предпросмотра стиля"""
+    def _render_element_row(index):
+        """Рендер строки элемента конфигурации"""
+        st.markdown(f'<div class="element-row">', unsafe_allow_html=True)
+        
+        # Номер элемента
+        st.markdown(f'<div class="element-number">{index + 1}</div>', unsafe_allow_html=True)
+        
+        # Выбор элемента
+        element_options = Config.AVAILABLE_ELEMENTS
+        current_element = st.session_state[f"el{index}"]
+        element_index = element_options.index(current_element) if current_element in element_options else 0
+        
+        st.selectbox("", element_options, key=f"el{index}", 
+                    index=element_index, label_visibility="collapsed")
+        
+        # Чекбоксы
+        col_it, col_bd, col_pr = st.columns([1, 1, 1])
+        
+        with col_it:
+            st.checkbox("", key=f"it{index}", value=st.session_state[f"it{index}"],
+                       label_visibility="collapsed")
+        
+        with col_bd:
+            st.checkbox("", key=f"bd{index}", value=st.session_state[f"bd{index}"],
+                       label_visibility="collapsed")
+        
+        with col_pr:
+            st.checkbox("", key=f"pr{index}", value=st.session_state[f"pr{index}"],
+                       label_visibility="collapsed")
+        
+        # Разделитель
+        st.text_input("", value=st.session_state[f"sp{index}"], key=f"sp{index}",
+                     label_visibility="collapsed")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    @staticmethod
+    def _render_style_preview_panel():
+        """Рендер панели предпросмотра стиля в рамке"""
+        st.markdown("""
+            <div class="settings-panel">
+                <div class="panel-header">
+                    <div class="panel-icon">👀</div>
+                    <div class="panel-header-text">Style Preview</div>
+                </div>
+        """, unsafe_allow_html=True)
+        
         # Создание конфигурации стиля для предпросмотра
         style_config = CreatePage._get_style_config()
         
@@ -2778,9 +3054,24 @@ class CreatePage:
                 preview_ref, _ = format_reference(preview_metadata, style_config, for_preview=True)
                 preview_with_numbering = CreatePage._add_numbering(preview_ref, style_config)
                 
-                st.markdown(f"<div class='card'><div class='card-title'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='style-preview'>{preview_with_numbering}</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
+                # Превью в рамке
+                st.markdown("""
+                    <div class="preview-frame">
+                        <div style="font-family: monospace; font-size: 14px; line-height: 1.5; white-space: pre-wrap;">
+                """, unsafe_allow_html=True)
+                
+                st.markdown(f"`{preview_with_numbering}`")
+                
+                st.markdown("""
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("Настройте элементы для отображения предпросмотра")
+        else:
+            st.info("Настройте элементы для отображения предпросмотра")
+        
+        st.markdown('</div>', unsafe_allow_html=True)  # Закрываем settings-panel
     
     @staticmethod
     def _get_style_config() -> Dict:
@@ -2915,32 +3206,37 @@ class CreatePage:
     @staticmethod
     def _render_action_buttons():
         """Рендер кнопок действий"""
+        st.markdown('<div class="nav-buttons">', unsafe_allow_html=True)
+        
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
-            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_create"):
+            if st.button(get_text('back_button'), use_container_width=True, 
+                        key="back_from_create", type="secondary"):
                 StageManager.navigate_to('start')
         
         with col2:
-            if st.button(get_text('export_style_button'), use_container_width=True, key="export_style_create"):
-                style_config = CreatePage._get_style_config()
-                export_data = CreatePage._export_style(style_config)
-                if export_data:
-                    st.download_button(
-                        label=get_text('export_style'),
-                        data=export_data,
-                        file_name=f"{st.session_state.style_export_name}.json",
-                        mime="application/json",
-                        use_container_width=True,
-                        key="download_exported_style"
-                    )
+            style_config = CreatePage._get_style_config()
+            export_data = CreatePage._export_style(style_config)
+            if export_data:
+                st.download_button(
+                    label=get_text('export_style_button'),
+                    data=export_data,
+                    file_name=f"{st.session_state.style_export_name}.json",
+                    mime="application/json",
+                    use_container_width=True,
+                    key="download_exported_style_create"
+                )
         
         with col3:
-            if st.button(get_text('proceed_to_io'), use_container_width=True, key="proceed_from_create"):
+            if st.button(get_text('proceed_to_io'), use_container_width=True,
+                        key="proceed_from_create"):
                 style_config = CreatePage._get_style_config()
                 st.session_state.style_config = style_config
                 st.session_state.custom_style_created = True
                 StageManager.navigate_to('io')
+        
+        st.markdown('</div>', unsafe_allow_html=True)
     
     @staticmethod
     def _export_style(style_config: Dict) -> Optional[bytes]:
