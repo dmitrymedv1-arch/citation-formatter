@@ -4,3 +4,6 @@ crossrefapi
 tqdm
 requests
 rich
+plotly
+pandas
+kaleido
