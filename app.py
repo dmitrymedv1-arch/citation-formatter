@@ -26,7 +26,6 @@ import sqlite3
 from contextlib import contextmanager
 import requests
 import streamlit.components.v1 as components
-from streamlit_sortables import sort_items
 
 # Настройка логирования
 logging.basicConfig(
@@ -3614,4 +3613,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
