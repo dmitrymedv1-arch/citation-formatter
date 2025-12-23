@@ -2897,7 +2897,7 @@ class CreatePage:
             st.markdown('<div class="table-row">', unsafe_allow_html=True)
             st.markdown('<div class="table-cell table-label">Исп. \'&\'</div>', unsafe_allow_html=True)
             st.markdown('<div class="table-cell table-value">', unsafe_allow_html=True)
-            st.checkbox("", key="use_ampersand_checkbox", value=st.session_state.use_ampersand_checkbox,
+            st.checkbox("", value=st.session_state.use_ampersand_checkbox,
                        label_visibility="collapsed", key="use_ampersand_checkbox_small")
             st.markdown('</div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
@@ -3823,5 +3823,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
