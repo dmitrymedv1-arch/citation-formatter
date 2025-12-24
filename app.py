@@ -1081,13 +1081,16 @@ class CustomCitationFormatter(BaseCitationFormatter):
                         separator = config['separator']
                 
                 if for_preview:
+                    # Используем специальные маркеры для форматирования
                     formatted_value = value
-                    if config['italic']:
-                        formatted_value = f"<i>{formatted_value}</i>"
-                    if config['bold']:
-                        formatted_value = f"<b>{formatted_value}</b>"
+                    if config['italic'] and config['bold']:
+                        formatted_value = f"***{formatted_value}***"
+                    elif config['italic']:
+                        formatted_value = f"*{formatted_value}*"
+                    elif config['bold']:
+                        formatted_value = f"**{formatted_value}**"
                     
-                    elements.append((formatted_value, False, False, separator, False, None, element_empty))
+                    elements.append((formatted_value, config['italic'], config['bold'], separator, False, None, element_empty))
                 else:
                     elements.append((value, config['italic'], config['bold'], separator,
                                    (element == "DOI" and self.style_config['doi_hyperlink']), doi_value, element_empty))
@@ -1096,6 +1099,7 @@ class CustomCitationFormatter(BaseCitationFormatter):
             else:
                 previous_element_was_empty = True
         
+        # Пост-обработка для удаления лишних разделителей
         cleaned_elements = []
         for i, element_data in enumerate(elements):
             value, italic, bold, separator, is_doi_hyperlink, doi_value, element_empty = element_data
@@ -1116,6 +1120,8 @@ class CustomCitationFormatter(BaseCitationFormatter):
                     ref_str = ref_str.rstrip(',.') + "."
             
             ref_str = re.sub(r'\.\.+', '.', ref_str)
+            
+            # Для предпросмотра возвращаем форматированную строку с Markdown
             return ref_str, False
         else:
             return cleaned_elements, False
@@ -2243,6 +2249,7 @@ class ThemeManager:
                 border-left: 3px solid {theme['accent']};
                 font-style: italic;
                 margin: 15px 0;
+                font-family: {theme['font']} !important;
             }}
             
             /* Стили для элемента конфигурации */
@@ -2878,7 +2885,7 @@ class CreatePage:
                 )
         
         st.markdown("</div>", unsafe_allow_html=True)
-    
+        
     @staticmethod
     def _render_style_preview():
         """Рендер предпросмотра стиля"""
@@ -2896,7 +2903,11 @@ class CreatePage:
                 preview_with_numbering = CreatePage._add_numbering(preview_ref, style_config)
                 
                 st.markdown(f"<div class='card'><div class='card-title'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+                
+                # Используем markdown для корректного отображения форматирования
+                st.markdown(f"<div class='style-preview'>**{get_text('example')}**</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='style-preview'>{preview_with_numbering}</div>", unsafe_allow_html=True)
+                
                 st.markdown("</div>", unsafe_allow_html=True)
     
     @staticmethod
@@ -2937,7 +2948,7 @@ class CreatePage:
             'rsc_style': st.session_state.get('rsc_style', False),
             'cta_style': st.session_state.get('cta_style', False)
         }
-    
+
     @staticmethod
     def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
         """Получение метаданных для предпросмотра"""
@@ -2996,16 +3007,17 @@ class CreatePage:
                 'doi': '10.1016/j.ceramint.2013.11.094'
             }
         elif style_config.get('elements'):
+            # Возвращаем данные, которые хорошо демонстрируют форматирование
             return {
                 'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
-                'title': 'Article Title',
-                'journal': 'Journal of the American Chemical Society',
-                'year': 2020,
-                'volume': '15',
-                'issue': '3',
-                'pages': '122-128',
-                'article_number': 'e12345',
-                'doi': '10.1000/xyz123'
+                'title': 'Advanced Research in Materials Science',
+                'journal': 'Journal of Materials Chemistry A',
+                'year': 2023,
+                'volume': '11',
+                'issue': '15',
+                'pages': '102-115',
+                'article_number': 'e2301234',
+                'doi': '10.1000/abc123'
             }
         else:
             return None
@@ -3695,3 +3707,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
