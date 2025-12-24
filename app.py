@@ -132,17 +132,17 @@ class Config:
         },
         'newspaper': {
             'name': 'Газетный',
-            'primary': '#2E7D32',  # Зеленый
-            'secondary': '#558B2F',  # Светло-зеленый
-            'accent': '#FF8F00',  # Янтарный
-            'background': '#F1F8E9',  # Светло-зеленый фон
+            'primary': '#795548',  # Коричневый
+            'secondary': '#8D6E63',  # Светло-коричневый
+            'accent': '#5D4037',  # Темно-коричневый
+            'background': '#FAF9F7',  # Слоновая кость
             'secondaryBackground': '#FFFFFF',
-            'text': '#1B5E20',  # Темно-зеленый текст
-            'font': "'Georgia', 'Times New Roman', serif",
-            'border': '#C5E1A5',  # Светло-зеленая граница
+            'text': '#4E342E',  # Шоколадный
+            'font': "'Garamond', 'Baskerville', serif",
+            'border': '#D7CCC8',  # Светло-коричневый
             'cardBackground': '#FFFFFF',
-            'buttonStyle': 'rounded',
-            'shadow': '0 2px 6px rgba(46, 125, 50, 0.15)'
+            'buttonStyle': 'classic',
+            'shadow': '0 3px 8px rgba(121, 85, 72, 0.1)'
         }
     }
     
@@ -3527,5 +3527,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
