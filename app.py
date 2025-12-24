@@ -182,7 +182,7 @@ TRANSLATIONS = {
         'input_method': 'Input:',
         'output_method': 'Output:',
         'select_docx': 'Select DOCX',
-        'enter_references': 'Enter references (one per line)',
+        'enter_references': 'Enter DOI/DOIs (one per line)',
         'references': 'References:',
         'results': 'Results:',
         'process': '🚀 Process',
@@ -323,7 +323,7 @@ TRANSLATIONS = {
         'input_method': 'Ввод:',
         'output_method': 'Вывод:',
         'select_docx': 'Выберите DOCX',
-        'enter_references': 'Введите ссылки (по одной на строку)',
+        'enter_references': 'Введите DOI/DOIs (по одной на строку)',
         'references': 'Ссылки:',
         'results': 'Результаты:',
         'process': '🚀 Обработать',
@@ -3808,6 +3808,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
