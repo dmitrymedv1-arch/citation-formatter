@@ -256,7 +256,7 @@ TRANSLATIONS = {
         'stage_create': 'Create',
         'stage_io': 'Input/Output',
         'stage_results': 'Results',
-        'start_title': 'Welcome to Citation Style Constructor',
+        'start_title': 'Welcome to DOI-based Citation Style Constructor',
         'start_ready_presets': '📋 Ready Style Presets',
         'start_create_style': '🎨 Create Style',
         'start_load_style': '📂 Load Your Saved Style',
@@ -397,7 +397,7 @@ TRANSLATIONS = {
         'stage_create': 'Создание',
         'stage_io': 'Ввод/Вывод',
         'stage_results': 'Результаты',
-        'start_title': 'Добро пожаловать в Конструктор стилей цитирования',
+        'start_title': 'Добро пожаловать в Конструктор стилей цитирования ссылок по их DOI',
         'start_ready_presets': '📋 Готовые стили',
         'start_create_style': '🎨 Создать стиль',
         'start_load_style': '📂 Загрузить сохраненный стиль',
@@ -3808,6 +3808,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
