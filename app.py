@@ -1023,7 +1023,7 @@ class BaseCitationFormatter:
         """Форматирует название журнала с учетом выбранного стиля"""
         journal_style = self.style_config.get('journal_style', '{Full Journal Name}')
         return journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
-
+        
 class CustomCitationFormatter(BaseCitationFormatter):
     """Форматировщик для пользовательских стилей с улучшенной обработкой Issue"""
     
@@ -1081,12 +1081,12 @@ class CustomCitationFormatter(BaseCitationFormatter):
                         separator = config['separator']
                 
                 if for_preview:
-                    # Используем специальные маркеры для форматирования
+                    # ИСПРАВЛЕНИЕ: Используем Markdown форматирование вместо HTML тегов
                     formatted_value = value
                     if config['italic'] and config['bold']:
-                        formatted_value = f"***{formatted_value}***"
+                        formatted_value = f"**_{formatted_value}_**"
                     elif config['italic']:
-                        formatted_value = f"*{formatted_value}*"
+                        formatted_value = f"_{formatted_value}_"
                     elif config['bold']:
                         formatted_value = f"**{formatted_value}**"
                     
@@ -1099,7 +1099,6 @@ class CustomCitationFormatter(BaseCitationFormatter):
             else:
                 previous_element_was_empty = True
         
-        # Пост-обработка для удаления лишних разделителей
         cleaned_elements = []
         for i, element_data in enumerate(elements):
             value, italic, bold, separator, is_doi_hyperlink, doi_value, element_empty = element_data
@@ -1120,8 +1119,6 @@ class CustomCitationFormatter(BaseCitationFormatter):
                     ref_str = ref_str.rstrip(',.') + "."
             
             ref_str = re.sub(r'\.\.+', '.', ref_str)
-            
-            # Для предпросмотра возвращаем форматированную строку с Markdown
             return ref_str, False
         else:
             return cleaned_elements, False
@@ -2247,7 +2244,6 @@ class ThemeManager:
                 padding: 15px;
                 border-radius: 5px;
                 border-left: 3px solid {theme['accent']};
-                font-style: italic;
                 margin: 15px 0;
                 font-family: {theme['font']} !important;
             }}
@@ -2886,7 +2882,7 @@ class CreatePage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-    @staticmethod
+    @staticmethod       
     def _render_style_preview():
         """Рендер предпросмотра стиля"""
         # Создание конфигурации стиля для предпросмотра
@@ -2904,9 +2900,9 @@ class CreatePage:
                 
                 st.markdown(f"<div class='card'><div class='card-title'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
                 
-                # Используем markdown для корректного отображения форматирования
-                st.markdown(f"<div class='style-preview'>**{get_text('example')}**</div>", unsafe_allow_html=True)
-                st.markdown(f"<div class='style-preview'>{preview_with_numbering}</div>", unsafe_allow_html=True)
+                # ИСПРАВЛЕНИЕ: Используем markdown с контейнером для правильного отображения
+                st.markdown(f"**{get_text('example')}**")
+                st.markdown(f'<div class="style-preview">{preview_with_numbering}</div>', unsafe_allow_html=True)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
     
@@ -3707,4 +3703,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
