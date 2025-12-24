@@ -2245,7 +2245,27 @@ class ThemeManager:
                 border-radius: 5px;
                 border-left: 3px solid {theme['accent']};
                 margin: 15px 0;
-                font-family: {theme['font']} !important;
+                font-family: {theme['font']};
+                line-height: 1.5;
+            }}
+
+            /* Стили для форматированного текста в style-preview (как в Results) */
+            .style-preview .formatted-text {{
+                font-family: {theme['font']};
+                line-height: 1.5;
+            }}
+            
+            .style-preview .formatted-text-italic {{
+                font-style: italic;
+            }}
+            
+            .style-preview .formatted-text-bold {{
+                font-weight: bold;
+            }}
+            
+            .style-preview .formatted-text-italic-bold {{
+                font-style: italic;
+                font-weight: bold;
             }}
             
             /* Стили для элемента конфигурации */
@@ -2882,7 +2902,7 @@ class CreatePage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-    @staticmethod       
+    @staticmethod              
     def _render_style_preview():
         """Рендер предпросмотра стиля"""
         # Создание конфигурации стиля для предпросмотра
@@ -2895,16 +2915,101 @@ class CreatePage:
             
             preview_metadata = CreatePage._get_preview_metadata(style_config)
             if preview_metadata:
-                preview_ref, _ = format_reference(preview_metadata, style_config, for_preview=True)
-                preview_with_numbering = CreatePage._add_numbering(preview_ref, style_config)
+                # Получаем отформатированные элементы (не строку)
+                elements, _ = format_reference(preview_metadata, style_config, for_preview=False)
+                preview_with_numbering = CreatePage._add_numbering_to_elements(elements, style_config)
                 
                 st.markdown(f"<div class='card'><div class='card-title'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
                 
-                # ИСПРАВЛЕНИЕ: Используем markdown с контейнером для правильного отображения
-                st.markdown(f"**{get_text('example')}**")
-                st.markdown(f'<div class="style-preview">{preview_with_numbering}</div>', unsafe_allow_html=True)
+                # Используем ту же логику, что и в ResultsPage
+                st.markdown(f"<small><b>{get_text('example')}</b></small>", unsafe_allow_html=True)
+                
+                # Создаем HTML с форматированием, как в ResultsPage
+                if isinstance(elements, str):
+                    # Если элементы уже строка
+                    display_html = f'<div class="formatted-text">{preview_with_numbering}</div>'
+                else:
+                    # Формируем HTML с форматированием, как в ResultsPage
+                    html_parts = []
+                    
+                    # Добавляем нумерацию
+                    numbering = style_config.get('numbering_style', 'No numbering')
+                    prefix = ""
+                    if numbering != "No numbering":
+                        if numbering == "1":
+                            prefix = f"<span>1 </span>"
+                        elif numbering == "1.":
+                            prefix = f"<span>1. </span>"
+                        elif numbering == "1)":
+                            prefix = f"<span>1) </span>"
+                        elif numbering == "(1)":
+                            prefix = f"<span>(1) </span>"
+                        elif numbering == "[1]":
+                            prefix = f"<span>[1] </span>"
+                        else:
+                            prefix = f"<span>1. </span>"
+                    
+                    html_parts.append(prefix)
+                    
+                    for j, element_data in enumerate(elements):
+                        value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
+                        
+                        # Определяем классы форматирования как в ResultsPage
+                        format_classes = []
+                        if italic and bold:
+                            format_classes.append("formatted-text-italic-bold")
+                        elif italic:
+                            format_classes.append("formatted-text-italic")
+                        elif bold:
+                            format_classes.append("formatted-text-bold")
+                        
+                        format_class = " ".join(format_classes) if format_classes else ""
+                        
+                        # Создаем HTML элемент
+                        if format_class:
+                            value_html = f'<span class="{format_class}">{value}</span>'
+                        else:
+                            value_html = f'<span>{value}</span>'
+                        
+                        html_parts.append(value_html)
+                        
+                        if separator and j < len(elements) - 1:
+                            html_parts.append(f'<span>{separator}</span>')
+                    
+                    # Добавляем конечную пунктуацию
+                    if style_config.get('final_punctuation'):
+                        # Убираем точку, если уже есть
+                        if html_parts and html_parts[-1].endswith('.'):
+                            html_parts[-1] = html_parts[-1][:-1]
+                        html_parts.append('<span>.</span>')
+                    
+                    full_html = "".join(html_parts)
+                    display_html = f'<div class="formatted-text">{full_html}</div>'
+                
+                st.markdown(f'<div class="style-preview">{display_html}</div>', unsafe_allow_html=True)
                 
                 st.markdown("</div>", unsafe_allow_html=True)
+    
+    @staticmethod
+    def _add_numbering_to_elements(elements, style_config):
+        """Добавление нумерации к элементам (для обратной совместимости)"""
+        if isinstance(elements, str):
+            numbering = style_config.get('numbering_style', 'No numbering')
+            if numbering == "No numbering":
+                return elements
+            elif numbering == "1":
+                return f"1 {elements}"
+            elif numbering == "1.":
+                return f"1. {elements}"
+            elif numbering == "1)":
+                return f"1) {elements}"
+            elif numbering == "(1)":
+                return f"(1) {elements}"
+            elif numbering == "[1]":
+                return f"[1] {elements}"
+            else:
+                return f"1. {elements}"
+        return elements
     
     @staticmethod
     def _get_style_config() -> Dict:
@@ -3703,5 +3808,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
