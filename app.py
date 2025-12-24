@@ -746,7 +746,8 @@ def init_session_state():
         'doi_not_found_count': 0,
         'formatted_refs': [],
         'txt_buffer': None,
-        'docx_buffer': None
+        'docx_buffer': None,
+        'formatted_txt_buffer': None,  # Новый буфер для отформатированных ссылок TXT
     }
     
     for key, default in defaults.items():
@@ -1792,7 +1793,7 @@ class ReferenceProcessor:
         self.validator = StyleValidator()
     
     def process_references(self, references: List[str], style_config: Dict, 
-                         progress_container, status_container) -> Tuple[List, io.BytesIO, int, int, Dict]:
+                         progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict]:
         """Обработка списка ссылок с отображением прогресса"""
         is_valid, validation_messages = self.validator.validate_references_count(references)
         for msg in validation_messages:
@@ -1802,10 +1803,11 @@ class ReferenceProcessor:
                 st.warning(msg)
         
         if not is_valid:
-            return [], io.BytesIO(), 0, 0, {}
+            return [], io.BytesIO(), io.BytesIO(), 0, 0, {}
         
         doi_list = []
         formatted_refs = []
+        formatted_texts = []  # Новый список для отформатированных текстов
         doi_found_count = 0
         doi_not_found_count = 0
         
@@ -1816,6 +1818,7 @@ class ReferenceProcessor:
             if self.doi_processor._is_section_header(ref):
                 doi_list.append(f"{ref} [SECTION HEADER - SKIPPED]")
                 formatted_refs.append((ref, False, None))
+                formatted_texts.append(ref)  # Добавляем исходный текст
                 continue
                 
             doi = self.doi_processor.find_doi_enhanced(ref)
@@ -1827,23 +1830,28 @@ class ReferenceProcessor:
                 error_msg = f"{ref}\nПроверьте источник и добавьте DOI вручную." if st.session_state.current_language == 'ru' else f"{ref}\nPlease check this source and insert the DOI manually."
                 doi_list.append(error_msg)
                 formatted_refs.append((error_msg, True, None))
+                formatted_texts.append(error_msg)  # Добавляем сообщение об ошибке
                 doi_not_found_count += 1
         
         if valid_dois:
             self._process_doi_batch(valid_dois, reference_doi_map, references, 
-                                  formatted_refs, doi_list, style_config,
+                                  formatted_refs, formatted_texts, doi_list, style_config,
                                   progress_container, status_container)
         
         doi_found_count = len([ref for ref in formatted_refs if not ref[1] and ref[2]])
         
         duplicates_info = self._find_duplicates(formatted_refs)
         
-        txt_buffer = self._create_txt_file(doi_list)
+        # Создание TXT файла с отформатированными ссылками вместо исходных DOI
+        formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
         
-        return formatted_refs, txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
+        # Создание TXT файла с исходными DOI (для обратной совместимости)
+        original_txt_buffer = self._create_txt_file(doi_list)
+        
+        return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
     
     def _process_doi_batch(self, valid_dois, reference_doi_map, references, 
-                          formatted_refs, doi_list, style_config,
+                          formatted_refs, formatted_texts, doi_list, style_config,
                           progress_container, status_container):
         """Пакетная обработка DOI"""
         status_container.info(get_text('batch_processing'))
@@ -1865,10 +1873,22 @@ class ReferenceProcessor:
                 if metadata:
                     formatted_ref, is_error = self._format_reference(metadata, style_config)
                     formatted_refs.append((formatted_ref, is_error, metadata))
+                    
+                    # Формируем отформатированный текст для TXT файла
+                    formatted_text = self._format_reference_for_text(metadata, style_config)
+                    formatted_texts.append(formatted_text)
+                    
+                    # Обновляем список DOI для сохранения обратной совместимости
+                    if doi in doi_list:
+                        index = doi_list.index(doi)
+                        doi_list[index] = formatted_text
                 else:
                     error_msg = self._create_error_message(ref, st.session_state.current_language)
-                    doi_list[doi_list.index(doi)] = error_msg
+                    if doi in doi_list:
+                        index = doi_list.index(doi)
+                        doi_list[index] = error_msg
                     formatted_refs.append((error_msg, True, None))
+                    formatted_texts.append(error_msg)
         
         self._update_progress_display(progress_bar, status_display, len(valid_dois), len(valid_dois), 0)
     
@@ -1949,9 +1969,39 @@ class ReferenceProcessor:
         status_display.text(status_text)
     
     def _format_reference(self, metadata: Dict, style_config: Dict) -> Tuple[Any, bool]:
-        """Форматирование ссылки"""
+        """Форматирование ссылки для DOCX"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
         return formatter.format_reference(metadata, False)
+    
+    def _format_reference_for_text(self, metadata: Dict, style_config: Dict) -> str:
+        """Форматирование ссылки для TXT файла (без HTML тегов)"""
+        formatter = CitationFormatterFactory.create_formatter(style_config)
+        elements, _ = formatter.format_reference(metadata, False)
+        
+        if isinstance(elements, str):
+            return elements
+        
+        ref_str = ""
+        for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+            # Добавляем форматирование в виде символов Markdown
+            if italic and bold:
+                formatted_value = f"***{value}***"
+            elif italic:
+                formatted_value = f"*{value}*"
+            elif bold:
+                formatted_value = f"**{value}**"
+            else:
+                formatted_value = value
+            
+            ref_str += formatted_value
+            
+            if separator and i < len(elements) - 1:
+                ref_str += separator
+        
+        if style_config.get('final_punctuation') and not ref_str.endswith('.'):
+            ref_str += "."
+        
+        return ref_str
     
     def _find_duplicates(self, formatted_refs: List) -> Dict[int, int]:
         """Поиск дубликатов ссылок"""
@@ -2008,8 +2058,16 @@ class ReferenceProcessor:
         else:
             return f"{ref}\nPlease check this source and insert the DOI manually."
     
+    def _create_formatted_txt_file(self, formatted_texts: List[str]) -> io.BytesIO:
+        """Создание TXT файла с отформатированными ссылками"""
+        output_txt_buffer = io.StringIO()
+        for text in formatted_texts:
+            output_txt_buffer.write(f"{text}\n\n")
+        output_txt_buffer.seek(0)
+        return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
+    
     def _create_txt_file(self, doi_list: List[str]) -> io.BytesIO:
-        """Создание TXT файла со списком DOI"""
+        """Создание TXT файла со списком DOI (для обратной совместимости)"""
         output_txt_buffer = io.StringIO()
         for doi in doi_list:
             output_txt_buffer.write(f"{doi}\n")
@@ -2223,6 +2281,65 @@ class ThemeManager:
             
             .download-button:hover {{
                 background-color: {theme['secondary']} !important;
+            }}
+            
+            /* Стили для прокручиваемого блока с результатами */
+            .scrollable-results {{
+                max-height: 400px;
+                overflow-y: auto;
+                padding: 10px;
+                border: 1px solid {theme['border']};
+                border-radius: 5px;
+                background-color: {theme['secondaryBackground']};
+                margin-top: 10px;
+            }}
+            
+            .scrollable-results::-webkit-scrollbar {{
+                width: 8px;
+            }}
+            
+            .scrollable-results::-webkit-scrollbar-track {{
+                background: {theme['background']};
+                border-radius: 4px;
+            }}
+            
+            .scrollable-results::-webkit-scrollbar-thumb {{
+                background: {theme['primary']};
+                border-radius: 4px;
+            }}
+            
+            .scrollable-results::-webkit-scrollbar-thumb:hover {{
+                background: {theme['secondary']};
+            }}
+            
+            /* Стили для форматированного текста в результатах */
+            .formatted-text {{
+                font-family: {theme['font']};
+                line-height: 1.5;
+                margin-bottom: 8px;
+            }}
+            
+            .formatted-text-italic {{
+                font-style: italic;
+            }}
+            
+            .formatted-text-bold {{
+                font-weight: bold;
+            }}
+            
+            .formatted-text-italic-bold {{
+                font-style: italic;
+                font-weight: bold;
+            }}
+            
+            .error-reference {{
+                background-color: rgba(255, 204, 0, 0.1);
+                border-left: 3px solid #ffcc00;
+            }}
+            
+            .duplicate-reference {{
+                background-color: rgba(78, 205, 196, 0.1);
+                border-left: 3px solid #4ECDC4;
             }}
             </style>
         """
@@ -3056,7 +3173,7 @@ class InputOutputPage:
         status_container = st.empty()
         
         with st.spinner(get_text('processing')):
-            formatted_refs, txt_buffer, doi_found_count, doi_not_found_count, duplicates_info = processor.process_references(
+            formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info = processor.process_references(
                 references, st.session_state.style_config, progress_container, status_container
             )
             
@@ -3067,7 +3184,9 @@ class InputOutputPage:
             
             # Сохранение результатов
             st.session_state.formatted_refs = formatted_refs
-            st.session_state.txt_buffer = txt_buffer
+            st.session_state.txt_buffer = formatted_txt_buffer  # Используем отформатированный TXT
+            st.session_state.formatted_txt_buffer = formatted_txt_buffer  # Сохраняем отдельно
+            st.session_state.original_txt_buffer = original_txt_buffer  # Сохраняем оригинальный для совместимости
             st.session_state.docx_buffer = docx_buffer
             st.session_state.doi_found_count = doi_found_count
             st.session_state.doi_not_found_count = doi_not_found_count
@@ -3119,47 +3238,94 @@ class ResultsPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Превью результатов
-        st.markdown(f"<div class='card'><div class='card-title'>Preview of Results</div>", unsafe_allow_html=True)
+        # Превью результатов с прокруткой
+        st.markdown(f"<div class='card'><div class='card-title'>Preview of Results ({len(st.session_state.formatted_refs)} references)</div>", unsafe_allow_html=True)
         
-        preview_limit = min(5, len(st.session_state.formatted_refs))
-        for i in range(preview_limit):
-            elements, is_error, metadata = st.session_state.formatted_refs[i]
-            
+        # Создаем прокручиваемый контейнер
+        st.markdown('<div class="scrollable-results">', unsafe_allow_html=True)
+        
+        for i, (elements, is_error, metadata) in enumerate(st.session_state.formatted_refs):
+            # Определяем стиль в зависимости от типа ссылки
+            css_class = "formatted-text"
             if is_error:
-                st.markdown(f"<div class='result-item' style='border-left-color: #ffcc00;'>{elements}</div>", unsafe_allow_html=True)
+                css_class += " error-reference"
             elif i in st.session_state.duplicates_info:
-                original_index = st.session_state.duplicates_info[i] + 1
-                duplicate_note = get_text('duplicate_reference').format(original_index)
-                
-                if isinstance(elements, str):
-                    display_text = f"{elements} - {duplicate_note}"
-                else:
-                    ref_str = ""
-                    for j, element_data in enumerate(elements):
-                        value, _, _, separator, _, _ = element_data
-                        ref_str += value
-                        if separator and j < len(elements) - 1:
-                            ref_str += separator
-                    display_text = f"{ref_str} - {duplicate_note}"
-                
-                st.markdown(f"<div class='result-item' style='border-left-color: #4ECDC4;'>{display_text}</div>", unsafe_allow_html=True)
+                css_class += " duplicate-reference"
+            
+            # Формируем текст с форматированием
+            if is_error:
+                # Для ошибок просто показываем текст
+                formatted_text = str(elements)
+                display_html = f'<div class="{css_class}">{formatted_text}</div>'
             else:
                 if isinstance(elements, str):
-                    display_text = elements
+                    # Если элементы уже строка
+                    formatted_text = elements
+                    display_html = f'<div class="{css_class}">{formatted_text}</div>'
                 else:
-                    ref_str = ""
+                    # Формируем HTML с форматированием
+                    html_parts = []
                     for j, element_data in enumerate(elements):
-                        value, _, _, separator, _, _ = element_data
-                        ref_str += value
+                        value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
+                        
+                        # Определяем классы форматирования
+                        format_classes = []
+                        if italic and bold:
+                            format_classes.append("formatted-text-italic-bold")
+                        elif italic:
+                            format_classes.append("formatted-text-italic")
+                        elif bold:
+                            format_classes.append("formatted-text-bold")
+                        
+                        format_class = " ".join(format_classes) if format_classes else ""
+                        
+                        # Создаем HTML элемент
+                        if format_class:
+                            value_html = f'<span class="{format_class}">{value}</span>'
+                        else:
+                            value_html = value
+                        
+                        html_parts.append(value_html)
+                        
                         if separator and j < len(elements) - 1:
-                            ref_str += separator
-                    display_text = ref_str
-                
-                st.markdown(f"<div class='result-item'>{display_text}</div>", unsafe_allow_html=True)
+                            html_parts.append(separator)
+                    
+                    # Добавляем примечание о дубликате
+                    if i in st.session_state.duplicates_info:
+                        original_index = st.session_state.duplicates_info[i] + 1
+                        duplicate_note = get_text('duplicate_reference').format(original_index)
+                        html_parts.append(f' - <em>{duplicate_note}</em>')
+                    
+                    # Добавляем конечную пунктуацию
+                    if st.session_state.style_config.get('final_punctuation') and not is_error:
+                        # Убираем точку, если уже есть
+                        if html_parts and html_parts[-1].endswith('.'):
+                            html_parts[-1] = html_parts[-1][:-1]
+                        html_parts.append('.')
+                    
+                    # Добавляем нумерацию
+                    numbering = st.session_state.style_config.get('numbering_style', 'No numbering')
+                    prefix = ""
+                    if numbering != "No numbering":
+                        if numbering == "1":
+                            prefix = f"{i + 1} "
+                        elif numbering == "1.":
+                            prefix = f"{i + 1}. "
+                        elif numbering == "1)":
+                            prefix = f"{i + 1}) "
+                        elif numbering == "(1)":
+                            prefix = f"({i + 1}) "
+                        elif numbering == "[1]":
+                            prefix = f"[{i + 1}] "
+                        else:
+                            prefix = f"{i + 1}. "
+                    
+                    full_html = prefix + "".join(html_parts)
+                    display_html = f'<div class="{css_class}">{full_html}</div>'
+            
+            st.markdown(display_html, unsafe_allow_html=True)
         
-        if len(st.session_state.formatted_refs) > preview_limit:
-            st.info(f"... and {len(st.session_state.formatted_refs) - preview_limit} more references")
+        st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
         
@@ -3173,10 +3339,11 @@ class ResultsPage:
                 st.download_button(
                     label=get_text('download_txt'),
                     data=st.session_state.txt_buffer.getvalue(),
-                    file_name='doi_list.txt',
+                    file_name='formatted_references.txt',
                     mime='text/plain',
                     use_container_width=True,
-                    key="download_txt_results"
+                    key="download_txt_results",
+                    help="Download formatted references as plain text"
                 )
         
         with col_download2:
@@ -3187,7 +3354,8 @@ class ResultsPage:
                     file_name='Reformatted references.docx',
                     mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
                     use_container_width=True,
-                    key="download_docx_results"
+                    key="download_docx_results",
+                    help="Download formatted references as DOCX document with full formatting"
                 )
         
         st.markdown("</div>", unsafe_allow_html=True)
@@ -3527,12 +3695,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
