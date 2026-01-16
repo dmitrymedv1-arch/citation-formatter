@@ -2545,8 +2545,8 @@ class ThemeManager:
                 color: white;
                 font-family: {theme['font']};
                 font-weight: 500;
-                padding: 10px 20px;
-                transition: all 0.3s ease;
+                padding: 6px 12px;
+                transition: all 0.2s ease;
                 border: none;
             }}
             
@@ -2576,12 +2576,12 @@ class ThemeManager:
             /* Стили для стилей на странице Select */
             .style-item {{
                 background-color: {theme['cardBackground']};
-                border-radius: 8px;
-                padding: 15px;
-                margin-bottom: 20px;
+                border-radius: 6px;
+                padding: 8px;
+                margin-bottom: 10px;
                 box-shadow: {theme['shadow']};
-                border-left: 4px solid {theme['primary']};
-                transition: all 0.3s ease;
+                border-left: 3px solid {theme['primary']};
+                transition: all 0.2s ease;
             }}
             
             .style-item:hover {{
@@ -2591,12 +2591,12 @@ class ThemeManager:
             
             .style-preview {{
                 background-color: {theme['secondaryBackground']};
-                padding: 10px;
-                border-radius: 5px;
+                padding: 6px;
+                border-radius: 4px;
                 font-family: monospace;
-                font-size: 0.9em;
-                line-height: 1.4;
-                margin-top: 10px;
+                font-size: 0.85em;
+                line-height: 1.3;
+                margin-top: 6px;
                 border: 1px solid {theme['border']};
             }}
             
@@ -3586,7 +3586,7 @@ class SelectPage:
                 StageManager.navigate_to('io')
         
         # Превью стиля
-        st.markdown("<div style='margin-top: 10px; padding: 10px; background-color: var(--secondaryBackground); border-radius: 5px; font-family: monospace; font-size: 0.9em; line-height: 1.4;'>", unsafe_allow_html=True)
+        st.markdown("<div style='margin-top: 6px; padding: 6px; background-color: var(--secondaryBackground); border-radius: 4px; font-family: monospace; font-size: 0.85em; line-height: 1.3;'>", unsafe_allow_html=True)
         
         # Преобразуем Markdown форматирование в HTML для отображения
         preview_html = preview_text
@@ -3599,15 +3599,15 @@ class SelectPage:
     @staticmethod
     def render():
         """Рендер страницы Select - все стили видны сразу"""
-        st.markdown(f"<h1>{get_text('select_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
+        st.markdown(f"<h1 style='margin-bottom: 15px;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin-bottom: 15px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
         
         # Получаем все превью стилей
         style_previews = SelectPage._get_style_previews()
         
         # Отображаем все стили в прокручиваемом контейнере
         st.markdown("""
-        <div style='max-height: 600px; overflow-y: auto; padding-right: 10px;'>
+        <div style='max-height: 500px; overflow-y: auto; padding-right: 8px;'>
         """, unsafe_allow_html=True)
         
         # Отображаем каждый стиль
@@ -4763,3 +4763,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
