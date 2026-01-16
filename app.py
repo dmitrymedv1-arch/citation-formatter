@@ -3551,14 +3551,15 @@ class SelectPage:
     
     @staticmethod
     def _render_style_item(style_num: int, style_name: str, preview_text: str):
-        """Компактный рендер одного стиля с кнопкой и превью в одной строке"""
-        # Создаем колонки: узкая кнопка слева, превью справа
-        col1, col2 = st.columns([1, 5])  # Кнопка 20%, превью 80%
+        """Рендер одного стиля с превью и кнопкой"""
+        st.markdown(f"<div class='style-item' style='margin-bottom: 20px; padding: 15px; background-color: var(--cardBackground); border-radius: 8px; border-left: 4px solid var(--primary);'>", unsafe_allow_html=True)
         
-        with col1:
-            # Узкая компактная кнопка
-            btn_label = f"Select style {style_num}"
-            if st.button(btn_label, key=f"select_style_{style_num}", use_container_width=True):
+        # Заголовок с кнопкой
+        col_title, col_btn = st.columns([3, 1])
+        with col_title:
+            st.markdown(f"**Style {style_num}: {style_name}**")
+        with col_btn:
+            if st.button(f"Select Style {style_num}", key=f"select_style_{style_num}", use_container_width=True):
                 # Применяем соответствующий стиль
                 if style_num == 1:
                     SelectPage._apply_style_1()
@@ -3584,55 +3585,48 @@ class SelectPage:
                 # Переход к следующему шагу
                 StageManager.navigate_to('io')
         
-        with col2:
-            # Форматируем превью: добавляем название стиля и текст
-            full_preview = f"<span style='font-weight: bold; color: var(--primary); margin-right: 5px;'>{style_name}:</span> {preview_text}"
-            
-            # Убираем лишние переносы строк в превью
-            preview_clean = full_preview.replace('\n', ' ')
-            
-            # Отображаем превью в компактном формате
-            st.markdown(
-                f"""<div style='font-family: "Courier New", monospace; font-size: 0.85em; 
-                    line-height: 1.2; margin: 2px 0; padding: 2px 5px; 
-                    background-color: var(--secondaryBackground); border-radius: 3px;
-                    border-left: 2px solid var(--primary); white-space: pre-wrap;'>
-                    {preview_clean}
-                </div>""", 
-                unsafe_allow_html=True
-            )
+        # Превью стиля
+        st.markdown("<div style='margin-top: 6px; padding: 6px; background-color: var(--secondaryBackground); border-radius: 4px; font-family: monospace; font-size: 0.85em; line-height: 1.3;'>", unsafe_allow_html=True)
         
+        # Преобразуем Markdown форматирование в HTML для отображения
+        preview_html = preview_text
+        preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
+        preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
+        
+        st.markdown(f"<div style='font-family: monospace;'>{preview_html}</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
     @staticmethod
     def render():
-        """Компактный рендер страницы Select - все стили на одной странице"""
-        st.markdown(f"<h1 style='margin-bottom: 10px; font-size: 1.5rem;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 10px; font-size: 0.9rem;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
+        """Рендер страницы Select - все стили видны сразу"""
+        st.markdown(f"<h1 style='margin-bottom: 15px;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin-bottom: 15px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
         
+        # Получаем все превью стилей
         style_previews = SelectPage._get_style_previews()
         
+        # Отображаем все стили в прокручиваемом контейнере
         st.markdown("""
-        <div style='margin: 0; padding: 0;'>
+        <div style='max-height: 500px; overflow-y: auto; padding-right: 8px;'>
         """, unsafe_allow_html=True)
         
+        # Отображаем каждый стиль
         for style_num, style_name, preview_text in style_previews:
-            SelectPage._render_style_item_compact(style_num, style_name, preview_text)
+            SelectPage._render_style_item(style_num, style_name, preview_text)
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        st.markdown("<div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border);'>", unsafe_allow_html=True)
+        # Кнопки навигации
+        st.markdown("---")
         col_back, col_custom = st.columns([1, 1])
         
         with col_back:
-            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select", 
-                        help="Вернуться на начальную страницу"):
+            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select"):
                 StageManager.navigate_to('start')
         
         with col_custom:
-            if st.button("Create Custom Style", use_container_width=True, key="go_to_custom",
-                        help="Перейти к созданию пользовательского стиля"):
+            if st.button("Create Custom Style", use_container_width=True, key="go_to_custom"):
                 StageManager.navigate_to('create')
-        
-        st.markdown("</div>", unsafe_allow_html=True)
 
 class CreatePage:
     """Страница Create"""
@@ -4794,8 +4788,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
