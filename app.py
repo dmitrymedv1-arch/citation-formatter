@@ -3699,7 +3699,19 @@ class CreatePage:
     @staticmethod
     def _render_general_settings():
         """Рендер общих настроек в формате 3x4"""
-        st.markdown(f"<div class='card'><div class='card-title'>{get_text('general_settings')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('general_settings')}</div>", unsafe_allow_html=True)
+
+        st.markdown("""
+        <style>
+        div[data-testid="column"] {
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+        }
+        .stSelectbox, .stTextInput, .stNumberInput, .stCheckbox, .stRadio {
+            margin-bottom: 5px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
         # Строка 1
         col1, col2, col3, col4 = st.columns(4)
@@ -3835,7 +3847,7 @@ class CreatePage:
     @staticmethod
     def _render_element_configuration():
         """Рендер конфигурации элементов в формате 5 колонок"""
-        st.markdown(f"<div class='card'><div class='card-title'>{get_text('element_config')}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('element_config')}</div>", unsafe_allow_html=True)
         
         # Заголовки колонок
         cols = st.columns([2, 1, 1, 1, 2])
@@ -3922,7 +3934,7 @@ class CreatePage:
                 elements, _ = format_reference(preview_metadata, style_config, for_preview=False)
                 preview_with_numbering = CreatePage._add_numbering_to_elements(elements, style_config)
                 
-                st.markdown(f"<div class='card'><div class='card-title'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+                st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
                 
                 # Используем ту же логику, что и в ResultsPage
                 st.markdown(f"<small><b>{get_text('example')}</b></small>", unsafe_allow_html=True)
@@ -4840,6 +4852,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
