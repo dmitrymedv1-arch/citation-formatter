@@ -2444,32 +2444,50 @@ class StartPage:
                 StageManager.navigate_to('create')
         
         with col3:
+            # Просто кнопка для перехода к загрузке стиля
             if st.button(get_text('start_load_style'), use_container_width=True, key="load_style_btn"):
-                # Загрузка файла стиля
-                uploaded_file = st.file_uploader(
-                    get_text('import_file'),
-                    type=['json'],
-                    label_visibility="collapsed",
-                    key="style_loader"
-                )
-                
-                if uploaded_file is not None:
-                    try:
-                        content = uploaded_file.read().decode('utf-8')
-                        imported_style = json.loads(content)
-                        
-                        if 'style_config' in imported_style:
-                            style_config = imported_style['style_config']
-                        else:
-                            style_config = imported_style
-                        
-                        # Применение стиля
-                        apply_imported_style(style_config)
-                        st.session_state.style_config = style_config
-                        st.success(get_text('style_loaded'))
+                # Устанавливаем флаг, что пользователь хочет загрузить стиль
+                st.session_state.show_style_loader = True
+        
+        # Если пользователь нажал кнопку загрузки, показываем загрузчик
+        if st.session_state.get('show_style_loader', False):
+            st.markdown("---")
+            st.subheader(get_text('load_style'))
+            
+            uploaded_file = st.file_uploader(
+                get_text('import_file'),
+                type=['json'],
+                help="Загрузите файл стиля в формате JSON",
+                key="style_loader"
+            )
+            
+            if uploaded_file is not None:
+                try:
+                    content = uploaded_file.read().decode('utf-8')
+                    imported_style = json.loads(content)
+                    
+                    if 'style_config' in imported_style:
+                        style_config = imported_style['style_config']
+                    else:
+                        style_config = imported_style
+                    
+                    # Применение стиля
+                    apply_imported_style(style_config)
+                    st.session_state.style_config = style_config
+                    
+                    st.success(get_text('style_loaded'))
+                    
+                    # Даем пользователю кнопку для продолжения
+                    if st.button(get_text('proceed_to_io'), type="primary"):
                         StageManager.navigate_to('io')
-                    except Exception as e:
-                        st.error(f"{get_text('import_error')}: {str(e)}")
+                        
+                except Exception as e:
+                    st.error(f"{get_text('import_error')}: {str(e)}")
+            
+            # Кнопка для отмены
+            if st.button(get_text('back_button')):
+                st.session_state.show_style_loader = False
+                st.rerun()
 
 class SelectPage:
     """Страница Select"""
@@ -3808,6 +3826,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
