@@ -1696,7 +1696,7 @@ class DOIProcessor:
             self.cache.set(doi, metadata)
         
         return metadata
-    
+
     def _extract_metadata_from_api(self, doi: str) -> Optional[Dict]:
         """Извлечение метаданных из Crossref API"""
         try:
@@ -1723,11 +1723,34 @@ class DOIProcessor:
             if 'container-title' in result and result['container-title']:
                 journal = self._clean_text(result['container-title'][0])
             
+            # ИЗМЕНЕННАЯ ЛОГИКА: Сначала проверяем published-print, затем published
             year = None
-            if 'published' in result and 'date-parts' in result['published']:
+            
+            # 1. Приоритет: published-print (дата печатной публикации)
+            if 'published-print' in result and 'date-parts' in result['published-print']:
+                date_parts = result['published-print']['date-parts']
+                if date_parts and date_parts[0] and len(date_parts[0]) > 0:
+                    year = date_parts[0][0]  # Берем год из первого элемента массива
+                    logger.info(f"Using published-print year {year} for DOI {doi}")
+            
+            # 2. Резервный вариант: published (общая дата публикации)
+            if year is None and 'published' in result and 'date-parts' in result['published']:
                 date_parts = result['published']['date-parts']
-                if date_parts and date_parts[0]:
-                    year = date_parts[0][0]
+                if date_parts and date_parts[0] and len(date_parts[0]) > 0:
+                    year = date_parts[0][0]  # Берем год из первого элемента массива
+                    logger.info(f"Using published year {year} for DOI {doi}")
+            
+            # 3. Дополнительные проверки (на всякий случай)
+            if year is None:
+                # Проверяем другие поля с датами в порядке приоритета
+                date_fields = ['issued', 'published-online', 'created']
+                for field in date_fields:
+                    if field in result and 'date-parts' in result[field]:
+                        date_parts = result[field]['date-parts']
+                        if date_parts and date_parts[0] and len(date_parts[0]) > 0:
+                            year = date_parts[0][0]
+                            logger.info(f"Using {field} year {year} for DOI {doi}")
+                            break
             
             volume = result.get('volume', '')
             issue = result.get('issue', '')
@@ -3844,6 +3867,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
