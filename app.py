@@ -2462,7 +2462,6 @@ class ReferenceProcessor:
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
 
-# Новые классы для многостраничной структуры
 class ThemeManager:
     """Менеджер тем оформления"""
     
@@ -2482,6 +2481,19 @@ class ThemeManager:
         
         return f"""
             <style>
+            :root {{
+                --primary: {theme['primary']};
+                --secondary: {theme['secondary']};
+                --accent: {theme['accent']};
+                --background: {theme['background']};
+                --secondaryBackground: {theme['secondaryBackground']};
+                --text: {theme['text']};
+                --font: {theme['font']};
+                --border: {theme['border']};
+                --cardBackground: {theme['cardBackground']};
+                --shadow: {theme['shadow']};
+            }}
+            
             /* Основные стили темы */
             .main {{
                 background-color: {theme['background']};
@@ -2561,6 +2573,33 @@ class ThemeManager:
                 font-size: 1.2rem;
             }}
             
+            /* Стили для стилей на странице Select */
+            .style-item {{
+                background-color: {theme['cardBackground']};
+                border-radius: 8px;
+                padding: 15px;
+                margin-bottom: 20px;
+                box-shadow: {theme['shadow']};
+                border-left: 4px solid {theme['primary']};
+                transition: all 0.3s ease;
+            }}
+            
+            .style-item:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+            }}
+            
+            .style-preview {{
+                background-color: {theme['secondaryBackground']};
+                padding: 10px;
+                border-radius: 5px;
+                font-family: monospace;
+                font-size: 0.9em;
+                line-height: 1.4;
+                margin-top: 10px;
+                border: 1px solid {theme['border']};
+            }}
+            
             /* Стили для выпадающих списков и полей ввода */
             .stSelectbox, .stTextInput, .stNumberInput, .stCheckbox, .stRadio, .stFileUploader, .stTextArea {{
                 margin-bottom: 10px;
@@ -2623,8 +2662,8 @@ class ThemeManager:
                 animation: fadeIn 0.5s ease-out;
             }}
             
-            /* Стили для превью стиля */
-            .style-preview {{
+            /* Стили для превью стиля на странице Create */
+            .create-style-preview {{
                 background-color: {theme['secondaryBackground']};
                 padding: 15px;
                 border-radius: 5px;
@@ -2633,22 +2672,22 @@ class ThemeManager:
                 font-family: {theme['font']};
                 line-height: 1.5;
             }}
-
+            
             /* Стили для форматированного текста в style-preview (как в Results) */
-            .style-preview .formatted-text {{
+            .create-style-preview .formatted-text {{
                 font-family: {theme['font']};
                 line-height: 1.5;
             }}
             
-            .style-preview .formatted-text-italic {{
+            .create-style-preview .formatted-text-italic {{
                 font-style: italic;
             }}
             
-            .style-preview .formatted-text-bold {{
+            .create-style-preview .formatted-text-bold {{
                 font-weight: bold;
             }}
             
-            .style-preview .formatted-text-italic-bold {{
+            .create-style-preview .formatted-text-italic-bold {{
                 font-style: italic;
                 font-weight: bold;
             }}
@@ -2749,13 +2788,33 @@ class ThemeManager:
                 background-color: rgba(78, 205, 196, 0.1);
                 border-left: 3px solid #4ECDC4;
             }}
+            
+            /* Стили для прокрутки на странице Select */
+            .select-scroll-container {{
+                max-height: 600px;
+                overflow-y: auto;
+                padding-right: 10px;
+            }}
+            
+            .select-scroll-container::-webkit-scrollbar {{
+                width: 8px;
+            }}
+            
+            .select-scroll-container::-webkit-scrollbar-track {{
+                background: {theme['background']};
+                border-radius: 4px;
+            }}
+            
+            .select-scroll-container::-webkit-scrollbar-thumb {{
+                background: {theme['primary']};
+                border-radius: 4px;
+            }}
+            
+            .select-scroll-container::-webkit-scrollbar-thumb:hover {{
+                background: {theme['secondary']};
+            }}
             </style>
         """
-    
-    @staticmethod
-    def apply_theme(theme_name: str):
-        """Применение темы к приложению"""
-        st.markdown(ThemeManager.get_theme_css(theme_name), unsafe_allow_html=True)
 
 class StageManager:
     """Менеджер этапов приложения"""
@@ -2878,21 +2937,21 @@ class SelectPage:
     """Страница Select"""
     
     @staticmethod
-    def _get_style_preview(style_number: int) -> str:
-        """Получение превью для стиля по номеру"""
-        previews = {
-            1: "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev.. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G",
-            2: "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://dx.doi.org/10.1039/B917103G",
-            3: "D.R. Dreyer, S. Park, C.W. Bielawski and R.S. Ruoff, *Chem. Soc. Rev.*, 2010, **39**, 228",
-            4: "Dreyer DR, Park S, Bielawski CW, Ruoff RS. The chemistry of graphene oxide. Chem Soc Rev. 2010;39(1):228–40. doi:10.1039/B917103G",
-            5: "D.R. Dreyer, S. Park, C.W. Bielawski, R.S. Ruoff, The chemistry of graphene oxide, Chem. Soc. Rev. 39 (2010) 228–240. https://dx.doi.org/10.1039/B917103G",
-            6: "Dreyer, D.R., Park, S., Bielawski, C.W., Ruoff, R.S. (2010). The chemistry of graphene oxide. Chem. Soc. Rev. *39*, 228–240. https://dx.doi.org/10.1039/B917103G.",
-            7: "Dreyer, D.R., Park, S., Bielawski, C.W. & Ruoff, R.S. (2010). The chemistry of graphene oxide. *Chemical Society Reviews* *39*(1), 228–240. https://dx.doi.org/10.1039/B917103G.",
-            8: "D. R. Dreyer, S. Park, C. W. Bielawski, R. S. Ruoff, *Chem. Soc. Rev.* **2010**, *39*, 228",
-            9: "D.R.Dreyer, S.Park, C.W.Bielawski, R.S.Ruoff. *Chem. Soc. Rev.*, **39**, 228 (2010); https://dx.doi.org/10.1039/B917103G",
-            10: "Dreyer DR, Park S, Bielawski CW, Ruoff RS (2010) The chemistry of graphene oxide. Chem Soc Rev 39(1):228–240. https://dx.doi.org/10.1039/B917103G"
-        }
-        return previews.get(style_number, "")
+    def _get_style_previews() -> List[Tuple[int, str, str]]:
+        """Получение превью для всех стилей"""
+        previews = [
+            (1, "ГОСТ", "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev.. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G"),
+            (2, "ACS (MDPI)", "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://dx.doi.org/10.1039/B917103G"),
+            (3, "RSC", "D.R. Dreyer, S. Park, C.W. Bielawski and R.S. Ruoff, *Chem. Soc. Rev.*, 2010, **39**, 228"),
+            (4, "CTA", "Dreyer DR, Park S, Bielawski CW, Ruoff RS. The chemistry of graphene oxide. Chem Soc Rev. 2010;39(1):228–40. doi:10.1039/B917103G"),
+            (5, "Style 5", "D.R. Dreyer, S. Park, C.W. Bielawski, R.S. Ruoff, The chemistry of graphene oxide, Chem. Soc. Rev. 39 (2010) 228–240. https://dx.doi.org/10.1039/B917103G"),
+            (6, "Style 6", "Dreyer, D.R., Park, S., Bielawski, C.W., Ruoff, R.S. (2010). The chemistry of graphene oxide. Chem. Soc. Rev. *39*, 228–240. https://dx.doi.org/10.1039/B917103G."),
+            (7, "Style 7", "Dreyer, D.R., Park, S., Bielawski, C.W. & Ruoff, R.S. (2010). The chemistry of graphene oxide. *Chemical Society Reviews* *39*(1), 228–240. https://dx.doi.org/10.1039/B917103G."),
+            (8, "Style 8", "D. R. Dreyer, S. Park, C. W. Bielawski, R. S. Ruoff, *Chem. Soc. Rev.* **2010**, *39*, 228"),
+            (9, "RCR", "D.R.Dreyer, S.Park, C.W.Bielawski, R.S.Ruoff. *Chem. Soc. Rev.*, **39**, 228 (2010); https://dx.doi.org/10.1039/B917103G"),
+            (10, "Style 10", "Dreyer DR, Park S, Bielawski CW, Ruoff RS (2010) The chemistry of graphene oxide. Chem Soc Rev 39(1):228–240. https://dx.doi.org/10.1039/B917103G")
+        ]
+        return previews
     
     @staticmethod
     def _apply_style_1():
@@ -2920,6 +2979,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         # Создание конфигурации стиля
@@ -2974,6 +3039,12 @@ class SelectPage:
         st.session_state.acs_style = True
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3027,6 +3098,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = True
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3080,6 +3157,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = True
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3134,6 +3217,11 @@ class SelectPage:
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
         st.session_state.style5 = True
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3187,7 +3275,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
         st.session_state.style6 = True
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3241,7 +3334,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
         st.session_state.style7 = True
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3295,7 +3393,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
         st.session_state.style8 = True
+        st.session_state.style9 = False
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3349,7 +3452,12 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
         st.session_state.style9 = True
+        st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
         st.session_state.style_config = {
@@ -3403,6 +3511,11 @@ class SelectPage:
         st.session_state.acs_style = False
         st.session_state.rsc_style = False
         st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
         st.session_state.style10 = True
         st.session_state.custom_style_created = True
         
@@ -3432,79 +3545,71 @@ class SelectPage:
         }
     
     @staticmethod
+    def _render_style_item(style_num: int, style_name: str, preview_text: str):
+        """Рендер одного стиля с превью и кнопкой"""
+        st.markdown(f"<div class='style-item' style='margin-bottom: 20px; padding: 15px; background-color: var(--cardBackground); border-radius: 8px; border-left: 4px solid var(--primary);'>", unsafe_allow_html=True)
+        
+        # Заголовок с кнопкой
+        col_title, col_btn = st.columns([3, 1])
+        with col_title:
+            st.markdown(f"**Style {style_num}: {style_name}**")
+        with col_btn:
+            if st.button(f"Select Style {style_num}", key=f"select_style_{style_num}", use_container_width=True):
+                # Применяем соответствующий стиль
+                if style_num == 1:
+                    SelectPage._apply_style_1()
+                elif style_num == 2:
+                    SelectPage._apply_style_2()
+                elif style_num == 3:
+                    SelectPage._apply_style_3()
+                elif style_num == 4:
+                    SelectPage._apply_style_4()
+                elif style_num == 5:
+                    SelectPage._apply_style_5()
+                elif style_num == 6:
+                    SelectPage._apply_style_6()
+                elif style_num == 7:
+                    SelectPage._apply_style_7()
+                elif style_num == 8:
+                    SelectPage._apply_style_8()
+                elif style_num == 9:
+                    SelectPage._apply_style_9()
+                elif style_num == 10:
+                    SelectPage._apply_style_10()
+                
+                # Переход к следующему шагу
+                StageManager.navigate_to('io')
+        
+        # Превью стиля
+        st.markdown("<div style='margin-top: 10px; padding: 10px; background-color: var(--secondaryBackground); border-radius: 5px; font-family: monospace; font-size: 0.9em; line-height: 1.4;'>", unsafe_allow_html=True)
+        
+        # Преобразуем Markdown форматирование в HTML для отображения
+        preview_html = preview_text
+        preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
+        preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
+        
+        st.markdown(f"<div style='font-family: monospace;'>{preview_html}</div>", unsafe_allow_html=True)
+        st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    @staticmethod
     def render():
-        """Рендер страницы Select"""
+        """Рендер страницы Select - все стили видны сразу"""
         st.markdown(f"<h1>{get_text('select_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
         
-        # Основной контейнер с левой и правой колонками
-        main_container = st.container()
+        # Получаем все превью стилей
+        style_previews = SelectPage._get_style_previews()
         
-        with main_container:
-            col_left, col_right = st.columns([1, 3])
-            
-            with col_left:
-                st.markdown("### Style Number")
-                
-                # Создаем 10 кнопок с цифрами
-                for i in range(1, 11):
-                    if st.button(f"{i}", key=f"style_button_{i}", use_container_width=True):
-                        # Сохраняем выбранный стиль для превью
-                        st.session_state.selected_style_preview = SelectPage._get_style_preview(i)
-                        
-                        # Применяем соответствующий стиль
-                        if i == 1:
-                            SelectPage._apply_style_1()
-                        elif i == 2:
-                            SelectPage._apply_style_2()
-                        elif i == 3:
-                            SelectPage._apply_style_3()
-                        elif i == 4:
-                            SelectPage._apply_style_4()
-                        elif i == 5:
-                            SelectPage._apply_style_5()
-                        elif i == 6:
-                            SelectPage._apply_style_6()
-                        elif i == 7:
-                            SelectPage._apply_style_7()
-                        elif i == 8:
-                            SelectPage._apply_style_8()
-                        elif i == 9:
-                            SelectPage._apply_style_9()
-                        elif i == 10:
-                            SelectPage._apply_style_10()
-                        
-                        # Показываем превью в правой колонке
-                        st.session_state.show_preview = True
-                        st.rerun()
-            
-            with col_right:
-                st.markdown("### Style Preview")
-                
-                # Если есть выбранный стиль, показываем превью
-                if hasattr(st.session_state, 'selected_style_preview') and st.session_state.selected_style_preview:
-                    preview_text = st.session_state.selected_style_preview
-                    
-                    # Преобразуем Markdown форматирование в HTML для отображения
-                    preview_html = preview_text
-                    
-                    # Заменяем * на курсив и ** на жирный в HTML
-                    preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
-                    preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
-                    
-                    st.markdown(f"""
-                    <div class="style-preview">
-                        <div style="font-family: monospace; line-height: 1.6;">
-                            {preview_html}
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Кнопка для применения стиля и перехода к следующему шагу
-                    if st.button("Apply This Style and Proceed", type="primary", use_container_width=True):
-                        StageManager.navigate_to('io')
-                else:
-                    st.info("Select a style number from the left to see its preview")
+        # Отображаем все стили в прокручиваемом контейнере
+        st.markdown("""
+        <div style='max-height: 600px; overflow-y: auto; padding-right: 10px;'>
+        """, unsafe_allow_html=True)
+        
+        # Отображаем каждый стиль
+        for style_num, style_name, preview_text in style_previews:
+            SelectPage._render_style_item(style_num, style_name, preview_text)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
         
         # Кнопки навигации
         st.markdown("---")
@@ -4653,3 +4758,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
