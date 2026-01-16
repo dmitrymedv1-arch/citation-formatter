@@ -3651,9 +3651,6 @@ class SelectPage:
             """
             st.markdown(html_content, unsafe_allow_html=True)
         
-        # Добавляем небольшой разделитель между строками
-        st.markdown("<div style='height: 1px; background-color: var(--border); margin: 2px 0;'></div>", unsafe_allow_html=True)
-        
     @staticmethod
     def render():
         """Компактный рендер страницы Select - все стили на одной странице без прокрутки"""
@@ -4843,6 +4840,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
