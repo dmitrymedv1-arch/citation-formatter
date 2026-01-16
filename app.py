@@ -2816,6 +2816,11 @@ class ThemeManager:
             </style>
         """
 
+    @staticmethod
+    def apply_theme(theme_name: str):
+        """Применение темы к приложению"""
+        st.markdown(ThemeManager.get_theme_css(theme_name), unsafe_allow_html=True)
+
 class StageManager:
     """Менеджер этапов приложения"""
     
@@ -4758,4 +4763,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
