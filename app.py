@@ -3536,17 +3536,21 @@ class CitationStyleApp:
         
         # Рендер текущей страницы
         self._render_current_page()
-    
+
     def _load_user_preferences(self):
         """Загрузка пользовательских предпочтений"""
         if not st.session_state.user_prefs_loaded:
             ip = self.user_prefs.get_user_ip()
             prefs = self.user_prefs.get_preferences(ip)
             
-            st.session_state.current_language = prefs['language']
-            st.session_state.current_theme = prefs['theme']
+            if 'current_language' not in st.session_state or not st.session_state.current_language:
+                st.session_state.current_language = prefs['language']
+            
+            if 'current_theme' not in st.session_state or not st.session_state.current_theme:
+                st.session_state.current_theme = prefs['theme']
+            
             st.session_state.user_prefs_loaded = True
-    
+
     def _render_header(self):
         """Рендер заголовка и контролов"""
         col_title, col_lang, col_theme = st.columns([2, 1, 1])
@@ -3565,11 +3569,15 @@ class CitationStyleApp:
             )
             
             if selected_language[1] != st.session_state.current_language:
-                st.session_state.current_language = selected_language[1]
+                # Сохраняем текущую тему вместе с новым языком
                 self.user_prefs.save_preferences(
                     self.user_prefs.get_user_ip(),
-                    {'language': st.session_state.current_language, 'theme': st.session_state.current_theme}
+                    {
+                        'language': selected_language[1],
+                        'theme': st.session_state.current_theme  # Сохраняем текущую тему!
+                    }
                 )
+                st.session_state.current_language = selected_language[1]
                 st.rerun()
         
         with col_theme:
@@ -3581,11 +3589,18 @@ class CitationStyleApp:
                 (get_text('newspaper_theme'), 'newspaper')
             ]
             
+            # Находим индекс текущей темы
+            current_theme_index = 0
+            for i, (_, theme_id) in enumerate(themes):
+                if theme_id == st.session_state.current_theme:
+                    current_theme_index = i
+                    break
+            
             selected_theme = st.selectbox(
                 get_text('choose_theme'),
                 themes,
                 format_func=lambda x: x[0],
-                index=0,
+                index=current_theme_index,
                 key="theme_selector_header"
             )
             
@@ -3593,7 +3608,10 @@ class CitationStyleApp:
                 st.session_state.current_theme = selected_theme[1]
                 self.user_prefs.save_preferences(
                     self.user_prefs.get_user_ip(),
-                    {'language': st.session_state.current_language, 'theme': st.session_state.current_theme}
+                    {
+                        'language': st.session_state.current_language,
+                        'theme': st.session_state.current_theme
+                    }
                 )
                 st.rerun()
     
@@ -3826,6 +3844,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
