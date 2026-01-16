@@ -3618,11 +3618,11 @@ class SelectPage:
     def _render_compact_style_row(style_num: int, style_name: str, preview_text: str):
         """Компактный рендер строки стиля с кнопкой и превью"""
         # Используем Streamlit columns для компактного отображения
-        col_btn, col_preview = st.columns([1, 8])
+        col_btn, col_preview = st.columns([1, 5])  # Кнопка 1/6 ширины
         
         with col_btn:
-            # Компактная кнопка Streamlit - она точно работает
-            btn_key = f"select_style_{style_num}_{hash(preview_text)}"  # Уникальный ключ
+            # Компактная кнопка Streamlit
+            btn_key = f"select_style_{style_num}_{hash(preview_text)}"
             if st.button(f"Style {style_num}", 
                         key=btn_key,
                         use_container_width=True,
@@ -3633,25 +3633,20 @@ class SelectPage:
                 StageManager.navigate_to('io')
         
         with col_preview:
-            # Превью текста в компактном формате
-            preview_clean = preview_text.replace('\n', ' ').replace('*', '')
+            preview_clean = preview_text.replace('\n', ' ')
+            display_text = preview_clean  # Показываем полный текст
+            formatted_html = display_text
+            formatted_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', formatted_html)
+            formatted_html = re.sub(r'\*(?!\*)(.*?)(?<!\*)\*', r'<em>\1</em>', formatted_html)
+            formatted_html = re.sub(r'_(.*?)_', r'<em>\1</em>', formatted_html)
             
-            # Обрезаем если слишком длинное
-            max_length = 120
-            if len(preview_clean) > max_length:
-                display_text = preview_clean[:max_length] + "..."
-                tooltip_text = preview_clean
-            else:
-                display_text = preview_clean
-                tooltip_text = None
-            
-            # Отображаем с помощью HTML для лучшего форматирования
+            # Отображаем с HTML форматированием
             html_content = f"""
             <div style="font-family: 'Courier New', monospace; font-size: 0.8rem; 
                         line-height: 1.2; padding: 3px; background-color: var(--secondaryBackground); 
                         border-radius: 3px; border-left: 2px solid var(--primary); 
-                        margin: 2px 0;" title="{tooltip_text if tooltip_text else ''}">
-                <span style="font-weight: bold; color: var(--primary);">{style_name}:</span> {display_text}
+                        margin: 2px 0;">
+                <span style="font-weight: bold; color: var(--primary);">{style_name}:</span> {formatted_html}
             </div>
             """
             st.markdown(html_content, unsafe_allow_html=True)
@@ -4848,6 +4843,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
