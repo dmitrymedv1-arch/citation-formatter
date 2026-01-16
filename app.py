@@ -3613,28 +3613,43 @@ class SelectPage:
         
         if style_num in style_apply_functions:
             style_apply_functions[style_num]()
-    
+
     @staticmethod
     def _render_compact_style_row(style_num: int, style_name: str, preview_text: str):
-        """Компактный рендер строки стиля - кнопка и превью в одной строке"""
-        # Создаем строку с помощью HTML и CSS
-        preview_clean = preview_text.replace('\n', ' ').replace('*', '')
+        """Компактный рендер строки стиля"""
+        # Используем HTML контейнер для строки
+        st.markdown("""
+        <style>
+        .compact-row {
+            display: flex;
+            align-items: center;
+            margin: 2px 0;
+            padding: 2px 0;
+            border-bottom: 1px solid var(--border);
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        html_content = f"""
-        <div class="compact-select-row">
-            <div style="width: 130px; flex-shrink: 0; margin-right: 5px;">
-                <button onclick="selectStyleCompact({style_num})" style="width: 100%; padding: 2px 5px; font-size: 0.75rem; height: 24px; background-color: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer;">
-                    Select style {style_num}
-                </button>
-            </div>
-            <div class="compact-select-preview">
-                <span class="compact-select-name">{style_name}:</span> {preview_clean}
-            </div>
-        </div>
-        """
+        # Создаем колонки Streamlit
+        col1, col2 = st.columns([1, 3])
         
-        st.markdown(html_content, unsafe_allow_html=True)
-    
+        with col1:
+            # Простая Streamlit кнопка - она точно работает
+            if st.button(f"S{style_num}", 
+                        key=f"compact_btn_{style_num}",
+                        use_container_width=True,
+                        help=f"Выбрать стиль {style_num}: {style_name}"):
+                SelectPage._apply_style_by_number(style_num)
+                StageManager.navigate_to('io')
+        
+        with col2:
+            # Превью текста
+            preview_clean = preview_text.replace('\n', ' ').replace('*', '')
+            st.markdown(
+                f"**{style_name}:** {preview_clean[:100]}..." if len(preview_clean) > 100 else f"**{style_name}:** {preview_clean}",
+                help=preview_clean
+            )
+        
     @staticmethod
     def render():
         """Компактный рендер страницы Select - все стили на одной странице без прокрутки"""
@@ -3644,43 +3659,9 @@ class SelectPage:
         # Получаем все превью стилей
         style_previews = SelectPage._get_style_previews()
         
-        # JavaScript для обработки кликов
-        js_code = """
-        <script>
-        function selectStyleCompact(styleNum) {
-            // Создаем скрытый input для передачи данных в Streamlit
-            const input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = 'selected_style';
-            input.value = styleNum;
-            document.body.appendChild(input);
-            
-            // Отправляем форму (Streamlit обработает это)
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = window.location.href;
-            form.appendChild(input);
-            document.body.appendChild(form);
-            form.submit();
-        }
-        </script>
-        """
-        st.markdown(js_code, unsafe_allow_html=True)
-        
-        # Проверяем, был ли выбран стиль через JavaScript
-        if 'selected_style' in st.query_params:
-            style_num = int(st.query_params['selected_style'])
-            SelectPage._apply_style_by_number(style_num)
-            StageManager.navigate_to('io')
-            return
-        
-        # Отображаем все стили в компактном формате
-        st.markdown("<div style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
-        
+        # Отображаем все стили в компактном формате с использованием Streamlit
         for style_num, style_name, preview_text in style_previews:
-            SelectPage._render_compact_style_row(style_num, style_name, preview_text)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+            SelectPage._render_compact_style_row_streamlit(style_num, style_name, preview_text)
         
         # Кнопки навигации (компактные)
         st.markdown("<div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border);'>", unsafe_allow_html=True)
@@ -4858,3 +4839,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
