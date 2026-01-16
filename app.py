@@ -1013,7 +1013,7 @@ class BaseCitationFormatter:
         elif doi_format == "DOI:10.10/xxx":
             value = f"DOI:{doi}"
         elif doi_format == "https://dx.doi.org/10.10/xxx":
-            value = f"https://dx.doi.org/{doi}"
+            value = f"https://doi.org/{doi}"
         else:
             value = doi
         
@@ -1232,7 +1232,7 @@ class ACSCitationFormatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         acs_ref = f"{authors_str} {metadata['title']}. {journal_name} {metadata['year']}, {metadata['volume']}, {pages_formatted}. {doi_url}"
         acs_ref = re.sub(r'\.\.+', '.', acs_ref)
@@ -1393,7 +1393,7 @@ class Style5Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
         if pages:
@@ -1449,7 +1449,7 @@ class Style6Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
         if pages:
@@ -1509,7 +1509,7 @@ class Style7Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
         if pages:
@@ -1634,7 +1634,7 @@ class Style9Formatter(BaseCitationFormatter):
         else:
             pages_formatted = ""
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
         
@@ -1679,7 +1679,7 @@ class Style10Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
         if pages:
@@ -2946,15 +2946,15 @@ class SelectPage:
         """Получение превью для всех стилей"""
         previews = [
             (1, "ГОСТ", "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G"),
-            (2, "ACS (MDPI)", "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://dx.doi.org/10.1039/B917103G"),
+            (2, "ACS (MDPI)", "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://doi.org/10.1039/B917103G"),
             (3, "RSC", "D.R. Dreyer, S. Park, C.W. Bielawski and R.S. Ruoff, *Chem. Soc. Rev.*, 2010, **39**, 228"),
             (4, "CTA", "Dreyer DR, Park S, Bielawski CW, Ruoff RS. The chemistry of graphene oxide. Chem Soc Rev. 2010;39(1):228–40. doi:10.1039/B917103G"),
-            (5, "Style 5", "D.R. Dreyer, S. Park, C.W. Bielawski, R.S. Ruoff, The chemistry of graphene oxide, Chem. Soc. Rev. 39 (2010) 228–240. https://dx.doi.org/10.1039/B917103G"),
-            (6, "Style 6", "Dreyer, D.R., Park, S., Bielawski, C.W., Ruoff, R.S. (2010). The chemistry of graphene oxide. Chem. Soc. Rev. *39*, 228–240. https://dx.doi.org/10.1039/B917103G."),
-            (7, "Style 7", "Dreyer, D.R., Park, S., Bielawski, C.W. & Ruoff, R.S. (2010). The chemistry of graphene oxide. *Chemical Society Reviews* *39*(1), 228–240. https://dx.doi.org/10.1039/B917103G."),
+            (5, "Style 5", "D.R. Dreyer, S. Park, C.W. Bielawski, R.S. Ruoff, The chemistry of graphene oxide, Chem. Soc. Rev. 39 (2010) 228–240. https://doi.org/10.1039/B917103G"),
+            (6, "Style 6", "Dreyer, D.R., Park, S., Bielawski, C.W., Ruoff, R.S. (2010). The chemistry of graphene oxide. Chem. Soc. Rev. *39*, 228–240. https://doi.org/10.1039/B917103G."),
+            (7, "Style 7", "Dreyer, D.R., Park, S., Bielawski, C.W. & Ruoff, R.S. (2010). The chemistry of graphene oxide. *Chemical Society Reviews* *39*(1), 228–240. https://doi.org/10.1039/B917103G."),
             (8, "Style 8", "D. R. Dreyer, S. Park, C. W. Bielawski, R. S. Ruoff, *Chem. Soc. Rev.* **2010**, *39*, 228"),
-            (9, "RCR", "D.R.Dreyer, S.Park, C.W.Bielawski, R.S.Ruoff. *Chem. Soc. Rev.*, **39**, 228 (2010); https://dx.doi.org/10.1039/B917103G"),
-            (10, "Style 10", "Dreyer DR, Park S, Bielawski CW, Ruoff RS (2010) The chemistry of graphene oxide. Chem Soc Rev 39(1):228–240. https://dx.doi.org/10.1039/B917103G")
+            (9, "RCR", "D.R.Dreyer, S.Park, C.W.Bielawski, R.S.Ruoff. *Chem. Soc. Rev.*, **39**, 228 (2010); https://doi.org/10.1039/B917103G"),
+            (10, "Style 10", "Dreyer DR, Park S, Bielawski CW, Ruoff RS (2010) The chemistry of graphene oxide. Chem Soc Rev 39(1):228–240. https://doi.org/10.1039/B917103G")
         ]
         return previews
     
@@ -2967,7 +2967,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = False
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122-128"
         st.session_state.punct = ""
@@ -3204,7 +3204,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = False
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122–128"
         st.session_state.punct = "."
@@ -3263,7 +3263,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = False
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122–128"
         st.session_state.punct = "."
@@ -3322,7 +3322,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = True
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122–128"
         st.session_state.punct = "."
@@ -3440,7 +3440,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = False
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122"
         st.session_state.punct = ""
@@ -3499,7 +3499,7 @@ class SelectPage:
         st.session_state.etal = 0
         st.session_state.use_and_checkbox = False
         st.session_state.use_ampersand_checkbox = False
-        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122–128"
         st.session_state.punct = ""
@@ -4788,6 +4788,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
