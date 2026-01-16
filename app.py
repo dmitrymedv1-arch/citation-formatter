@@ -60,7 +60,7 @@ class Config:
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
     AUTHOR_FORMATS = ["AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A."]
     PAGE_FORMATS = ["122 - 128", "122-128", "122 – 128", "122–128", "122–8", "122"]
-    DOI_FORMATS = ["10.10/xxx", "doi:10.10/xxx", "DOI:10.10/xxx", "https://dx.doi.org/10.10/xxx"]
+    DOI_FORMATS = ["10.10/xxx", "doi:10.10/xxx", "DOI:10.10/xxx", "https://doi.org/10.10/xxx"]
     JOURNAL_STYLES = ["{Full Journal Name}", "{J. Abbr.}", "{J Abbr}"]
     AVAILABLE_ELEMENTS = ["", "Authors", "Title", "Journal", "Year", "Volume", "Issue", "Pages", "DOI"]
     
@@ -710,7 +710,7 @@ def init_session_state():
         'auth': "AA Smith",
         'sep': ", ",
         'etal': 0,
-        'doi': "10.10/xxx",
+        'doi': "https://doi.org/10.10/xxx",
         'doilink': True,
         'page': "122–128",
         'punct': "",
@@ -746,8 +746,8 @@ def init_session_state():
         'formatted_refs': [],
         'txt_buffer': None,
         'docx_buffer': None,
-        'formatted_txt_buffer': None,  # Новый буфер для отформатированных ссылок TXT
-        'selected_style_preview': None,  # Новое поле для хранения превью выбранного стиля
+        'formatted_txt_buffer': None,
+        'selected_style_preview': None,
     }
     
     for key, default in defaults.items():
@@ -1012,7 +1012,8 @@ class BaseCitationFormatter:
             value = f"doi:{doi}"
         elif doi_format == "DOI:10.10/xxx":
             value = f"DOI:{doi}"
-        elif doi_format == "https://dx.doi.org/10.10/xxx":
+        elif doi_format == "https://doi.org/10.10/xxx":
+            # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
             value = f"https://doi.org/{doi}"
         else:
             value = doi
@@ -1232,6 +1233,7 @@ class ACSCitationFormatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         acs_ref = f"{authors_str} {metadata['title']}. {journal_name} {metadata['year']}, {metadata['volume']}, {pages_formatted}. {doi_url}"
@@ -1393,6 +1395,7 @@ class Style5Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1449,6 +1452,7 @@ class Style6Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1509,6 +1513,7 @@ class Style7Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1634,6 +1639,7 @@ class Style9Formatter(BaseCitationFormatter):
         else:
             pages_formatted = ""
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
@@ -1679,6 +1685,7 @@ class Style10Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
+        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -2813,6 +2820,45 @@ class ThemeManager:
             .select-scroll-container::-webkit-scrollbar-thumb:hover {{
                 background: {theme['secondary']};
             }}
+            
+            /* Компактные стили для страницы Select */
+            .compact-select-row {{
+                display: flex;
+                align-items: center;
+                margin: 2px 0;
+                padding: 2px 0;
+                border-bottom: 1px solid {theme['border']};
+                min-height: 30px;
+            }}
+            
+            .compact-select-button {{
+                width: 120px !important;
+                min-width: 120px !important;
+                max-width: 120px !important;
+                margin: 0 !important;
+                padding: 2px 5px !important;
+                font-size: 0.8rem !important;
+                height: 26px !important;
+            }}
+            
+            .compact-select-preview {{
+                font-family: 'Courier New', monospace;
+                font-size: 0.75rem;
+                line-height: 1.1;
+                margin-left: 8px;
+                flex-grow: 1;
+                overflow-wrap: break-word;
+                padding: 2px 4px;
+                background-color: {theme['secondaryBackground']};
+                border-radius: 3px;
+                border-left: 2px solid {theme['primary']};
+            }}
+            
+            .compact-select-name {{
+                font-weight: bold;
+                color: {theme['primary']};
+                margin-right: 5px;
+            }}
             </style>
         """
 
@@ -3550,83 +3596,107 @@ class SelectPage:
         }
     
     @staticmethod
-    def _render_style_item(style_num: int, style_name: str, preview_text: str):
-        """Рендер одного стиля с превью и кнопкой"""
-        st.markdown(f"<div class='style-item' style='margin-bottom: 20px; padding: 15px; background-color: var(--cardBackground); border-radius: 8px; border-left: 4px solid var(--primary);'>", unsafe_allow_html=True)
+    def _apply_style_by_number(style_num: int):
+        """Применение стиля по номеру"""
+        style_apply_functions = {
+            1: SelectPage._apply_style_1,
+            2: SelectPage._apply_style_2,
+            3: SelectPage._apply_style_3,
+            4: SelectPage._apply_style_4,
+            5: SelectPage._apply_style_5,
+            6: SelectPage._apply_style_6,
+            7: SelectPage._apply_style_7,
+            8: SelectPage._apply_style_8,
+            9: SelectPage._apply_style_9,
+            10: SelectPage._apply_style_10
+        }
         
-        # Заголовок с кнопкой
-        col_title, col_btn = st.columns([3, 1])
-        with col_title:
-            st.markdown(f"**Style {style_num}: {style_name}**")
-        with col_btn:
-            if st.button(f"Select Style {style_num}", key=f"select_style_{style_num}", use_container_width=True):
-                # Применяем соответствующий стиль
-                if style_num == 1:
-                    SelectPage._apply_style_1()
-                elif style_num == 2:
-                    SelectPage._apply_style_2()
-                elif style_num == 3:
-                    SelectPage._apply_style_3()
-                elif style_num == 4:
-                    SelectPage._apply_style_4()
-                elif style_num == 5:
-                    SelectPage._apply_style_5()
-                elif style_num == 6:
-                    SelectPage._apply_style_6()
-                elif style_num == 7:
-                    SelectPage._apply_style_7()
-                elif style_num == 8:
-                    SelectPage._apply_style_8()
-                elif style_num == 9:
-                    SelectPage._apply_style_9()
-                elif style_num == 10:
-                    SelectPage._apply_style_10()
-                
-                # Переход к следующему шагу
-                StageManager.navigate_to('io')
+        if style_num in style_apply_functions:
+            style_apply_functions[style_num]()
+    
+    @staticmethod
+    def _render_compact_style_row(style_num: int, style_name: str, preview_text: str):
+        """Компактный рендер строки стиля - кнопка и превью в одной строке"""
+        # Создаем строку с помощью HTML и CSS
+        preview_clean = preview_text.replace('\n', ' ').replace('*', '')
         
-        # Превью стиля
-        st.markdown("<div style='margin-top: 6px; padding: 6px; background-color: var(--secondaryBackground); border-radius: 4px; font-family: monospace; font-size: 0.85em; line-height: 1.3;'>", unsafe_allow_html=True)
+        html_content = f"""
+        <div class="compact-select-row">
+            <div style="width: 130px; flex-shrink: 0; margin-right: 5px;">
+                <button onclick="selectStyleCompact({style_num})" style="width: 100%; padding: 2px 5px; font-size: 0.75rem; height: 24px; background-color: var(--primary); color: white; border: none; border-radius: 3px; cursor: pointer;">
+                    Select style {style_num}
+                </button>
+            </div>
+            <div class="compact-select-preview">
+                <span class="compact-select-name">{style_name}:</span> {preview_clean}
+            </div>
+        </div>
+        """
         
-        # Преобразуем Markdown форматирование в HTML для отображения
-        preview_html = preview_text
-        preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
-        preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
-        
-        st.markdown(f"<div style='font-family: monospace;'>{preview_html}</div>", unsafe_allow_html=True)
-        st.markdown("</div></div>", unsafe_allow_html=True)
+        st.markdown(html_content, unsafe_allow_html=True)
     
     @staticmethod
     def render():
-        """Рендер страницы Select - все стили видны сразу"""
-        st.markdown(f"<h1 style='margin-bottom: 15px;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 15px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
+        """Компактный рендер страницы Select - все стили на одной странице без прокрутки"""
+        st.markdown(f"<h1 style='margin-bottom: 5px; font-size: 1.4rem;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin-bottom: 10px; font-size: 0.85rem;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
         
         # Получаем все превью стилей
         style_previews = SelectPage._get_style_previews()
         
-        # Отображаем все стили в прокручиваемом контейнере
-        st.markdown("""
-        <div style='max-height: 500px; overflow-y: auto; padding-right: 8px;'>
-        """, unsafe_allow_html=True)
+        # JavaScript для обработки кликов
+        js_code = """
+        <script>
+        function selectStyleCompact(styleNum) {
+            // Создаем скрытый input для передачи данных в Streamlit
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'selected_style';
+            input.value = styleNum;
+            document.body.appendChild(input);
+            
+            // Отправляем форму (Streamlit обработает это)
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = window.location.href;
+            form.appendChild(input);
+            document.body.appendChild(form);
+            form.submit();
+        }
+        </script>
+        """
+        st.markdown(js_code, unsafe_allow_html=True)
         
-        # Отображаем каждый стиль
+        # Проверяем, был ли выбран стиль через JavaScript
+        if 'selected_style' in st.query_params:
+            style_num = int(st.query_params['selected_style'])
+            SelectPage._apply_style_by_number(style_num)
+            StageManager.navigate_to('io')
+            return
+        
+        # Отображаем все стили в компактном формате
+        st.markdown("<div style='margin: 0; padding: 0;'>", unsafe_allow_html=True)
+        
         for style_num, style_name, preview_text in style_previews:
-            SelectPage._render_style_item(style_num, style_name, preview_text)
+            SelectPage._render_compact_style_row(style_num, style_name, preview_text)
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Кнопки навигации
-        st.markdown("---")
+        # Кнопки навигации (компактные)
+        st.markdown("<div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border);'>", unsafe_allow_html=True)
         col_back, col_custom = st.columns([1, 1])
         
         with col_back:
-            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select"):
+            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select", 
+                        help="Вернуться на начальную страницу"):
                 StageManager.navigate_to('start')
         
         with col_custom:
-            if st.button("Create Custom Style", use_container_width=True, key="go_to_custom"):
+            if st.button("Create Custom Style", use_container_width=True, key="go_to_custom",
+                        help="Перейти к созданию пользовательского стиля"):
                 StageManager.navigate_to('create')
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
 class CreatePage:
     """Страница Create"""
@@ -3943,7 +4013,7 @@ class CreatePage:
     
     @staticmethod
     def _add_numbering_to_elements(elements, style_config):
-        """Добавление нумерации к элементам (для обратной совместимости)"""
+        """Добавление нумерации к элементам (для обратной совместичности)"""
         if isinstance(elements, str):
             numbering = style_config.get('numbering_style', 'No numbering')
             if numbering == "No numbering":
