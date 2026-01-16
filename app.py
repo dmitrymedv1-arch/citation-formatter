@@ -2945,7 +2945,7 @@ class SelectPage:
     def _get_style_previews() -> List[Tuple[int, str, str]]:
         """Получение превью для всех стилей"""
         previews = [
-            (1, "ГОСТ", "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev.. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G"),
+            (1, "ГОСТ", "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G"),
             (2, "ACS (MDPI)", "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://dx.doi.org/10.1039/B917103G"),
             (3, "RSC", "D.R. Dreyer, S. Park, C.W. Bielawski and R.S. Ruoff, *Chem. Soc. Rev.*, 2010, **39**, 228"),
             (4, "CTA", "Dreyer DR, Park S, Bielawski CW, Ruoff RS. The chemistry of graphene oxide. Chem Soc Rev. 2010;39(1):228–40. doi:10.1039/B917103G"),
@@ -4763,4 +4763,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
