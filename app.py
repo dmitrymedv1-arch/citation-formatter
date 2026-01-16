@@ -3618,7 +3618,7 @@ class SelectPage:
     def _render_compact_style_row(style_num: int, style_name: str, preview_text: str):
         """Компактный рендер строки стиля с кнопкой и превью"""
         # Используем Streamlit columns для компактного отображения
-        col_btn, col_preview = st.columns([1, 6])
+        col_btn, col_preview = st.columns([1, 8])
         
         with col_btn:
             # Компактная кнопка Streamlit - она точно работает
@@ -4848,6 +4848,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
