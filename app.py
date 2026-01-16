@@ -747,6 +747,7 @@ def init_session_state():
         'txt_buffer': None,
         'docx_buffer': None,
         'formatted_txt_buffer': None,  # Новый буфер для отформатированных ссылок TXT
+        'selected_style_preview': None,  # Новое поле для хранения превью выбранного стиля
     }
     
     for key, default in defaults.items():
@@ -1361,6 +1362,356 @@ class CTACitationFormatter(BaseCitationFormatter):
             elements.append((doi_text, False, False, "", True, metadata['doi']))
             return elements, False
 
+# Новые форматировщики для дополнительных стилей
+
+class Style5Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 5"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{first_initial}.{second_initial}. {family}"
+            else:
+                author_str = f"{first_initial}. {family}"
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                authors_str += ", "
+        
+        journal_name = self.format_journal_name(metadata['journal'])
+        
+        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                start_page, end_page = pages.split('-')
+                pages_formatted = f"{start_page}–{end_page}"
+            else:
+                pages_formatted = pages
+        else:
+            pages_formatted = ""
+        
+        style5_ref = f"{authors_str}, {metadata['title']}, {journal_name} {metadata['volume']} ({metadata['year']}) {pages_formatted}. {doi_url}"
+        
+        if for_preview:
+            return style5_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, ", ", False, None))
+            elements.append((metadata['title'], False, False, ", ", False, None))
+            elements.append((journal_name, False, False, " ", False, None))
+            elements.append((metadata['volume'], False, False, " (", False, None))
+            elements.append((str(metadata['year']), False, False, ") ", False, None))
+            elements.append((pages_formatted, False, False, ". ", False, None))
+            elements.append((doi_url, False, False, "", True, metadata['doi']))
+            return elements, False
+
+class Style6Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 6"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{family}, {first_initial}.{second_initial}."
+            else:
+                author_str = f"{family}, {first_initial}."
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                authors_str += ", "
+        
+        journal_name = metadata['journal']
+        
+        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                start_page, end_page = pages.split('-')
+                pages_formatted = f"{start_page}–{end_page}"
+            else:
+                pages_formatted = pages
+        else:
+            pages_formatted = ""
+        
+        style6_ref = f"{authors_str} ({metadata['year']}). {metadata['title']}. {journal_name} {metadata['volume']}, {pages_formatted}. {doi_url}."
+        
+        if for_preview:
+            return style6_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, " (", False, None))
+            elements.append((str(metadata['year']), False, False, "). ", False, None))
+            elements.append((metadata['title'], False, False, ". ", False, None))
+            elements.append((journal_name, False, False, " ", False, None))
+            elements.append((metadata['volume'], True, False, ", ", False, None))
+            elements.append((pages_formatted, False, False, ". ", False, None))
+            elements.append((doi_url, False, False, "", True, metadata['doi']))
+            elements.append((".", False, False, "", False, None))
+            return elements, False
+
+class Style7Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 7"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{family}, {first_initial}.{second_initial}."
+            else:
+                author_str = f"{family}, {first_initial}."
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                if i == len(metadata['authors']) - 2:
+                    authors_str += " & "
+                else:
+                    authors_str += ", "
+        
+        journal_name = metadata['journal']
+        
+        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                start_page, end_page = pages.split('-')
+                pages_formatted = f"{start_page}–{end_page}"
+            else:
+                pages_formatted = pages
+        else:
+            pages_formatted = ""
+        
+        issue_part = f"({metadata['issue']}), " if metadata['issue'] else ""
+        
+        style7_ref = f"{authors_str} ({metadata['year']}). {metadata['title']}. {journal_name} {metadata['volume']}{issue_part}{pages_formatted}. {doi_url}."
+        
+        if for_preview:
+            return style7_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, " (", False, None))
+            elements.append((str(metadata['year']), False, False, "). ", False, None))
+            elements.append((metadata['title'], False, False, ". ", False, None))
+            elements.append((journal_name, True, False, " ", False, None))
+            elements.append((metadata['volume'], True, False, "", False, None))
+            if metadata['issue']:
+                elements.append((f"({metadata['issue']})", False, False, ", ", False, None))
+            else:
+                elements.append(("", False, False, ", ", False, None))
+            elements.append((pages_formatted, False, False, ". ", False, None))
+            elements.append((doi_url, False, False, "", True, metadata['doi']))
+            elements.append((".", False, False, "", False, None))
+            return elements, False
+
+class Style8Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 8"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{first_initial}. {second_initial}. {family}"
+            else:
+                author_str = f"{first_initial}. {family}"
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                authors_str += ", "
+        
+        journal_name = self.format_journal_name(metadata['journal'])
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                first_page = pages.split('-')[0].strip()
+                pages_formatted = first_page
+            else:
+                pages_formatted = pages.strip()
+        else:
+            pages_formatted = ""
+        
+        style8_ref = f"{authors_str}, {journal_name} {metadata['year']}, {metadata['volume']}, {pages_formatted}."
+        
+        if for_preview:
+            return style8_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, ", ", False, None))
+            elements.append((journal_name, True, False, " ", False, None))
+            elements.append((str(metadata['year']), True, False, ", ", False, None))
+            elements.append((metadata['volume'], False, True, ", ", False, None))
+            elements.append((pages_formatted, False, False, ".", False, None))
+            return elements, False
+
+class Style9Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 9 (RCR)"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{first_initial}.{second_initial}.{family}"
+            else:
+                author_str = f"{first_initial}.{family}"
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                authors_str += ", "
+        
+        journal_name = self.format_journal_name(metadata['journal'])
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                first_page = pages.split('-')[0].strip()
+                pages_formatted = first_page
+            else:
+                pages_formatted = pages.strip()
+        else:
+            pages_formatted = ""
+        
+        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        
+        style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
+        
+        if for_preview:
+            return style9_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, ". ", False, None))
+            elements.append((journal_name, True, False, ", ", False, None))
+            elements.append((metadata['volume'], False, True, ", ", False, None))
+            elements.append((pages_formatted, False, False, " (", False, None))
+            elements.append((str(metadata['year']), False, False, "); ", False, None))
+            elements.append((doi_url, False, False, "", True, metadata['doi']))
+            return elements, False
+
+class Style10Formatter(BaseCitationFormatter):
+    """Форматировщик для стиля 10"""
+    
+    def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
+        if not metadata:
+            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            return (error_message, True)
+        
+        authors_str = ""
+        for i, author in enumerate(metadata['authors']):
+            given = author['given']
+            family = author['family']
+            
+            initials = given.split()[:2]
+            first_initial = initials[0][0] if initials else ''
+            second_initial = initials[1][0].upper() if len(initials) > 1 else ''
+            
+            if second_initial:
+                author_str = f"{family} {first_initial}{second_initial}"
+            else:
+                author_str = f"{family} {first_initial}"
+            
+            authors_str += author_str
+            
+            if i < len(metadata['authors']) - 1:
+                authors_str += " "
+        
+        journal_name = self.format_journal_name(metadata['journal'])
+        
+        doi_url = f"https://dx.doi.org/{metadata['doi']}"
+        
+        pages = metadata['pages']
+        if pages:
+            if '-' in pages:
+                start_page, end_page = pages.split('-')
+                pages_formatted = f"{start_page}–{end_page}"
+            else:
+                pages_formatted = pages
+        else:
+            pages_formatted = ""
+        
+        issue_part = f"({metadata['issue']}):" if metadata['issue'] else ""
+        
+        style10_ref = f"{authors_str} ({metadata['year']}) {metadata['title']}. {journal_name} {metadata['volume']}{issue_part}{pages_formatted}. {doi_url}"
+        
+        if for_preview:
+            return style10_ref, False
+        else:
+            elements = []
+            elements.append((authors_str, False, False, " (", False, None))
+            elements.append((str(metadata['year']), False, False, ") ", False, None))
+            elements.append((metadata['title'], False, False, ". ", False, None))
+            elements.append((journal_name, False, False, " ", False, None))
+            elements.append((metadata['volume'], False, False, "", False, None))
+            if metadata['issue']:
+                elements.append((f"({metadata['issue']})", False, False, ":", False, None))
+            else:
+                elements.append(("", False, False, ":", False, None))
+            elements.append((pages_formatted, False, False, ". ", False, None))
+            elements.append((doi_url, False, False, "", True, metadata['doi']))
+            return elements, False
+
 class CitationFormatterFactory:
     """Фабрика для создания форматировщиков цитирования"""
     
@@ -1374,6 +1725,18 @@ class CitationFormatterFactory:
             return RSCCitationFormatter(style_config)
         elif style_config.get('cta_style', False):
             return CTACitationFormatter(style_config)
+        elif style_config.get('style5', False):
+            return Style5Formatter(style_config)
+        elif style_config.get('style6', False):
+            return Style6Formatter(style_config)
+        elif style_config.get('style7', False):
+            return Style7Formatter(style_config)
+        elif style_config.get('style8', False):
+            return Style8Formatter(style_config)
+        elif style_config.get('style9', False):
+            return Style9Formatter(style_config)
+        elif style_config.get('style10', False):
+            return Style10Formatter(style_config)
         else:
             return CustomCitationFormatter(style_config)
 
@@ -2515,53 +2878,25 @@ class SelectPage:
     """Страница Select"""
     
     @staticmethod
-    def render():
-        """Рендер страницы Select"""
-        st.markdown(f"<h1>{get_text('select_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
-        
-        # Определяем количество кнопок в зависимости от языка
-        styles = []
-        if st.session_state.current_language == 'ru':
-            styles = ['gost', 'acs', 'rsc', 'cta']
-        else:
-            styles = ['acs', 'rsc', 'cta']
-        
-        # Распределяем кнопки по колонкам
-        cols = st.columns(len(styles))
-        
-        for i, style in enumerate(styles):
-            with cols[i]:
-                if style == 'gost':
-                    button_text = get_text('gost_button')
-                    callback = SelectPage._apply_gost_style
-                elif style == 'acs':
-                    button_text = get_text('acs_button')
-                    callback = SelectPage._apply_acs_style
-                elif style == 'rsc':
-                    button_text = get_text('rsc_button')
-                    callback = SelectPage._apply_rsc_style
-                elif style == 'cta':
-                    button_text = get_text('cta_button')
-                    callback = SelectPage._apply_cta_style
-                
-                if st.button(button_text, use_container_width=True, key=f"style_{style}"):
-                    callback()
-                    StageManager.navigate_to('io')
-        
-        # Кнопки навигации
-        col_back, col_next = st.columns([1, 2])
-        with col_back:
-            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select"):
-                StageManager.navigate_to('start')
-        
-        with col_next:
-            if st.button(get_text('proceed_to_io'), use_container_width=True, key="proceed_from_select"):
-                StageManager.navigate_to('io')
+    def _get_style_preview(style_number: int) -> str:
+        """Получение превью для стиля по номеру"""
+        previews = {
+            1: "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chem. Soc. Rev.. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G",
+            2: "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://dx.doi.org/10.1039/B917103G",
+            3: "D.R. Dreyer, S. Park, C.W. Bielawski and R.S. Ruoff, *Chem. Soc. Rev.*, 2010, **39**, 228",
+            4: "Dreyer DR, Park S, Bielawski CW, Ruoff RS. The chemistry of graphene oxide. Chem Soc Rev. 2010;39(1):228–40. doi:10.1039/B917103G",
+            5: "D.R. Dreyer, S. Park, C.W. Bielawski, R.S. Ruoff, The chemistry of graphene oxide, Chem. Soc. Rev. 39 (2010) 228–240. https://dx.doi.org/10.1039/B917103G",
+            6: "Dreyer, D.R., Park, S., Bielawski, C.W., Ruoff, R.S. (2010). The chemistry of graphene oxide. Chem. Soc. Rev. *39*, 228–240. https://dx.doi.org/10.1039/B917103G.",
+            7: "Dreyer, D.R., Park, S., Bielawski, C.W. & Ruoff, R.S. (2010). The chemistry of graphene oxide. *Chemical Society Reviews* *39*(1), 228–240. https://dx.doi.org/10.1039/B917103G.",
+            8: "D. R. Dreyer, S. Park, C. W. Bielawski, R. S. Ruoff, *Chem. Soc. Rev.* **2010**, *39*, 228",
+            9: "D.R.Dreyer, S.Park, C.W.Bielawski, R.S.Ruoff. *Chem. Soc. Rev.*, **39**, 228 (2010); https://dx.doi.org/10.1039/B917103G",
+            10: "Dreyer DR, Park S, Bielawski CW, Ruoff RS (2010) The chemistry of graphene oxide. Chem Soc Rev 39(1):228–240. https://dx.doi.org/10.1039/B917103G"
+        }
+        return previews.get(style_number, "")
     
     @staticmethod
-    def _apply_gost_style():
-        """Применение стиля ГОСТ"""
+    def _apply_style_1():
+        """Применение стиля 1 (ГОСТ)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith AA"
         st.session_state.sep = ", "
@@ -2604,12 +2939,18 @@ class SelectPage:
             'gost_style': True,
             'acs_style': False,
             'rsc_style': False,
-            'cta_style': False
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
     
     @staticmethod
-    def _apply_acs_style():
-        """Применение стиля ACS"""
+    def _apply_style_2():
+        """Применение стиля 2 (ACS MDPI)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith, A.A."
         st.session_state.sep = "; "
@@ -2651,12 +2992,18 @@ class SelectPage:
             'gost_style': False,
             'acs_style': True,
             'rsc_style': False,
-            'cta_style': False
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
     
     @staticmethod
-    def _apply_rsc_style():
-        """Применение стиля RSC"""
+    def _apply_style_3():
+        """Применение стиля 3 (RSC)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "A.A. Smith"
         st.session_state.sep = ", "
@@ -2698,12 +3045,18 @@ class SelectPage:
             'gost_style': False,
             'acs_style': False,
             'rsc_style': True,
-            'cta_style': False
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
     
     @staticmethod
-    def _apply_cta_style():
-        """Применение стиля CTA"""
+    def _apply_style_4():
+        """Применение стиля 4 (CTA)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith AA"
         st.session_state.sep = ", "
@@ -2745,8 +3098,425 @@ class SelectPage:
             'gost_style': False,
             'acs_style': False,
             'rsc_style': False,
-            'cta_style': True
+            'cta_style': True,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
+    
+    @staticmethod
+    def _apply_style_5():
+        """Применение стиля 5"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A.A. Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': True,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_6():
+        """Применение стиля 6"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith, A.A."
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{Full Journal Name}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style6 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': True,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_7():
+        """Применение стиля 7"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith, A.A."
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = True
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{Full Journal Name}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style7 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': True,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_8():
+        """Применение стиля 8"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A. A. Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "10.10/xxx"
+        st.session_state.doilink = False
+        st.session_state.page = "122"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style8 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': True,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_9():
+        """Применение стиля 9 (RCR)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A.A.Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style9 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': True,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_10():
+        """Применение стиля 10"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith AA"
+        st.session_state.sep = " "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{J Abbr}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style10 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': True
+        }
+    
+    @staticmethod
+    def render():
+        """Рендер страницы Select"""
+        st.markdown(f"<h1>{get_text('select_title')}</h1>", unsafe_allow_html=True)
+        st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
+        
+        # Основной контейнер с левой и правой колонками
+        main_container = st.container()
+        
+        with main_container:
+            col_left, col_right = st.columns([1, 3])
+            
+            with col_left:
+                st.markdown("### Style Number")
+                
+                # Создаем 10 кнопок с цифрами
+                for i in range(1, 11):
+                    if st.button(f"{i}", key=f"style_button_{i}", use_container_width=True):
+                        # Сохраняем выбранный стиль для превью
+                        st.session_state.selected_style_preview = SelectPage._get_style_preview(i)
+                        
+                        # Применяем соответствующий стиль
+                        if i == 1:
+                            SelectPage._apply_style_1()
+                        elif i == 2:
+                            SelectPage._apply_style_2()
+                        elif i == 3:
+                            SelectPage._apply_style_3()
+                        elif i == 4:
+                            SelectPage._apply_style_4()
+                        elif i == 5:
+                            SelectPage._apply_style_5()
+                        elif i == 6:
+                            SelectPage._apply_style_6()
+                        elif i == 7:
+                            SelectPage._apply_style_7()
+                        elif i == 8:
+                            SelectPage._apply_style_8()
+                        elif i == 9:
+                            SelectPage._apply_style_9()
+                        elif i == 10:
+                            SelectPage._apply_style_10()
+                        
+                        # Показываем превью в правой колонке
+                        st.session_state.show_preview = True
+                        st.rerun()
+            
+            with col_right:
+                st.markdown("### Style Preview")
+                
+                # Если есть выбранный стиль, показываем превью
+                if hasattr(st.session_state, 'selected_style_preview') and st.session_state.selected_style_preview:
+                    preview_text = st.session_state.selected_style_preview
+                    
+                    # Преобразуем Markdown форматирование в HTML для отображения
+                    preview_html = preview_text
+                    
+                    # Заменяем * на курсив и ** на жирный в HTML
+                    preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
+                    preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
+                    
+                    st.markdown(f"""
+                    <div class="style-preview">
+                        <div style="font-family: monospace; line-height: 1.6;">
+                            {preview_html}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Кнопка для применения стиля и перехода к следующему шагу
+                    if st.button("Apply This Style and Proceed", type="primary", use_container_width=True):
+                        StageManager.navigate_to('io')
+                else:
+                    st.info("Select a style number from the left to see its preview")
+        
+        # Кнопки навигации
+        st.markdown("---")
+        col_back, col_custom = st.columns([1, 1])
+        
+        with col_back:
+            if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select"):
+                StageManager.navigate_to('start')
+        
+        with col_custom:
+            if st.button("Create Custom Style", use_container_width=True, key="go_to_custom"):
+                StageManager.navigate_to('create')
 
 class CreatePage:
     """Страница Create"""
@@ -2951,7 +3721,13 @@ class CreatePage:
         if style_config['elements'] or any([style_config.get('gost_style', False), 
                                            style_config.get('acs_style', False),
                                            style_config.get('rsc_style', False),
-                                           style_config.get('cta_style', False)]):
+                                           style_config.get('cta_style', False),
+                                           style_config.get('style5', False),
+                                           style_config.get('style6', False),
+                                           style_config.get('style7', False),
+                                           style_config.get('style8', False),
+                                           style_config.get('style9', False),
+                                           style_config.get('style10', False)]):
             
             preview_metadata = CreatePage._get_preview_metadata(style_config)
             if preview_metadata:
@@ -3087,65 +3863,70 @@ class CreatePage:
             'gost_style': st.session_state.get('gost_style', False),
             'acs_style': st.session_state.get('acs_style', False),
             'rsc_style': st.session_state.get('rsc_style', False),
-            'cta_style': st.session_state.get('cta_style', False)
+            'cta_style': st.session_state.get('cta_style', False),
+            'style5': st.session_state.get('style5', False),
+            'style6': st.session_state.get('style6', False),
+            'style7': st.session_state.get('style7', False),
+            'style8': st.session_state.get('style8', False),
+            'style9': st.session_state.get('style9', False),
+            'style10': st.session_state.get('style10', False)
         }
 
     @staticmethod
     def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
         """Получение метаданных для предпросмотра"""
-        if style_config.get('gost_style', False):
+        if style_config.get('gost_style', False) or style_config.get('style5', False) or style_config.get('style6', False) or style_config.get('style7', False) or style_config.get('style8', False) or style_config.get('style9', False) or style_config.get('style10', False):
             return {
-                'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
-                'title': 'Article Title',
-                'journal': 'Journal of the American Chemical Society',
-                'year': 2020,
-                'volume': '15',
-                'issue': '3',
-                'pages': '122-128',
+                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
+                'title': 'The chemistry of graphene oxide',
+                'journal': 'Chemical Society Reviews',
+                'year': 2010,
+                'volume': '39',
+                'issue': '1',
+                'pages': '228-240',
                 'article_number': '',
-                'doi': '10.1000/xyz123'
+                'doi': '10.1039/B917103G'
             }
         elif style_config.get('acs_style', False):
             return {
-                'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
-                'title': 'Article Title',
-                'journal': 'Journal of the American Chemical Society',
-                'year': 2020,
-                'volume': '15',
-                'issue': '3',
-                'pages': '122-128',
+                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
+                'title': 'The chemistry of graphene oxide',
+                'journal': 'Chemical Society Reviews',
+                'year': 2010,
+                'volume': '39',
+                'issue': '1',
+                'pages': '228-240',
                 'article_number': '',
-                'doi': '10.1000/xyz123'
+                'doi': '10.1039/B917103G'
             }
         elif style_config.get('rsc_style', False):
             return {
-                'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
-                'title': 'Article Title',
-                'journal': 'Chemical Communications',
-                'year': 2020,
-                'volume': '15',
-                'issue': '3',
-                'pages': '122-128',
+                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
+                'title': 'The chemistry of graphene oxide',
+                'journal': 'Chemical Society Reviews',
+                'year': 2010,
+                'volume': '39',
+                'issue': '1',
+                'pages': '228-240',
                 'article_number': '',
-                'doi': '10.1000/xyz123'
+                'doi': '10.1039/B917103G'
             }
         elif style_config.get('cta_style', False):
             return {
                 'authors': [
-                    {'given': 'Fei', 'family': 'He'},
-                    {'given': 'Feng', 'family': 'Ma'},
-                    {'given': 'Juan', 'family': 'Li'},
-                    {'given': 'Tao', 'family': 'Li'},
-                    {'given': 'Guangshe', 'family': 'Li'}
+                    {'given': 'D.R.', 'family': 'Dreyer'},
+                    {'given': 'S.', 'family': 'Park'},
+                    {'given': 'C.W.', 'family': 'Bielawski'},
+                    {'given': 'R.S.', 'family': 'Ruoff'}
                 ],
-                'title': 'Effect of calcination temperature on the structural properties and photocatalytic activities of solvothermal synthesized TiO2 hollow nanoparticles',
-                'journal': 'Ceramics International',
-                'year': 2014,
-                'volume': '40',
-                'issue': '5',
-                'pages': '6441-6446',
+                'title': 'The chemistry of graphene oxide',
+                'journal': 'Chemical Society Reviews',
+                'year': 2010,
+                'volume': '39',
+                'issue': '1',
+                'pages': '228-240',
                 'article_number': '',
-                'doi': '10.1016/j.ceramint.2013.11.094'
+                'doi': '10.1039/B917103G'
             }
         elif style_config.get('elements'):
             # Возвращаем данные, которые хорошо демонстрируют форматирование
@@ -3839,6 +4620,12 @@ def apply_imported_style(imported_style):
     st.session_state.acs_style = imported_style.get('acs_style', False)
     st.session_state.rsc_style = imported_style.get('rsc_style', False)
     st.session_state.cta_style = imported_style.get('cta_style', False)
+    st.session_state.style5 = imported_style.get('style5', False)
+    st.session_state.style6 = imported_style.get('style6', False)
+    st.session_state.style7 = imported_style.get('style7', False)
+    st.session_state.style8 = imported_style.get('style8', False)
+    st.session_state.style9 = imported_style.get('style9', False)
+    st.session_state.style10 = imported_style.get('style10', False)
     
     for i in range(8):
         st.session_state[f"el{i}"] = ""
@@ -3866,12 +4653,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
