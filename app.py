@@ -43,6 +43,7 @@ class Config:
     DB_PATH = "doi_cache.db"
     LTWA_CSV_PATH = "ltwa.csv"
     USER_PREFS_DB = "user_preferences.db"
+    STATISTICS_DB = "app_statistics.db"  # Новая база данных для статистики
     
     # Настройки API
     CROSSREF_WORKERS = 3
@@ -153,6 +154,9 @@ class Config:
         'io': 'Input/Output',
         'results': 'Results'
     }
+    
+    # Настройки статистики
+    DISPLAY_STATISTICS = True  # Включить/выключить отображение статистики
 
 # Полный словарь переводов (упрощенный до 2 языков)
 TRANSLATIONS = {
@@ -295,7 +299,17 @@ TRANSLATIONS = {
         'download_txt': 'Download TXT',
         'download_docx': 'Download DOCX',
         'try_again': 'Try Again',
-        'new_session': 'New Session'
+        'new_session': 'New Session',
+        # Новые переводы для статистики
+        'statistics_footer_title': '📊 Global Statistics',
+        'statistics_unique_refs': 'unique references processed',
+        'statistics_since': 'Since',
+        'statistics_about': 'ℹ️ About statistics',
+        'statistics_description': 'This counter shows the total number of unique references (DOI-based) that have been processed by all users of this application.',
+        'statistics_note_1': 'Only successful DOI resolutions are counted',
+        'statistics_note_2': 'Duplicate references are counted only once',
+        'statistics_note_3': 'Statistics are anonymous and don\'t store any personal data',
+        'statistics_note_4': 'The count updates in real-time as users process references',
     },
     'ru': {
         'header': '🎨 Конструктор стилей цитирования',
@@ -436,7 +450,17 @@ TRANSLATIONS = {
         'download_txt': 'Скачать TXT',
         'download_docx': 'Скачать DOCX',
         'try_again': 'Попробовать снова',
-        'new_session': 'Новая сессия'
+        'new_session': 'Новая сессия',
+        # Новые переводы для статистики
+        'statistics_footer_title': '📊 Глобальная статистика',
+        'statistics_unique_refs': 'уникальных ссылок обработано',
+        'statistics_since': 'С',
+        'statistics_about': 'ℹ️ О статистике',
+        'statistics_description': 'Этот счетчик показывает общее количество уникальных ссылок (на основе DOI), обработанных всеми пользователями приложения.',
+        'statistics_note_1': 'Учитываются только успешно разрешенные DOI',
+        'statistics_note_2': 'Дубликаты ссылок учитываются только один раз',
+        'statistics_note_3': 'Статистика анонимна и не хранит персональные данные',
+        'statistics_note_4': 'Счетчик обновляется в реальном времени',
     }
 }
 
@@ -577,6 +601,160 @@ class UserPreferencesManager:
                 ))
         except Exception as e:
             logger.error(f"Error saving preferences for {ip}: {e}")
+
+class StatisticsManager:
+    """Менеджер статистики приложения"""
+    
+    def __init__(self, db_path: str = Config.STATISTICS_DB):
+        self.db_path = db_path
+        self._init_db()
+    
+    def _init_db(self):
+        """Инициализация базы данных статистики"""
+        with sqlite3.connect(self.db_path) as conn:
+            # Таблица для агрегированной статистики
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS app_statistics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    metric_name TEXT NOT NULL UNIQUE,
+                    metric_value INTEGER DEFAULT 0,
+                    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # Таблица для хранения истории обработанных DOI
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS processed_dois (
+                    doi TEXT PRIMARY KEY,
+                    normalized_doi TEXT NOT NULL,
+                    processed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    source_ip TEXT,
+                    session_id TEXT
+                )
+            ''')
+            
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_metric_name ON app_statistics(metric_name)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_normalized_doi ON processed_dois(normalized_doi)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_processed_at ON processed_dois(processed_at)')
+            
+            # Инициализируем счетчик, если он не существует
+            conn.execute('''
+                INSERT OR IGNORE INTO app_statistics 
+                (metric_name, metric_value) 
+                VALUES (?, ?)
+            ''', ('total_unique_references', 0))
+    
+    def increment_unique_references(self, count: int = 1):
+        """Увеличивает счетчик уникальных ссылок"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute('''
+                    UPDATE app_statistics 
+                    SET metric_value = metric_value + ?, 
+                        last_updated = CURRENT_TIMESTAMP
+                    WHERE metric_name = 'total_unique_references'
+                ''', (count,))
+        except Exception as e:
+            logger.error(f"Error updating statistics: {e}")
+    
+    def get_unique_references_count(self) -> int:
+        """Получает количество уникальных ссылок"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                result = conn.execute(
+                    'SELECT metric_value FROM app_statistics WHERE metric_name = ?',
+                    ('total_unique_references',)
+                ).fetchone()
+                
+                return result[0] if result else 0
+        except Exception as e:
+            logger.error(f"Error getting statistics: {e}")
+            return 0
+    
+    def add_references_batch(self, references: List[str]):
+        """Добавляет новые ссылки в статистику"""
+        if not references:
+            return
+        
+        # Извлекаем и нормализуем DOI из ссылок
+        doi_processor = DOIProcessor()
+        unique_dois = set()
+        
+        for ref in references:
+            if not doi_processor._is_section_header(ref):
+                doi = doi_processor.find_doi_enhanced(ref)
+                if doi:
+                    # Нормализуем DOI для исключения дубликатов
+                    normalized_doi = re.sub(
+                        r'^(https?://doi\.org/|doi:|DOI:)', 
+                        '', 
+                        doi, 
+                        flags=re.IGNORECASE
+                    ).lower().strip()
+                    unique_dois.add((doi, normalized_doi))
+        
+        # Проверяем, какие DOI уже есть в истории
+        if unique_dois:
+            existing_count = self._count_existing_references([nd for _, nd in unique_dois])
+            new_count = len(unique_dois) - existing_count
+            
+            if new_count > 0:
+                self.increment_unique_references(new_count)
+                # Сохраняем новые DOI в историю
+                self._save_new_references(unique_dois)
+    
+    def _count_existing_references(self, normalized_dois: List[str]) -> int:
+        """Считает, сколько DOI уже есть в истории"""
+        if not normalized_dois:
+            return 0
+        
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                # Используем параметризованный запрос для безопасности
+                placeholders = ','.join(['?'] * len(normalized_dois))
+                query = f'''
+                    SELECT COUNT(*) FROM processed_dois 
+                    WHERE normalized_doi IN ({placeholders})
+                '''
+                
+                result = conn.execute(query, normalized_dois).fetchone()
+                return result[0] if result else 0
+        except Exception as e:
+            logger.error(f"Error counting existing references: {e}")
+            return 0
+    
+    def _save_new_references(self, dois: Set[Tuple[str, str]]):
+        """Сохраняет новые DOI в историю"""
+        try:
+            ip = UserPreferencesManager().get_user_ip()
+            session_id = str(hashlib.md5(str(time.time()).encode()).hexdigest())[:8]
+            
+            with sqlite3.connect(self.db_path) as conn:
+                for doi, normalized_doi in dois:
+                    conn.execute('''
+                        INSERT OR IGNORE INTO processed_dois 
+                        (doi, normalized_doi, source_ip, session_id)
+                        VALUES (?, ?, ?, ?)
+                    ''', (doi, normalized_doi, ip, session_id))
+        except Exception as e:
+            logger.error(f"Error saving new references: {e}")
+    
+    def get_first_processing_date(self) -> Optional[str]:
+        """Получает дату первой обработки"""
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                result = conn.execute(
+                    'SELECT MIN(processed_at) FROM processed_dois'
+                ).fetchone()
+                
+                if result and result[0]:
+                    # Преобразуем в удобный формат
+                    date_obj = datetime.strptime(result[0], '%Y-%m-%d %H:%M:%S')
+                    return date_obj.strftime('%B %Y')
+        except Exception as e:
+            logger.error(f"Error getting first processing date: {e}")
+        
+        return datetime.now().strftime('%B %Y')
 
 class StyleValidator:
     """Валидатор настроек стиля"""
@@ -748,6 +926,7 @@ def init_session_state():
         'docx_buffer': None,
         'formatted_txt_buffer': None,
         'selected_style_preview': None,
+        'statistics_manager': None,  # Новое состояние для менеджера статистики
     }
     
     for key, default in defaults.items():
@@ -2229,6 +2408,17 @@ class ReferenceProcessor:
                 doi_not_found_count += 1
         
         if valid_dois:
+            # Обновляем статистику перед обработкой
+            if Config.DISPLAY_STATISTICS:
+                try:
+                    if not st.session_state.statistics_manager:
+                        st.session_state.statistics_manager = StatisticsManager(Config.STATISTICS_DB)
+                    
+                    # Обновляем статистику только успешными DOI
+                    st.session_state.statistics_manager.add_references_batch(valid_dois)
+                except Exception as e:
+                    logger.error(f"Error updating statistics: {e}")
+            
             self._process_doi_batch(valid_dois, reference_doi_map, references, 
                                   formatted_refs, formatted_texts, doi_list, style_config,
                                   progress_container, status_container)
@@ -2659,6 +2849,80 @@ class ThemeManager:
                 font-size: 0.9rem;
             }}
             
+            /* Стили для глобальной статистики */
+            .global-stats-container {{
+                background: linear-gradient(135deg, {theme['primary']} 0%, {theme['secondary']} 100%);
+                padding: 20px;
+                border-radius: 15px;
+                text-align: center;
+                color: white;
+                margin: 25px 0;
+                box-shadow: 0 6px 15px rgba(0,0,0,0.2);
+                position: relative;
+                overflow: hidden;
+            }}
+            
+            .global-stats-container::before {{
+                content: '';
+                position: absolute;
+                top: -50%;
+                left: -50%;
+                width: 200%;
+                height: 200%;
+                background: radial-gradient(circle, rgba(255,255,255,0.1) 1px, transparent 1px);
+                background-size: 20px 20px;
+                opacity: 0.3;
+                animation: moveBackground 20s linear infinite;
+            }}
+            
+            @keyframes moveBackground {{
+                0% {{ transform: translate(0, 0); }}
+                100% {{ transform: translate(20px, 20px); }}
+            }}
+            
+            .global-stats-title {{
+                font-size: 0.95rem;
+                opacity: 0.9;
+                margin-bottom: 5px;
+                position: relative;
+                z-index: 1;
+            }}
+            
+            .global-stats-value {{
+                font-size: 2.2rem;
+                font-weight: bold;
+                margin: 10px 0;
+                position: relative;
+                z-index: 1;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            }}
+            
+            .global-stats-label {{
+                font-size: 0.85rem;
+                opacity: 0.9;
+                position: relative;
+                z-index: 1;
+            }}
+            
+            .global-stats-date {{
+                font-size: 0.75rem;
+                opacity: 0.7;
+                margin-top: 8px;
+                position: relative;
+                z-index: 1;
+            }}
+            
+            .global-stats-info {{
+                background-color: {theme['cardBackground']};
+                padding: 12px;
+                border-radius: 8px;
+                margin-top: 10px;
+                border-left: 3px solid {theme['accent']};
+                font-size: 0.85rem;
+                position: relative;
+                z-index: 1;
+            }}
+            
             /* Анимации */
             @keyframes fadeIn {{
                 from {{ opacity: 0; transform: translateY(20px); }}
@@ -2923,6 +3187,63 @@ class StartPage:
     """Страница Start"""
     
     @staticmethod
+    def _render_statistics_footer():
+        """Рендер статистики внизу страницы"""
+        if not Config.DISPLAY_STATISTICS:
+            return
+        
+        try:
+            # Инициализируем менеджер статистики, если еще не инициализирован
+            if not st.session_state.statistics_manager:
+                st.session_state.statistics_manager = StatisticsManager(Config.STATISTICS_DB)
+            
+            # Получаем статистику
+            stats_manager = st.session_state.statistics_manager
+            total_refs = stats_manager.get_unique_references_count()
+            first_date = stats_manager.get_first_processing_date()
+            
+            # Определяем язык для отображения
+            lang = st.session_state.current_language
+            
+            # Отображаем в красивом формате
+            st.markdown("---")
+            
+            col1, col2, col3 = st.columns([1, 2, 1])
+            
+            with col2:
+                st.markdown(f"""
+                <div class="global-stats-container">
+                    <div class="global-stats-title">
+                        {get_text('statistics_footer_title')}
+                    </div>
+                    <div class="global-stats-value">
+                        {total_refs:,}
+                    </div>
+                    <div class="global-stats-label">
+                        {get_text('statistics_unique_refs')}
+                    </div>
+                    <div class="global-stats-date">
+                        {get_text('statistics_since')} {first_date}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Небольшая дополнительная информация
+                with st.expander(get_text('statistics_about'), icon="ℹ️"):
+                    st.markdown(f"""
+                    **{get_text('statistics_description')}**
+                    
+                    - **{get_text('statistics_note_1')}**
+                    - **{get_text('statistics_note_2')}**
+                    - **{get_text('statistics_note_3')}**
+                    - **{get_text('statistics_note_4')}**
+                    """)
+        
+        except Exception as e:
+            logger.error(f"Error rendering statistics: {e}")
+            # Не показываем ошибку пользователю, просто не отображаем статистику
+    
+    @staticmethod
     def render():
         """Рендер страницы Start"""
         st.markdown(f"<h1>{get_text('start_title')}</h1>", unsafe_allow_html=True)
@@ -2983,6 +3304,9 @@ class StartPage:
             if st.button(get_text('back_button')):
                 st.session_state.show_style_loader = False
                 st.rerun()
+        
+        # Добавляем статистику внизу страницы
+        StartPage._render_statistics_footer()
 
 class SelectPage:
     """Страница Select"""
@@ -4527,6 +4851,10 @@ class CitationStyleApp:
         # Загрузка пользовательских предпочтений
         self._load_user_preferences()
         
+        # Инициализация менеджера статистики
+        if Config.DISPLAY_STATISTICS and not st.session_state.statistics_manager:
+            st.session_state.statistics_manager = StatisticsManager(Config.STATISTICS_DB)
+        
         # Применение темы
         ThemeManager.apply_theme(st.session_state.current_theme)
         
@@ -4852,15 +5180,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
