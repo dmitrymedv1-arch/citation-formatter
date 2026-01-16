@@ -3651,23 +3651,33 @@ class CreatePage:
         
         # Строка 1
         col1, col2, col3, col4 = st.columns(4)
-        
+
         with col1:
+            num_value = st.session_state.num
+            num_index = 0  # значение по умолчанию
+            if num_value in Config.NUMBERING_STYLES:
+                num_index = Config.NUMBERING_STYLES.index(num_value)
+            
             st.selectbox(
                 get_text('numbering_style'),
                 Config.NUMBERING_STYLES,
                 key="num",
-                index=Config.NUMBERING_STYLES.index(st.session_state.num)
+                index=num_index
             )
-        
+
         with col2:
+            auth_value = st.session_state.auth
+            auth_index = 0  # значение по умолчанию
+            if auth_value in Config.AUTHOR_FORMATS:
+                auth_index = Config.AUTHOR_FORMATS.index(auth_value)
+            
             st.selectbox(
                 get_text('author_format'),
                 Config.AUTHOR_FORMATS,
                 key="auth",
-                index=Config.AUTHOR_FORMATS.index(st.session_state.auth)
+                index=auth_index
             )
-        
+            
         with col3:
             st.selectbox(
                 get_text('author_separator'),
@@ -3703,11 +3713,16 @@ class CreatePage:
             )
         
         with col7:
+            journal_style_value = st.session_state.journal_style
+            journal_index = 0  # значение по умолчанию
+            if journal_style_value in Config.JOURNAL_STYLES:
+                journal_index = Config.JOURNAL_STYLES.index(journal_style_value)
+            
             st.selectbox(
                 get_text('journal_style'),
                 Config.JOURNAL_STYLES,
                 key="journal_style",
-                index=Config.JOURNAL_STYLES.index(st.session_state.journal_style),
+                index=journal_index,
                 format_func=lambda x: {
                     "{Full Journal Name}": get_text('full_journal_name'),
                     "{J. Abbr.}": get_text('journal_abbr_with_dots'),
@@ -3717,7 +3732,7 @@ class CreatePage:
         
         with col8:
             current_page = st.session_state.page
-            page_index = 3
+            page_index = 0  # значение по умолчанию
             if current_page in Config.PAGE_FORMATS:
                 page_index = Config.PAGE_FORMATS.index(current_page)
             
@@ -3730,15 +3745,20 @@ class CreatePage:
         
         # Строка 3
         col9, col10, col11, col12 = st.columns(4)
-        
+
         with col9:
+            doi_value = st.session_state.doi
+            doi_index = 0  # значение по умолчанию
+            if doi_value in Config.DOI_FORMATS:
+                doi_index = Config.DOI_FORMATS.index(doi_value)
+            
             st.selectbox(
                 get_text('doi_format'),
                 Config.DOI_FORMATS,
                 key="doi",
-                index=Config.DOI_FORMATS.index(st.session_state.doi)
+                index=doi_index
             )
-        
+                
         with col10:
             st.checkbox(
                 get_text('doi_hyperlink'),
@@ -3783,12 +3803,17 @@ class CreatePage:
             cols = st.columns([2, 1, 1, 1, 2])
             
             with cols[0]:
+                el_value = st.session_state[f"el{i}"]
+                el_index = 0  # значение по умолчанию
+                if el_value in Config.AVAILABLE_ELEMENTS:
+                    el_index = Config.AVAILABLE_ELEMENTS.index(el_value)
+                
                 st.selectbox(
                     "",
                     Config.AVAILABLE_ELEMENTS,
                     key=f"el{i}",
                     label_visibility="collapsed",
-                    index=Config.AVAILABLE_ELEMENTS.index(st.session_state[f"el{i}"]) if st.session_state[f"el{i}"] in Config.AVAILABLE_ELEMENTS else 0
+                    index=el_index
                 )
             
             with cols[1]:
@@ -4763,5 +4788,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
