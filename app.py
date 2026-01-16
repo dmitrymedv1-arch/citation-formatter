@@ -2959,141 +2959,595 @@ class SelectPage:
         return previews
     
     @staticmethod
-    def _render_compact_style_item(style_num: int, style_name: str, preview_text: str):
-        """Рендер одного стиля в компактном формате"""
-        # Создаем контейнер для стиля
-        with st.container():
-            # Верхняя часть с названием и кнопкой
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.markdown(f"**{style_num}. {style_name}**")
-            with col2:
-                button_key = f"select_style_{style_num}"
-                if st.button(f"✓ Select", key=button_key, use_container_width=True):
-                    # Применяем соответствующий стиль
-                    if style_num == 1:
-                        SelectPage._apply_style_1()
-                    elif style_num == 2:
-                        SelectPage._apply_style_2()
-                    elif style_num == 3:
-                        SelectPage._apply_style_3()
-                    elif style_num == 4:
-                        SelectPage._apply_style_4()
-                    elif style_num == 5:
-                        SelectPage._apply_style_5()
-                    elif style_num == 6:
-                        SelectPage._apply_style_6()
-                    elif style_num == 7:
-                        SelectPage._apply_style_7()
-                    elif style_num == 8:
-                        SelectPage._apply_style_8()
-                    elif style_num == 9:
-                        SelectPage._apply_style_9()
-                    elif style_num == 10:
-                        SelectPage._apply_style_10()
-                    
-                    # Переход к следующему шагу
-                    StageManager.navigate_to('io')
-            
-            # Превью стиля (компактное)
-            preview_html = preview_text
-            preview_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', preview_html)
-            preview_html = re.sub(r'\*(.*?)\*', r'<em>\1</em>', preview_html)
-            
-            # Обрезаем длинное превью для компактности
-            if len(preview_html) > 120:
-                preview_html = preview_html[:117] + "..."
-            
-            st.markdown(f"""
-            <div style='
-                margin: 2px 0 8px 0;
-                padding: 4px 8px;
-                background-color: var(--secondaryBackground);
-                border-radius: 4px;
-                font-family: monospace;
-                font-size: 0.8em;
-                line-height: 1.2;
-                border-left: 2px solid var(--border);
-            '>
-                {preview_html}
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("<div style='margin-bottom: 8px;'></div>", unsafe_allow_html=True)
+    def _apply_style_1():
+        """Применение стиля 1 (ГОСТ)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith AA"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122-128"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{Full Journal Name}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = True
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        # Создание конфигурации стиля
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': True,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
     
     @staticmethod
-    def render():
-        """Рендер страницы Select - компактный вид"""
-        st.markdown(f"<h1>{get_text('select_title')}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin-bottom: 10px; font-size: 0.95em;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
+    def _apply_style_2():
+        """Применение стиля 2 (ACS MDPI)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith, A.A."
+        st.session_state.sep = "; "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
         
-        # Получаем все превью стилей
-        style_previews = SelectPage._get_style_previews()
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
         
-        # Используем grid layout для более компактного отображения
-        st.markdown("""
-        <style>
-        .compact-style-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 6px;
-            margin-bottom: 15px;
+        st.session_state.gost_style = False
+        st.session_state.acs_style = True
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': True,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
-        .compact-style-item {
-            background-color: var(--cardBackground);
-            border-radius: 6px;
-            padding: 8px;
-            border: 1px solid var(--border);
-            transition: all 0.2s ease;
+    
+    @staticmethod
+    def _apply_style_3():
+        """Применение стиля 3 (RSC)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A.A. Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = True
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = True
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': True,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
-        .compact-style-item:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    
+    @staticmethod
+    def _apply_style_4():
+        """Применение стиля 4 (CTA)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith AA"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "doi:10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–8"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{J Abbr}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = True
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': True,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
-        .compact-preview {
-            font-family: monospace;
-            font-size: 0.75em;
-            line-height: 1.1;
-            margin-top: 4px;
-            padding: 4px 6px;
-            background-color: var(--secondaryBackground);
-            border-radius: 3px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
+    
+    @staticmethod
+    def _apply_style_5():
+        """Применение стиля 5"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A.A. Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = True
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': True,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
         }
-        </style>
-        """, unsafe_allow_html=True)
+    
+    @staticmethod
+    def _apply_style_6():
+        """Применение стиля 6"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith, A.A."
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{Full Journal Name}"
         
-        # Отображаем все стили в компактном виде
-        st.markdown('<div class="compact-style-grid">', unsafe_allow_html=True)
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
         
-        # Разделяем на две колонки для еще большей компактности
-        col1, col2 = st.columns(2)
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = True
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
         
-        with col1:
-            # Стили 1-5
-            for style_num, style_name, preview_text in style_previews[:5]:
-                SelectPage._render_compact_style_item(style_num, style_name, preview_text)
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': True,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_7():
+        """Применение стиля 7"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith, A.A."
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = True
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{Full Journal Name}"
         
-        with col2:
-            # Стили 6-10
-            for style_num, style_name, preview_text in style_previews[5:]:
-                SelectPage._render_compact_style_item(style_num, style_name, preview_text)
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
         
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = True
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
         
-        # Кнопки навигации (компактные)
-        st.markdown("---")
-        col_back, col_custom = st.columns([1, 1])
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': True,
+            'style8': False,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_8():
+        """Применение стиля 8"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A. A. Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "10.10/xxx"
+        st.session_state.doilink = False
+        st.session_state.page = "122"
+        st.session_state.punct = "."
+        st.session_state.journal_style = "{J. Abbr.}"
         
-        with col_back:
-            if st.button("◀ Back", use_container_width=True, key="back_from_select"):
-                StageManager.navigate_to('start')
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
         
-        with col_custom:
-            if st.button("🎨 Create Custom", use_container_width=True, key="go_to_custom"):
-                StageManager.navigate_to('create')
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = True
+        st.session_state.style9 = False
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': True,
+            'style9': False,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_9():
+        """Применение стиля 9 (RCR)"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "A.A.Smith"
+        st.session_state.sep = ", "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{J. Abbr.}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = True
+        st.session_state.style10 = False
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': True,
+            'style10': False
+        }
+    
+    @staticmethod
+    def _apply_style_10():
+        """Применение стиля 10"""
+        st.session_state.num = "No numbering"
+        st.session_state.auth = "Smith AA"
+        st.session_state.sep = " "
+        st.session_state.etal = 0
+        st.session_state.use_and_checkbox = False
+        st.session_state.use_ampersand_checkbox = False
+        st.session_state.doi = "https://dx.doi.org/10.10/xxx"
+        st.session_state.doilink = True
+        st.session_state.page = "122–128"
+        st.session_state.punct = ""
+        st.session_state.journal_style = "{J Abbr}"
+        
+        for i in range(8):
+            st.session_state[f"el{i}"] = ""
+            st.session_state[f"it{i}"] = False
+            st.session_state[f"bd{i}"] = False
+            st.session_state[f"pr{i}"] = False
+            st.session_state[f"sp{i}"] = ". "
+        
+        st.session_state.gost_style = False
+        st.session_state.acs_style = False
+        st.session_state.rsc_style = False
+        st.session_state.cta_style = False
+        st.session_state.style5 = False
+        st.session_state.style6 = False
+        st.session_state.style7 = False
+        st.session_state.style8 = False
+        st.session_state.style9 = False
+        st.session_state.style10 = True
+        st.session_state.custom_style_created = True
+        
+        st.session_state.style_config = {
+            'author_format': st.session_state.auth,
+            'author_separator': st.session_state.sep,
+            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
+            'use_and_bool': st.session_state.use_and_checkbox,
+            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
+            'doi_format': st.session_state.doi,
+            'doi_hyperlink': st.session_state.doilink,
+            'page_format': st.session_state.page,
+            'final_punctuation': st.session_state.punct,
+            'numbering_style': st.session_state.num,
+            'journal_style': st.session_state.journal_style,
+            'elements': [],
+            'gost_style': False,
+            'acs_style': False,
+            'rsc_style': False,
+            'cta_style': False,
+            'style5': False,
+            'style6': False,
+            'style7': False,
+            'style8': False,
+            'style9': False,
+            'style10': True
+        }
     
     @staticmethod
     def _render_style_item(style_num: int, style_name: str, preview_text: str):
@@ -4309,6 +4763,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
