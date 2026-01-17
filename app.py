@@ -4679,12 +4679,12 @@ class CitationStyleApp:
             st.title(get_text('header'))
         
         with col_lang:
-            languages = [('Русский', 'ru'), ('English', 'en')]
+            languages = [('English', 'en'), ('Русский', 'ru')]
             selected_language = st.selectbox(
                 get_text('choose_language'),
                 languages,
                 format_func=lambda x: x[0],
-                index=0 if st.session_state.current_language == 'ru' else 1,
+                index=0 if st.session_state.current_language == 'en' else 1,
                 key="language_selector_header"
             )
             
@@ -4970,6 +4970,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
