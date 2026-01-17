@@ -648,7 +648,7 @@ class ProgressManager:
             'errors': 0,
             'phase': 'processing'
         }
-    
+
     def update_progress(self, processed: int, found: int, errors: int, phase: str = None):
         """Обновление прогресса"""
         self.progress_data.update({
@@ -658,6 +658,16 @@ class ProgressManager:
         })
         if phase:
             self.progress_data['phase'] = phase
+        
+        # Обновляем время
+        if self.start_time:
+            elapsed = time.time() - self.start_time
+            total = self.progress_data['total']
+            
+            # Обновляем оставшееся время
+            if processed > 0 and total > 0:
+                estimated_total = (elapsed / processed) * total
+                self.progress_data['time_remaining'] = estimated_total - elapsed
     
     def get_progress_info(self) -> Dict[str, Any]:
         """Получение информации о прогрессе"""
@@ -2193,6 +2203,7 @@ class ReferenceProcessor:
     def process_references(self, references: List[str], style_config: Dict, 
                          progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict]:
         """Обработка списка ссылок с отображением прогресса"""
+        # Валидация
         is_valid, validation_messages = self.validator.validate_references_count(references)
         for msg in validation_messages:
             if "error" in msg.lower():
@@ -2205,18 +2216,20 @@ class ReferenceProcessor:
         
         doi_list = []
         formatted_refs = []
-        formatted_texts = []  # Новый список для отформатированных текстов
+        formatted_texts = []  # Для отформатированных текстов
         doi_found_count = 0
         doi_not_found_count = 0
         
+        # Сбор DOI для пакетной обработки
         valid_dois = []
         reference_doi_map = {}
         
+        # ПЕРВЫЙ ПРОХОД: сбор всех DOI
         for i, ref in enumerate(references):
             if self.doi_processor._is_section_header(ref):
                 doi_list.append(f"{ref} [SECTION HEADER - SKIPPED]")
                 formatted_refs.append((ref, False, None))
-                formatted_texts.append(ref)  # Добавляем исходный текст
+                formatted_texts.append(ref)  # Сохраняем как есть
                 continue
                 
             doi = self.doi_processor.find_doi_enhanced(ref)
@@ -2225,24 +2238,28 @@ class ReferenceProcessor:
                 reference_doi_map[i] = doi
                 doi_list.append(doi)
             else:
-                error_msg = f"{ref}\nПроверьте источник и добавьте DOI вручную." if st.session_state.current_language == 'ru' else f"{ref}\nPlease check this source and insert the DOI manually."
+                error_msg = self._create_error_message(ref, st.session_state.current_language)
                 doi_list.append(error_msg)
                 formatted_refs.append((error_msg, True, None))
-                formatted_texts.append(error_msg)  # Добавляем сообщение об ошибке
+                formatted_texts.append(error_msg)  # Сохраняем ошибку
                 doi_not_found_count += 1
-            
-            self._process_doi_batch(valid_dois, reference_doi_map, references, 
-                                  formatted_refs, formatted_texts, doi_list, style_config,
-                                  progress_container, status_container)
         
+        # ВТОРОЙ ПРОХОД: пакетная обработка DOI
+        if valid_dois:
+            self._process_doi_batch(
+                valid_dois, reference_doi_map, references, 
+                formatted_refs, formatted_texts, doi_list, style_config,
+                progress_container, status_container
+            )
+        
+        # Подсчет статистики
         doi_found_count = len([ref for ref in formatted_refs if not ref[1] and ref[2]])
         
+        # Поиск дубликатов
         duplicates_info = self._find_duplicates(formatted_refs)
         
-        # Создание TXT файла с отформатированными ссылками вместо исходных DOI
+        # Создание TXT файлов
         formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
-        
-        # Создание TXT файла с исходными DOI (для обратной совместимости)
         original_txt_buffer = self._create_txt_file(doi_list)
         
         return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
@@ -2253,14 +2270,24 @@ class ReferenceProcessor:
         """Пакетная обработка DOI"""
         status_container.info(get_text('batch_processing'))
         
-        self.progress_manager.start_processing(len(valid_dois))
+        # Начало обработки - УСТАНАВЛИВАЕМ ОБЩЕЕ КОЛИЧЕСТВО
+        total_to_process = len(valid_dois)
+        self.progress_manager.start_processing(total_to_process)
         
+        # Создаем прогресс-бар
         progress_bar = progress_container.progress(0)
         status_display = status_container.empty()
         
+        # Шаг 1: Извлечение метаданных для ВСЕХ DOI сразу
         metadata_results = self._extract_metadata_batch(valid_dois, progress_bar, status_display)
         
+        # Создаем маппинг DOI -> метаданные
         doi_to_metadata = dict(zip(valid_dois, metadata_results))
+        
+        # Шаг 2: Форматирование найденных метаданных
+        processed_count = 0
+        found_count = 0
+        error_count = 0
         
         for i, ref in enumerate(references):
             if i in reference_doi_map:
@@ -2268,17 +2295,19 @@ class ReferenceProcessor:
                 metadata = doi_to_metadata.get(doi)
                 
                 if metadata:
+                    # Форматирование для DOCX
                     formatted_ref, is_error = self._format_reference(metadata, style_config)
-                    formatted_refs.append((formatted_ref, is_error, metadata))
-                    
-                    # Формируем отформатированный текст для TXT файла
+                    # Форматирование для TXT
                     formatted_text = self._format_reference_for_text(metadata, style_config)
-                    formatted_texts.append(formatted_text)
                     
-                    # Обновляем список DOI для сохранения обратной совместимости
+                    # Обновляем списки
                     if doi in doi_list:
                         index = doi_list.index(doi)
                         doi_list[index] = formatted_text
+                    
+                    formatted_refs.append((formatted_ref, is_error, metadata))
+                    formatted_texts.append(formatted_text)
+                    found_count += 1
                 else:
                     error_msg = self._create_error_message(ref, st.session_state.current_language)
                     if doi in doi_list:
@@ -2286,9 +2315,23 @@ class ReferenceProcessor:
                         doi_list[index] = error_msg
                     formatted_refs.append((error_msg, True, None))
                     formatted_texts.append(error_msg)
+                    error_count += 1
+                
+                processed_count += 1
+                
+                # Обновляем прогресс В РЕАЛЬНОМ ВРЕМЕНИ
+                self.progress_manager.update_progress(processed_count, found_count, error_count, 'formatting')
+                progress_ratio = processed_count / total_to_process if total_to_process > 0 else 0
+                progress_bar.progress(progress_ratio)
+                
+                # Обновляем статус
+                status_text = f"Processed: {processed_count}/{total_to_process} | Found: {found_count} | Errors: {error_count}"
+                status_display.text(status_text)
         
-        self._update_progress_display(progress_bar, status_display, len(valid_dois), len(valid_dois), 0)
-    
+        # Финальное обновление
+        self.progress_manager.update_progress(total_to_process, found_count, error_count, 'complete')
+        progress_bar.progress(1.0)
+        
     def _extract_metadata_batch(self, doi_list, progress_bar, status_display) -> List:
         """Пакетное извлечение метаданных"""
         results = [None] * len(doi_list)
@@ -2300,6 +2343,7 @@ class ReferenceProcessor:
             }
             
             completed = 0
+            total = len(doi_list)
             for future in concurrent.futures.as_completed(future_to_index):
                 index = future_to_index[future]
                 try:
@@ -2310,12 +2354,10 @@ class ReferenceProcessor:
                     results[index] = None
                 
                 completed += 1
-                self._update_progress_display(progress_bar, status_display, completed, len(doi_list), 0)
-        
-        failed_indices = [i for i, result in enumerate(results) if result is None]
-        if failed_indices:
-            logger.info(f"Retrying {len(failed_indices)} failed DOI requests")
-            self._retry_failed_requests(failed_indices, doi_list, results, progress_bar, status_display)
+                # Обновляем только прогресс, не статус
+                progress_ratio = completed / total if total > 0 else 0
+                progress_bar.progress(progress_ratio)
+                status_display.text(f"Fetching metadata: {completed}/{total}")
         
         return results
     
@@ -4928,4 +4970,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
