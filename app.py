@@ -561,7 +561,7 @@ class UserPreferencesManager:
             logger.error(f"Error getting preferences for {ip}: {e}")
         
         return {
-            'language': 'ru',
+            'language': 'en',
             'theme': 'light'
         }
     
@@ -4970,5 +4970,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
