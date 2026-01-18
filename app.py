@@ -707,7 +707,7 @@ class ProgressManager:
 def init_session_state():
     """Инициализация состояния сессии"""
     defaults = {
-        'current_language': 'ru',
+        'current_language': 'en',
         'current_theme': 'light',
         'current_stage': 'start',
         'imported_style': None,
@@ -4970,6 +4970,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
