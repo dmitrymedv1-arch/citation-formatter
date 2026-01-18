@@ -2041,9 +2041,10 @@ class DOIProcessor:
                 return doi_match.group(1).rstrip('.,;:')
         
         return None
-    
+
     def _find_bibliographic_doi(self, reference: str) -> Optional[str]:
-        """Поиск DOI по библиографическим данным"""
+        """Поиск DOI по библиографическим данным с улучшенной логикой"""
+        # Очищаем ссылку от уже существующих DOI
         clean_ref = re.sub(r'\s*(https?://doi\.org/|doi:|DOI:)\s*[^\s,;]+', '', reference, flags=re.IGNORECASE)
         clean_ref = clean_ref.strip()
         
@@ -2051,12 +2052,80 @@ class DOIProcessor:
             return None
         
         try:
-            query = self.works.query(bibliographic=clean_ref).sort('relevance').order('desc')
-            for result in query:
-                if 'DOI' in result:
-                    return result['DOI']
+            # Извлекаем ключевые параметры из ссылки
+            extracted_data = self._extract_bibliographic_data(clean_ref)
+            
+            if not extracted_data:
+                return None
+            
+            # Строим запрос к Crossref API с использованием извлеченных параметров
+            query_filters = []
+            
+            # 1. Журнал (самый важный параметр)
+            if extracted_data.get('journal'):
+                journal_query = self._prepare_journal_query(extracted_data['journal'])
+                query_filters.append(f"container-title:{journal_query}")
+            
+            # 2. Год
+            if extracted_data.get('year'):
+                query_filters.append(f"from-pub-date:{extracted_data['year']}")
+                query_filters.append(f"until-pub-date:{extracted_data['year']}")
+            
+            # 3. Том
+            if extracted_data.get('volume'):
+                query_filters.append(f"volume:{extracted_data['volume']}")
+            
+            # 4. Автор (особенно первый автор)
+            if extracted_data.get('authors') and extracted_data['authors']:
+                first_author = extracted_data['authors'][0]
+                # Ищем по фамилии первого автора
+                query_filters.append(f"author:{first_author['family']}")
+            
+            # 5. Номер статьи или страницы
+            if extracted_data.get('article_number'):
+                query_filters.append(f"article-number:{extracted_data['article_number']}")
+            elif extracted_data.get('first_page'):
+                # Для Crossref API лучше искать по page, но точное совпадение сложно
+                pass
+            
+            # 6. Ключевые слова из названия (если есть)
+            if extracted_data.get('title_keywords'):
+                title_keywords = " ".join(extracted_data['title_keywords'][:3])  # Берем первые 3 ключевых слова
+                query_filters.append(f"title:{title_keywords}")
+            
+            # Формируем полный запрос
+            if not query_filters:
+                return None
+            
+            # Начинаем с самого строгого запроса
+            query_string = " ".join(query_filters)
+            
+            try:
+                query = self.works.query(query_string).sort('relevance').order('desc')
+                
+                # Получаем результаты
+                results = list(query)
+                
+                if not results:
+                    # Пробуем более широкий поиск
+                    return self._fallback_bibliographic_search(extracted_data, clean_ref)
+                
+                # Фильтруем результаты по дополнительным критериям
+                filtered_results = self._filter_search_results(results, extracted_data)
+                
+                if filtered_results:
+                    # Возвращаем DOI из наиболее подходящего результата
+                    return filtered_results[0].get('DOI')
+                elif results:
+                    # Возвращаем DOI из первого результата
+                    return results[0].get('DOI')
+                    
+            except Exception as e:
+                logger.warning(f"Query error for '{clean_ref[:100]}...': {e}")
+                return self._fallback_bibliographic_search(extracted_data, clean_ref)
+                
         except Exception as e:
-            logger.error(f"Bibliographic search error for '{clean_ref}': {e}")
+            logger.error(f"Bibliographic search error for '{clean_ref[:100]}...': {e}")
         
         return None
     
@@ -2157,6 +2226,317 @@ class DOIProcessor:
         except Exception as e:
             logger.error(f"Error extracting metadata for DOI {doi}: {e}")
             return None
+
+    def _extract_year_from_result(self, result: Dict) -> Optional[int]:
+        """Извлекает год из результата Crossref"""
+        date_fields = ['published-print', 'published', 'issued', 'published-online', 'created']
+        
+        for field in date_fields:
+            if field in result and 'date-parts' in result[field]:
+                date_parts = result[field]['date-parts']
+                if date_parts and date_parts[0] and len(date_parts[0]) > 0:
+                    return date_parts[0][0]
+        
+        return None
+
+    def _extract_bibliographic_data(self, reference: str) -> Dict[str, Any]:
+        """Извлекает библиографические данные из строки ссылки"""
+        data = {
+            'authors': [],
+            'journal': '',
+            'year': None,
+            'volume': '',
+            'issue': '',
+            'article_number': '',
+            'first_page': '',
+            'title_keywords': []
+        }
+        
+        # Удаляем лишние символы и приводим к стандартному виду
+        ref_lower = reference.lower()
+        
+        # 1. Извлечение года
+        year_match = re.search(r'\b(19\d{2}|20\d{2})\b', reference)
+        if year_match:
+            data['year'] = int(year_match.group(1))
+        
+        # 2. Извлечение авторов
+        authors_match = re.search(r'^(.*?)[,\.]\s*(?=[A-Z]|chim|chem|j|proc|adv)', reference, re.IGNORECASE)
+        if authors_match:
+            authors_text = authors_match.group(1)
+            authors = self._parse_authors(authors_text)
+            if authors:
+                data['authors'] = authors
+        
+        # 3. Извлечение журнала (ищем перед годом и после авторов)
+        # Пытаемся найти название журнала
+        journal_patterns = [
+            r'chim(?:ica)?\s*techno\s*acta',
+            r'chem(?:ical)?\s*society\s*reviews',
+            r'j(?:ournal)?\.?\s*(?:of\s*)?[a-z\s]+',
+            r'proc(?:eedings)?\.?\s*(?:of\s*)?[a-z\s]+',
+            r'adv(?:anced)?\.?\s*(?:of\s*)?[a-z\s]+'
+        ]
+        
+        for pattern in journal_patterns:
+            match = re.search(pattern, ref_lower)
+            if match:
+                # Извлекаем оригинальное написание из ссылки
+                start = match.start()
+                end = min(match.end() + 50, len(reference))  # Берем немного контекста
+                
+                # Ищем конец названия журнала (до запятой, точки или года)
+                journal_text = reference[start:end]
+                journal_end = re.search(r'[,\.]\s*\d{4}|[,\.]\s*\d{2}|$', journal_text)
+                if journal_end:
+                    journal_text = journal_text[:journal_end.start()]
+                
+                data['journal'] = journal_text.strip(' ,.')
+                break
+        
+        # 4. Извлечение тома
+        volume_match = re.search(r'\b(?:v|vol|volume)[\.\s]*(\d+)\b', ref_lower)
+        if volume_match:
+            data['volume'] = volume_match.group(1)
+        else:
+            # Ищем паттерн типа "2025, 12," где 12 - том
+            if data['year']:
+                pattern = r'{}\s*[,\.]\s*(\d+)\s*[,\.]'.format(data['year'])
+                match = re.search(pattern, reference)
+                if match:
+                    data['volume'] = match.group(1)
+        
+        # 5. Извлечение номера статьи или страницы
+        # Ищем артикулы типа "Art. 12304" или "12304" в конце
+        article_match = re.search(r'\bart(?:icle)?[\.\s]*(\d{4,6})\b', ref_lower, re.IGNORECASE)
+        if article_match:
+            data['article_number'] = article_match.group(1)
+        else:
+            # Ищем числа в конце строки (возможно, это номер статьи или страница)
+            end_numbers = re.findall(r'\b(\d{4,6})\b[^\.]*$', reference)
+            if end_numbers:
+                data['article_number'] = end_numbers[-1]
+        
+        # 6. Извлечение первой страницы (если указан диапазон)
+        pages_match = re.search(r'\b(\d{3,6})\s*[-–—]\s*\d{3,6}\b', reference)
+        if pages_match:
+            data['first_page'] = pages_match.group(1)
+        elif not data['article_number']:
+            # Если нет article number, проверяем, есть ли одиночное число в конце
+            single_number_match = re.search(r'\b(\d{3,6})\b[^\.]*$', reference)
+            if single_number_match:
+                num = single_number_match.group(1)
+                if len(num) >= 4:  # Считаем номером статьи если 4+ цифр
+                    data['article_number'] = num
+                else:
+                    data['first_page'] = num
+        
+        # 7. Извлечение ключевых слов из возможного заголовка
+        # Ищем текст между журналом и годом/томом
+        if data['journal']:
+            journal_pattern = re.escape(data['journal'])
+            after_journal_match = re.search(journal_pattern + r'[^\.]*?\.\s*(.*?)\s*(?:\d{4}|\b(?:v|vol|volume))', 
+                                           reference, re.IGNORECASE | re.DOTALL)
+            if after_journal_match:
+                potential_title = after_journal_match.group(1).strip(' ,.')
+                if len(potential_title) > 10 and not re.match(r'^\d+$', potential_title):
+                    # Разбиваем на слова и берем самые значимые
+                    words = re.findall(r'\b[A-Za-z]{4,}\b', potential_title)
+                    data['title_keywords'] = words[:5]  # Берем до 5 ключевых слов
+        
+        return data
+
+    def _parse_authors(self, authors_text: str) -> List[Dict[str, str]]:
+        """Парсит строку с авторами"""
+        authors = []
+        
+        # Разделяем по запятым, "and", "et al.", "&"
+        parts = re.split(r',\s*|\s+and\s+|\s+et\s+al\.|\s*&\s*', authors_text, flags=re.IGNORECASE)
+        
+        for part in parts:
+            part = part.strip()
+            if not part or part.lower() == 'et' or part.lower() == 'al':
+                continue
+            
+            # Парсим фамилию и инициалы
+            # Паттерны: "V. Sadykov", "Sadykov V.", "Sadykov V", "Sadykov, V."
+            match = re.match(r'^([A-Z]\.?\s+)?([A-Z][a-z]+)$', part)
+            if match:
+                # Формат "V. Sadykov"
+                given = match.group(1).strip('. ') if match.group(1) else ''
+                family = match.group(2)
+                authors.append({'given': given, 'family': family})
+            else:
+                # Пробуем другие форматы
+                words = part.split()
+                if len(words) >= 2:
+                    if len(words[0]) == 1 or (len(words[0]) == 2 and words[0].endswith('.')):
+                        # Формат "V. Sadykov" или "V.S. Sadykov"
+                        given = ' '.join(words[:-1])
+                        family = words[-1]
+                    else:
+                        # Формат "Sadykov V." или "Sadykov V"
+                        family = words[0]
+                        given = ' '.join(words[1:])
+                    
+                    # Очищаем инициалы
+                    given = re.sub(r'[^A-Z\.\s]', '', given).strip()
+                    
+                    authors.append({'given': given, 'family': family})
+                elif words:
+                    # Только фамилия
+                    authors.append({'given': '', 'family': words[0]})
+        
+        return authors
+
+    def _prepare_journal_query(self, journal: str) -> str:
+        """Подготавливает строку журнала для запроса"""
+        # Удаляем лишние слова и символы
+        journal_clean = re.sub(r'\b(journal|of|the|and|&|chimica|acta)\b', '', journal, flags=re.IGNORECASE)
+        journal_clean = re.sub(r'[^\w\s]', '', journal_clean)
+        journal_clean = ' '.join(journal_clean.split())
+        
+        # Для коротких названий используем точное совпадение
+        if len(journal_clean.split()) <= 3:
+            return journal_clean
+        else:
+            # Берем первые 3 значимых слова
+            words = [w for w in journal_clean.split() if len(w) > 2][:3]
+            return ' '.join(words)
+
+    def _filter_search_results(self, results: List[Dict], extracted_data: Dict) -> List[Dict]:
+        """Фильтрует результаты поиска по дополнительным критериям"""
+        filtered = []
+        
+        for result in results:
+            score = 0
+            
+            # 1. Проверка журнала
+            result_journal = result.get('container-title', [''])[0].lower()
+            extracted_journal = extracted_data.get('journal', '').lower()
+            if extracted_journal and extracted_journal in result_journal:
+                score += 3
+            
+            # 2. Проверка года
+            result_year = self._extract_year_from_result(result)
+            if result_year and extracted_data.get('year') and result_year == extracted_data['year']:
+                score += 2
+            
+            # 3. Проверка тома
+            result_volume = str(result.get('volume', ''))
+            if result_volume and extracted_data.get('volume') and result_volume == extracted_data['volume']:
+                score += 2
+            
+            # 4. Проверка номера статьи или страницы
+            result_article = result.get('article-number', '')
+            result_pages = result.get('page', '')
+            
+            if extracted_data.get('article_number'):
+                if result_article and extracted_data['article_number'] in result_article:
+                    score += 4  # Высокий приоритет
+                elif result_pages and extracted_data['article_number'] in result_pages:
+                    score += 3
+            elif extracted_data.get('first_page'):
+                if result_pages and extracted_data['first_page'] in result_pages:
+                    score += 3
+            
+            # 5. Проверка авторов (особенно первого)
+            result_authors = result.get('author', [])
+            if result_authors and extracted_data.get('authors'):
+                # Проверяем первого автора
+                result_first_author = result_authors[0].get('family', '').lower()
+                extracted_first_author = extracted_data['authors'][0].get('family', '').lower()
+                
+                if result_first_author and extracted_first_author:
+                    # Проверяем совпадение фамилии
+                    if extracted_first_author in result_first_author or result_first_author in extracted_first_author:
+                        score += 2
+                    
+                    # Проверяем совпадение инициалов (если есть)
+                    result_given = result_authors[0].get('given', '').lower()
+                    extracted_given = extracted_data['authors'][0].get('given', '').lower()
+                    if extracted_given and result_given and extracted_given[0] == result_given[0]:
+                        score += 1
+            
+            # Минимальный порог для включения в результаты
+            if score >= 5:  # Увеличили порог для более точного соответствия
+                filtered.append((score, result))
+        
+        # Сортируем по score
+        filtered.sort(key=lambda x: x[0], reverse=True)
+        return [result for _, result in filtered]
+
+    def _fallback_bibliographic_search(self, extracted_data: Dict, original_ref: str) -> Optional[str]:
+        """Резервный поиск по библиографическим данным"""
+        try:
+            # Пробуем поиск по ключевым словам из всей ссылки
+            # Берем наиболее значимые слова
+            words = re.findall(r'\b[A-Za-z]{4,}\b', original_ref)
+            
+            if words:
+                # Используем первые 3 значимых слова
+                keywords = " ".join(words[:3])
+                query = self.works.query(f"query.bibliographic={keywords}").sort('relevance').order('desc')
+                
+                # Фильтруем результаты
+                for result in query:
+                    # Проверяем ключевые параметры
+                    if self._matches_basic_criteria(result, extracted_data):
+                        return result.get('DOI')
+            
+            # Если не нашли, пробуем просто поиск по журналу и году
+            if extracted_data.get('journal') and extracted_data.get('year'):
+                journal_query = self._prepare_journal_query(extracted_data['journal'])
+                query_string = f"container-title:{journal_query}"
+                query_string += f" from-pub-date:{extracted_data['year']}"
+                query_string += f" until-pub-date:{extracted_data['year']}"
+                
+                query = self.works.query(query_string).sort('relevance').order('desc')
+                
+                for result in query:
+                    if extracted_data.get('volume'):
+                        if str(result.get('volume', '')) == extracted_data['volume']:
+                            return result.get('DOI')
+                    else:
+                        return result.get('DOI')
+                        
+        except Exception as e:
+            logger.warning(f"Fallback search error: {e}")
+        
+        return None
+
+    def _matches_basic_criteria(self, result: Dict, extracted_data: Dict) -> bool:
+        """Проверяет базовые критерии совпадения"""
+        matches = 0
+        
+        # Проверка года
+        result_year = self._extract_year_from_result(result)
+        if result_year and extracted_data.get('year') and result_year == extracted_data['year']:
+            matches += 1
+        
+        # Проверка журнала
+        result_journal = result.get('container-title', [''])[0].lower()
+        extracted_journal = extracted_data.get('journal', '').lower()
+        if extracted_journal and extracted_journal in result_journal:
+            matches += 1
+        
+        # Проверка тома
+        result_volume = str(result.get('volume', ''))
+        if result_volume and extracted_data.get('volume') and result_volume == extracted_data['volume']:
+            matches += 1
+        
+        # Проверка авторов
+        result_authors = result.get('author', [])
+        if result_authors and extracted_data.get('authors'):
+            # Проверяем первого автора
+            result_first_author = result_authors[0].get('family', '').lower()
+            extracted_first_author = extracted_data['authors'][0].get('family', '').lower()
+            
+            if result_first_author and extracted_first_author:
+                if extracted_first_author in result_first_author or result_first_author in extracted_first_author:
+                    matches += 1
+        
+        return matches >= 2  # Минимум 2 совпадения из 4
     
     def _normalize_name(self, name: str) -> str:
         """Нормализует имя автора"""
@@ -4970,6 +5350,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
