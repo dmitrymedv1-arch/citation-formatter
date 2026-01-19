@@ -2041,22 +2041,230 @@ class DOIProcessor:
                 return doi_match.group(1).rstrip('.,;:')
         
         return None
-    
+
     def _find_bibliographic_doi(self, reference: str) -> Optional[str]:
-        """Поиск DOI по библиографическим данным"""
-        clean_ref = re.sub(r'\s*(https?://doi\.org/|doi:|DOI:)\s*[^\s,;]+', '', reference, flags=re.IGNORECASE)
-        clean_ref = clean_ref.strip()
-        
-        if len(clean_ref) < 30:
-            return None
-        
+        """
+        Улучшенный поиск DOI по библиографическим данным.
+        Анализирует журнал, год, том и номер статьи/страницы.
+        Проверяет соответствие первого автора для валидации.
+        """
         try:
-            query = self.works.query(bibliographic=clean_ref).sort('relevance').order('desc')
-            for result in query:
-                if 'DOI' in result:
-                    return result['DOI']
+            # 1. Парсинг библиографических данных из ссылки
+            parsed_data = self._parse_bibliographic_reference(reference)
+            if not parsed_data:
+                logger.warning(f"Не удалось распарсить ссылку: {reference[:100]}...")
+                return None
+            
+            journal = parsed_data.get('journal')
+            year = parsed_data.get('year')
+            volume = parsed_data.get('volume')
+            article_num = parsed_data.get('article_number')
+            first_page = parsed_data.get('first_page')
+            first_author = parsed_data.get('first_author')
+            
+            if not all([journal, year, volume]):
+                logger.warning(f"Недостаточно данных для поиска: журнал={journal}, год={year}, том={volume}")
+                return None
+            
+            # 2. Формируем комбинированный запрос к Crossref
+            # Используем несколько стратегий для увеличения точности
+            query_parts = []
+            
+            # Основные параметры (обязательные)
+            query_parts.append(f'container-title:"{journal}"')
+            query_parts.append(f'volume:{volume}')
+            
+            # Год (из published-print или published-online)
+            query_parts.append(f'from-pub-date:{year}-01-01')
+            query_parts.append(f'until-pub-date:{year}-12-31')
+            
+            # Номер статьи или первая страница (если есть)
+            if article_num:
+                query_parts.append(f'article-number:{article_num}')
+            elif first_page:
+                # Ищем по первой странице, если нет номера статьи
+                query_parts.append(f'page:{first_page}')
+            
+            query_string = ",".join(query_parts)
+            logger.info(f"Поиск по запросу: {query_string}")
+            
+            # 3. Выполняем запрос с сортировкой по релевантности
+            try:
+                results = self.works.query(query_string).sort('relevance').order('desc')
+            except Exception as e:
+                logger.error(f"Ошибка запроса Crossref: {e}")
+                return None
+            
+            found_doi = None
+            best_match_score = 0
+            
+            # 4. Анализируем результаты и выбираем лучший
+            for result in results:
+                if 'DOI' not in result:
+                    continue
+                    
+                current_score = 0
+                candidate_doi = result['DOI']
+                
+                # Проверяем соответствие журнала
+                result_journal = result.get('container-title', [''])[0]
+                if result_journal and journal.lower() in result_journal.lower():
+                    current_score += 30
+                elif result.get('short-container-title'):
+                    short_journal = result['short-container-title'][0]
+                    if journal.lower() in short_journal.lower():
+                        current_score += 25
+                
+                # Проверяем год
+                result_year = self._extract_year_from_result(result)
+                if result_year == year:
+                    current_score += 25
+                
+                # Проверяем том
+                result_volume = result.get('volume', '')
+                if str(result_volume) == str(volume):
+                    current_score += 20
+                
+                # Проверяем номер статьи или страницу
+                if article_num:
+                    result_article_num = result.get('article-number', '')
+                    if str(article_num) == str(result_article_num):
+                        current_score += 15
+                elif first_page:
+                    result_pages = result.get('page', '')
+                    if result_pages and result_pages.startswith(str(first_page)):
+                        current_score += 10
+                
+                # КРИТИЧЕСКАЯ ПРОВЕРКА: сверяем первого автора
+                if first_author and result.get('author'):
+                    result_first_author = result['author'][0].get('family', '').lower()
+                    if first_author.lower() == result_first_author:
+                        current_score += 50  # Максимальный вес для автора
+                        logger.info(f"Совпадение автора: {first_author} == {result_first_author}")
+                    else:
+                        # Если автор не совпадает, значительно снижаем score
+                        current_score -= 30
+                        logger.warning(f"Несовпадение автора: {first_author} != {result_first_author}")
+                
+                # Выбираем результат с максимальным score
+                if current_score > best_match_score:
+                    best_match_score = current_score
+                    found_doi = candidate_doi
+                    logger.debug(f"Новый лучший кандидат: {candidate_doi} (score={current_score})")
+            
+            # 5. Проверяем минимальный порог соответствия
+            if found_doi and best_match_score >= 60:  # Порог можно настроить
+                logger.info(f"Найден DOI: {found_doi} с score={best_match_score}")
+                return found_doi
+            elif found_doi:
+                logger.warning(f"DOI найден {found_doi}, но низкий score={best_match_score}")
+                return None
+            else:
+                logger.warning(f"DOI не найден для {reference[:80]}...")
+                return None
+                
         except Exception as e:
-            logger.error(f"Bibliographic search error for '{clean_ref}': {e}")
+            logger.error(f"Ошибка в библиографическом поиске: {e}")
+            return None
+    
+    def _parse_bibliographic_reference(self, reference: str) -> Optional[Dict]:
+        """
+        Парсит библиографическую ссылку и извлекает ключевые элементы.
+        Обрабатывает форматы типа: "V. Sadykov, E. Sadovskaya et al., Chim. Tech. Acta, 2025, 12, 12304"
+        """
+        try:
+            # Очистка ссылки
+            clean_ref = re.sub(r'\s+', ' ', reference.strip())
+            
+            result = {
+                'journal': None,
+                'year': None,
+                'volume': None,
+                'article_number': None,
+                'first_page': None,
+                'first_author': None
+            }
+            
+            # 1. Извлечение первого автора (до первой запятой или "et al")
+            author_match = re.match(r'^([^,]+?)(?:,| et al\.)', clean_ref)
+            if author_match:
+                authors_text = author_match.group(1).strip()
+                # Извлекаем фамилию первого автора
+                first_author_parts = re.split(r'[,\s]+', authors_text)
+                for part in first_author_parts:
+                    if part and '.' not in part and part.lower() not in ['and', '&']:
+                        result['first_author'] = part
+                        break
+            
+            # 2. Поиск года (4 цифры)
+            year_match = re.search(r'\b(19|20)\d{2}\b', clean_ref)
+            if year_match:
+                result['year'] = int(year_match.group())
+            
+            # 3. Поиск журнала (между авторами и годом)
+            # Ищем текст между авторами и годом
+            if author_match and year_match:
+                start_pos = author_match.end()
+                end_pos = year_match.start()
+                journal_text = clean_ref[start_pos:end_pos].strip()
+                # Убираем лишние запятые и точки
+                journal_text = re.sub(r'^[,\s\.]+|[,\s\.]+$', '', journal_text)
+                if journal_text:
+                    result['journal'] = journal_text
+            
+            # 4. Поиск тома (цифра после года)
+            if year_match:
+                after_year = clean_ref[year_match.end():]
+                vol_match = re.search(r'\b(\d{1,4})\b', after_year)
+                if vol_match:
+                    result['volume'] = vol_match.group(1)
+                    
+                    # 5. Поиск номера статьи или первой страницы
+                    after_volume = after_year[vol_match.end():]
+                    num_match = re.search(r'\b(\d{1,6})\b', after_volume)
+                    if num_match:
+                        number = num_match.group(1)
+                        # Эвристика: если число большое (>1000), это скорее всего номер статьи
+                        if int(number) > 1000:
+                            result['article_number'] = number
+                        else:
+                            result['first_page'] = number
+            
+            # Дополнительная проверка для формата "V. Sadykova, E. Sadovskaya et al. Chimica Techno Acta 2025. V. 12. Art. 12304"
+            if not result['article_number']:
+                art_match = re.search(r'Art\.\s*(\d+)', clean_ref, re.IGNORECASE)
+                if art_match:
+                    result['article_number'] = art_match.group(1)
+            
+            # Проверяем, что собрали достаточно данных
+            if any([result['journal'], result['year'], result['volume']]):
+                logger.debug(f"Парсинг ссылки: {result}")
+                return result
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Ошибка парсинга ссылки: {e}")
+            return None
+    
+    def _extract_year_from_result(self, result: Dict) -> Optional[int]:
+        """
+        Извлекает год публикации из результата Crossref.
+        Проверяет несколько полей в порядке приоритета.
+        """
+        year_fields = [
+            ('published-print', 'date-parts'),
+            ('published-online', 'date-parts'),
+            ('issued', 'date-parts'),
+            ('published', 'date-parts'),
+            ('created', 'date-parts')
+        ]
+        
+        for field, subfield in year_fields:
+            if field in result and subfield in result[field]:
+                date_parts = result[field][subfield]
+                if date_parts and date_parts[0] and len(date_parts[0]) > 0:
+                    return date_parts[0][0]
         
         return None
     
@@ -4970,3 +5178,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
