@@ -1471,14 +1471,17 @@ class Style6Formatter(BaseCitationFormatter):
         
         # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
-        
+
         pages = metadata['pages']
+        article_number = metadata.get('article_number', '')
         if pages:
             if '-' in pages:
                 start_page, end_page = pages.split('-')
                 pages_formatted = f"{start_page}–{end_page}"
             else:
                 pages_formatted = pages
+        elif article_number:
+            pages_formatted = article_number  # Используем номер статьи если нет страниц
         else:
             pages_formatted = ""
         
@@ -1534,12 +1537,15 @@ class Style7Formatter(BaseCitationFormatter):
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
+        article_number = metadata.get('article_number', '')
         if pages:
             if '-' in pages:
                 start_page, end_page = pages.split('-')
                 pages_formatted = f"{start_page}–{end_page}"
             else:
                 pages_formatted = pages
+        elif article_number:
+            pages_formatted = article_number  # Используем номер статьи если нет страниц
         else:
             pages_formatted = ""
         
@@ -4974,6 +4980,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
