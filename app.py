@@ -1377,11 +1377,12 @@ class CTACitationFormatter(BaseCitationFormatter):
             else:
                 elements.append(("", False, False, ":", False, None))
             elements.append((pages_formatted, False, False, ". ", False, None))
-            doi_text = f"doi:{metadata['doi']}"
-            elements.append((doi_text, False, False, "", True, metadata['doi']))
+            
+            # ИСПРАВЛЕНО: разделяем "doi:" и сам DOI
+            elements.append(("doi:", False, False, "", False, None))  # "doi:" не гиперссылка
+            elements.append((metadata['doi'], False, False, "", True, metadata['doi']))  # DOI как гиперссылка
+            
             return elements, False
-
-# Новые форматировщики для дополнительных стилей
 
 class Style5Formatter(BaseCitationFormatter):
     """Форматировщик для стиля 5"""
@@ -4983,6 +4984,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
