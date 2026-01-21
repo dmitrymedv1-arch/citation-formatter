@@ -1604,10 +1604,10 @@ class Style8Formatter(BaseCitationFormatter):
         article_number = metadata.get('article_number', '')
         if pages:
             if '-' in pages:
-                start_page, end_page = pages.split('-')
-                pages_formatted = f"{start_page}–{end_page}"
+                first_page = pages.split('-')[0].strip()
+                pages_formatted = first_page
             else:
-                pages_formatted = pages
+                pages_formatted = pages.strip()
         elif article_number:
             pages_formatted = article_number  # Используем номер статьи если нет страниц
         else:
@@ -4983,6 +4983,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
