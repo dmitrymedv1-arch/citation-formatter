@@ -1599,14 +1599,17 @@ class Style8Formatter(BaseCitationFormatter):
                 authors_str += ", "
         
         journal_name = self.format_journal_name(metadata['journal'])
-        
+
         pages = metadata['pages']
+        article_number = metadata.get('article_number', '')
         if pages:
             if '-' in pages:
-                first_page = pages.split('-')[0].strip()
-                pages_formatted = first_page
+                start_page, end_page = pages.split('-')
+                pages_formatted = f"{start_page}–{end_page}"
             else:
-                pages_formatted = pages.strip()
+                pages_formatted = pages
+        elif article_number:
+            pages_formatted = article_number  # Используем номер статьи если нет страниц
         else:
             pages_formatted = ""
         
@@ -4980,6 +4983,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
