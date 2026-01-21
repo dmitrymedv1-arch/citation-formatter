@@ -56,6 +56,10 @@ class Config:
     MIN_REFERENCES_FOR_STATS = 5
     MAX_REFERENCES = 1000
     
+    # Повторная проверка неудачных DOI
+    MAX_RETRY_ATTEMPTS = 2  # Максимум 2 повторные попытки
+    RETRY_DELAY_SECONDS = 1  # Задержка между попытками
+    
     # Стили
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
     AUTHOR_FORMATS = ["AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A."]
@@ -2345,11 +2349,12 @@ class ReferenceProcessor:
         # Финальное обновление
         self.progress_manager.update_progress(total_to_process, found_count, error_count, 'complete')
         progress_bar.progress(1.0)
-        
+
     def _extract_metadata_batch(self, doi_list, progress_bar, status_display) -> List:
-        """Пакетное извлечение метаданных"""
+        """Пакетное извлечение метаданных с повторной попыткой"""
         results = [None] * len(doi_list)
         
+        # ПЕРВЫЙ ПРОХОД
         with concurrent.futures.ThreadPoolExecutor(max_workers=Config.CROSSREF_WORKERS) as executor:
             future_to_index = {
                 executor.submit(self.doi_processor.extract_metadata_with_cache, doi): i 
@@ -2368,10 +2373,19 @@ class ReferenceProcessor:
                     results[index] = None
                 
                 completed += 1
-                # Обновляем только прогресс, не статус
                 progress_ratio = completed / total if total > 0 else 0
                 progress_bar.progress(progress_ratio)
                 status_display.text(f"Fetching metadata: {completed}/{total}")
+        
+        # ПРОВЕРКА НА НЕУДАЧНЫЕ ЗАПРОСЫ
+        failed_indices = [i for i, result in enumerate(results) if result is None]
+        
+        if failed_indices:
+            logger.info(f"Retrying {len(failed_indices)} failed requests...")
+            status_display.text(f"Retrying {len(failed_indices)} failed requests...")
+            
+            # ПОВТОРНАЯ ОБРАБОТКА
+            self._retry_failed_requests(failed_indices, doi_list, results, progress_bar, status_display)
         
         return results
     
@@ -4984,6 +4998,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
