@@ -1707,7 +1707,7 @@ class Style10Formatter(BaseCitationFormatter):
             authors_str += author_str
             
             if i < len(metadata['authors']) - 1:
-                authors_str += " "
+                authors_str += ", "
         
         journal_name = self.format_journal_name(metadata['journal'])
         
@@ -4983,6 +4983,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
