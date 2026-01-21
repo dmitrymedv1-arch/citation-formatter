@@ -892,6 +892,10 @@ class JournalAbbreviation:
 # Инициализация системы сокращений
 journal_abbrev = JournalAbbreviation()
 
+def clean_double_dots(text: str) -> str:
+    """Убирает двойные точки в тексте"""
+    return re.sub(r'\.\.+', '.', text)
+
 class BaseCitationFormatter:
     """Базовый класс для форматирования цитирования"""
     
@@ -4970,4 +4974,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
