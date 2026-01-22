@@ -2980,179 +2980,424 @@ class OpenAlexArticleFinder:
 
 # Обновленный класс для рекомендаций с прогресс-баром
 class OptimizedArticleRecommender:
-    """Оптимизированная система рекомендаций с OpenAlex"""
+    """Оптимизированная система рекомендаций с поиском по семантической близости"""
     
     def __init__(self):
         self.openalex_finder = OpenAlexArticleFinder()
         self.crossref_works = Works()
-        self.processor = EnhancedTextProcessor()
-    
+        
     def generate_recommendations_with_progress(self, formatted_refs: List[Tuple[Any, bool, Any]], 
                                               progress_callback = None) -> Optional[pd.DataFrame]:
-        """Генерация рекомендаций с отображением прогресса"""
+        """Генерация рекомендаций с отслеживанием прогресса"""
         if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
             return None
         
         if progress_callback:
             progress_callback(5, "Анализ исходных статей...")
         
-        # Извлекаем DOI из форматированных ссылок
-        valid_dois = []
-        for _, is_error, metadata in formatted_refs:
-            if not is_error and metadata and metadata.get('doi'):
-                valid_dois.append(metadata['doi'])
+        # 1. Извлекаем метаданные и создаем семантический профиль
+        semantic_profile = self._build_semantic_profile(formatted_refs)
         
-        if not valid_dois:
+        if not semantic_profile or not semantic_profile.get('key_terms'):
+            if progress_callback:
+                progress_callback(100, "Не удалось создать семантический профиль")
             return None
         
         if progress_callback:
-            progress_callback(15, f"Найдено {len(valid_dois)} DOI для анализа...")
+            progress_callback(20, f"Создан профиль с {len(semantic_profile['key_terms'])} ключевыми терминами...")
         
-        # Получаем статьи из OpenAlex
-        openalex_works = []
-        for i, doi in enumerate(valid_dois[:5]):  # Ограничиваем 5 DOI для скорости
-            if progress_callback:
-                progress_callback(15 + (i * 10), f"Получение данных для DOI {i+1}/{min(5, len(valid_dois))}...")
-            
-            work = self.openalex_finder.get_work_by_doi(doi)
-            if work:
-                openalex_works.append(work)
-        
-        if not openalex_works:
-            if progress_callback:
-                progress_callback(50, "Статьи не найдены в OpenAlex, используем Crossref...")
-            return self._fallback_to_crossref(valid_dois, progress_callback)
-        
+        # 2. Поиск в OpenAlex (приоритетный источник)
+        openalex_results = []
         if progress_callback:
-            progress_callback(60, f"Найдено {len(openalex_works)} статей в OpenAlex, поиск похожих...")
+            progress_callback(30, "Поиск в OpenAlex...")
         
-        # Ищем похожие статьи для каждой найденной работы
-        all_recommendations = []
+        openalex_results = self._search_in_openalex(semantic_profile, progress_callback, 30, 50)
         
-        for i, work in enumerate(openalex_works):
+        # 3. Поиск в Crossref (резервный, но с той же логикой)
+        crossref_results = []
+        if len(openalex_results) < Config.MAX_RECOMMENDATIONS // 2:
             if progress_callback:
-                progress_callback(60 + (i * 5), f"Поиск похожих для статьи {i+1}/{len(openalex_works)}...")
+                progress_callback(60, f"Дополнительный поиск в Crossref...")
             
-            similar_articles = self.openalex_finder.search_similar_articles(work, max_results=10)
-            all_recommendations.extend(similar_articles)
+            crossref_results = self._search_in_crossref(semantic_profile, progress_callback, 60, 80)
         
-        if not all_recommendations:
-            if progress_callback:
-                progress_callback(85, "Похожие статьи не найдены, используем резервный метод...")
-            return self._fallback_to_crossref(valid_dois, progress_callback)
-        
+        # 4. Объединяем и ранжируем результаты
         if progress_callback:
-            progress_callback(90, "Обработка и сортировка результатов...")
+            progress_callback(85, "Оценка релевантности...")
         
-        # Убираем дубликаты и преобразуем в DataFrame
-        unique_recommendations = self._deduplicate_recommendations(all_recommendations)
+        all_results = openalex_results + crossref_results
+        
+        if not all_results:
+            if progress_callback:
+                progress_callback(100, "Рекомендации не найдены")
+            return None
+        
+        # 5. Сортируем по семантической близости, а не по цитированию
+        ranked_results = self._rank_by_semantic_similarity(all_results, semantic_profile)
         
         if progress_callback:
             progress_callback(95, "Формирование итогового списка...")
         
-        return self._create_recommendations_df(unique_recommendations)
+        return self._create_recommendations_df(ranked_results)
     
-    def _fallback_to_crossref(self, dois: List[str], progress_callback = None) -> Optional[pd.DataFrame]:
-        """Резервный поиск через Crossref"""
-        if progress_callback:
-            progress_callback(50, "Использование Crossref для поиска...")
+    def _build_semantic_profile(self, formatted_refs: List[Tuple[Any, bool, Any]]) -> Dict:
+        """Строит семантический профиль на основе списка литературы"""
+        profile = {
+            'titles': [],
+            'abstracts': [],
+            'journals': [],
+            'key_terms': set(),
+            'years': [],
+            'keywords': []
+        }
         
-        try:
-            combined_text = " ".join(dois[:10])
-            key_terms = self.processor.extract_key_terms(combined_text, top_k=15)
+        # Собираем текст из всех статей
+        all_text = []
+        
+        for _, is_error, metadata in formatted_refs:
+            if is_error or not metadata:
+                continue
             
-            if progress_callback:
-                progress_callback(60, f"Поиск по ключевым словам: {', '.join(key_terms[:5])}...")
+            # Заголовок
+            if metadata.get('title'):
+                profile['titles'].append(metadata['title'].lower())
+                all_text.append(metadata['title'])
             
-            # Простой поиск в Crossref
-            all_articles = []
-            for term in key_terms[:3]:
-                try:
-                    works = self.crossref_works.query(query_title=term).filter(from_pub_date='2019').sort('relevance').order('desc')
-                    
-                    for i, work in enumerate(works[:5]):
-                        if 'DOI' in work and 'title' in work:
-                            article = {
-                                'doi': work['DOI'],
-                                'title': work.get('title', [''])[0],
-                                'year': work.get('created', {}).get('date-parts', [[0]])[0][0],
-                                'journal': work.get('container-title', [''])[0],
-                                'authors': [],
-                                'citation_count': work.get('is-referenced-by-count', 0),
-                                'relevance_score': 0.3 + (i * 0.1),  # Базовый рейтинг
-                                'source': 'crossref'
-                            }
-                            
-                            # Авторы
-                            for author in work.get('author', [])[:3]:
-                                given = author.get('given', '')
-                                family = author.get('family', '')
-                                if family:
-                                    article['authors'].append(f"{family}, {given[:1]}.")
-                            
-                            all_articles.append(article)
-                            
-                except Exception as e:
-                    continue
+            # Аннотация
+            if metadata.get('abstract'):
+                profile['abstracts'].append(metadata['abstract'].lower())
+                all_text.append(metadata['abstract'])
             
-            if all_articles:
-                # Сортируем по релевантности
-                all_articles.sort(key=lambda x: x['relevance_score'], reverse=True)
-                
+            # Журнал
+            if metadata.get('journal'):
+                profile['journals'].append(metadata['journal'].lower())
+            
+            # Год
+            if metadata.get('year'):
+                profile['years'].append(metadata['year'])
+        
+        # Извлекаем ключевые термины
+        if all_text:
+            combined_text = ' '.join(all_text)
+            profile['key_terms'] = self._extract_key_terms(combined_text)
+        
+        # Извлекаем ключевые слова из заголовков
+        profile['keywords'] = self._extract_keywords_from_titles(profile['titles'])
+        
+        return profile
+    
+    def _extract_key_terms(self, text: str) -> Set[str]:
+        """Извлечение ключевых терминов из текста"""
+        # Убираем специальные символы и цифры
+        clean_text = re.sub(r'[^\w\s]', ' ', text.lower())
+        clean_text = re.sub(r'\b\d+\b', ' ', clean_text)
+        
+        # Разбиваем на слова
+        words = re.findall(r'\b[a-z]{4,}\b', clean_text)
+        
+        # Убираем стоп-слова
+        stop_words = {
+            'with', 'from', 'that', 'this', 'have', 'which', 'their', 'there',
+            'what', 'when', 'were', 'them', 'they', 'your', 'will', 'would',
+            'study', 'research', 'paper', 'article', 'work', 'result', 'method',
+            'approach', 'analysis', 'experiment', 'investigation', 'show', 'demonstrate',
+            'propose', 'present', 'discuss', 'examine', 'evaluate', 'assess', 'using',
+            'based', 'different', 'various', 'several', 'recent', 'important', 'novel'
+        }
+        
+        filtered_words = [word for word in words if word not in stop_words]
+        
+        # Находим наиболее частые слова
+        word_counts = Counter(filtered_words)
+        top_words = [word for word, count in word_counts.most_common(30)]
+        
+        return set(top_words)
+    
+    def _extract_keywords_from_titles(self, titles: List[str]) -> List[str]:
+        """Извлечение ключевых слов из заголовков"""
+        keywords = []
+        
+        for title in titles:
+            # Извлекаем слова с заглавной буквы (часто это термины)
+            title_keywords = re.findall(r'\b[A-Z][a-z]{3,}\b', title)
+            keywords.extend(title_keywords)
+            
+            # Извлекаем составные термины (через дефис)
+            hyphen_keywords = re.findall(r'\b\w+-\w+\b', title)
+            keywords.extend(hyphen_keywords)
+        
+        return list(set(keywords))
+    
+    def _search_in_openalex(self, semantic_profile: Dict, progress_callback, start_progress: int, end_progress: int) -> List[Dict]:
+        """Поиск рекомендаций в OpenAlex"""
+        results = []
+        key_terms = list(semantic_profile['key_terms'])
+        keywords = semantic_profile['keywords']
+        
+        if not key_terms and not keywords:
+            return results
+        
+        # Стратегия 1: Поиск по ключевым терминам
+        if key_terms:
+            search_queries = self._generate_search_queries(key_terms, keywords)
+            
+            for i, query in enumerate(search_queries[:3]):  # Ограничиваем 3 запроса
                 if progress_callback:
-                    progress_callback(95, f"Найдено {len(all_articles)} статей в Crossref")
+                    current_progress = start_progress + (i * 10)
+                    progress_callback(current_progress, f"OpenAlex поиск: {query[:50]}...")
                 
-                return pd.DataFrame(all_articles[:Config.MAX_RECOMMENDATIONS])
+                try:
+                    # Параметры для OpenAlex
+                    current_year = datetime.now().year
+                    from_year = current_year - 5
+                    
+                    params = {
+                        'search': query,
+                        'filter': f'publication_year:>{from_year-1}',
+                        'sort': 'relevance_score:desc',
+                        'per-page': 15,
+                    }
+                    
+                    response = requests.get(
+                        "https://api.openalex.org/works",
+                        params=params,
+                        headers={'User-Agent': 'CitationStyleConstructor/1.0'},
+                        timeout=15
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json().get('results', [])
+                        
+                        for item in data:
+                            parsed_item = self.openalex_finder._parse_work_data(item)
+                            if parsed_item and parsed_item.get('title'):
+                                # Вычисляем семантическую близость
+                                similarity_score = self._calculate_semantic_similarity(
+                                    parsed_item, semantic_profile
+                                )
+                                parsed_item['semantic_similarity'] = similarity_score
+                                results.append(parsed_item)
+                                
+                except Exception as e:
+                    logger.debug(f"OpenAlex search error for query '{query}': {e}")
+                    continue
+        
+        return results[:Config.MAX_RECOMMENDATIONS * 2]  # Берем больше для последующего ранжирования
+    
+    def _search_in_crossref(self, semantic_profile: Dict, progress_callback, start_progress: int, end_progress: int) -> List[Dict]:
+        """Поиск рекомендаций в Crossref"""
+        results = []
+        key_terms = list(semantic_profile['key_terms'])
+        keywords = semantic_profile['keywords']
+        
+        if not key_terms:
+            return results
+        
+        # Создаем поисковые запросы
+        search_queries = self._generate_search_queries(key_terms, keywords)
+        
+        for i, query in enumerate(search_queries[:2]):  # Ограничиваем 2 запроса
+            if progress_callback:
+                current_progress = start_progress + (i * 15)
+                progress_callback(current_progress, f"Crossref поиск: {query[:50]}...")
+            
+            try:
+                # Ищем в Crossref
+                current_year = datetime.now().year
+                works_query = self.crossref_works.query(query_title=query).filter(from_pub_date=str(current_year - 5))
+                
+                for j, work in enumerate(works_query[:10]):  # Ограничиваем 10 результатов на запрос
+                    if 'DOI' in work and 'title' in work:
+                        # Парсим статью
+                        article = self._parse_crossref_work(work)
+                        if article:
+                            # Вычисляем семантическую близость
+                            similarity_score = self._calculate_semantic_similarity(
+                                article, semantic_profile
+                            )
+                            article['semantic_similarity'] = similarity_score
+                            article['source'] = 'crossref'
+                            results.append(article)
+                    
+                    if len(results) >= Config.MAX_RECOMMENDATIONS:
+                        break
+                        
+            except Exception as e:
+                logger.debug(f"Crossref search error for query '{query}': {e}")
+                continue
+        
+        return results
+    
+    def _generate_search_queries(self, key_terms: List[str], keywords: List[str]) -> List[str]:
+        """Генерация поисковых запросов"""
+        queries = []
+        
+        # 1. Комбинация топ-терминов
+        if len(key_terms) >= 3:
+            queries.append(' '.join(key_terms[:3]))
+        
+        # 2. Ключевые слова из заголовков
+        if keywords:
+            queries.append(' '.join(keywords[:3]))
+        
+        # 3. Пары терминов
+        for i in range(min(3, len(key_terms) - 1)):
+            for j in range(i + 1, min(4, len(key_terms))):
+                queries.append(f"{key_terms[i]} {key_terms[j]}")
+        
+        # 4. Отдельные важные термины
+        for term in key_terms[:5]:
+            if len(term) > 5:  # Длинные термины обычно более специфичны
+                queries.append(term)
+        
+        return list(set(queries))[:8]  # Уникальные, максимум 8
+    
+    def _parse_crossref_work(self, work: Dict) -> Optional[Dict]:
+        """Парсинг статьи из Crossref"""
+        try:
+            title = work.get('title', [''])[0]
+            if not title:
+                return None
+            
+            # Авторы
+            authors = []
+            for author in work.get('author', [])[:3]:
+                given = author.get('given', '')
+                family = author.get('family', '')
+                if family:
+                    authors.append(f"{family}, {given[:1]}." if given else family)
+            
+            # Журнал
+            journal = work.get('container-title', [''])[0]
+            
+            # Год
+            year = None
+            date_fields = ['published-print', 'published-online', 'issued', 'created']
+            for field in date_fields:
+                if field in work and 'date-parts' in work[field] and work[field]['date-parts']:
+                    year = work[field]['date-parts'][0][0]
+                    break
+            
+            return {
+                'doi': work.get('DOI', ''),
+                'title': title,
+                'authors': authors,
+                'journal': journal,
+                'publication_year': year or datetime.now().year - 1,
+                'cited_by_count': work.get('is-referenced-by-count', 0),
+                'abstract': '',  # Crossref часто не дает аннотаций
+                'concepts': [],  # Нет концептов в Crossref
+                'source': 'crossref',
+                'citation_count': work.get('is-referenced-by-count', 0) or 0
+            }
             
         except Exception as e:
-            logger.error(f"Crossref fallback error: {e}")
-        
-        return None
+            logger.debug(f"Error parsing Crossref work: {e}")
+            return None
     
-    def _deduplicate_recommendations(self, recommendations: List[Dict]) -> List[Dict]:
-        """Удаление дубликатов из рекомендаций"""
-        seen_dois = set()
-        unique_recommendations = []
+    def _calculate_semantic_similarity(self, article: Dict, semantic_profile: Dict) -> float:
+        """Вычисление семантической близости статьи к профилю"""
+        similarity_score = 0.0
         
-        for rec in recommendations:
-            doi = rec.get('doi')
+        # 1. Сходство по ключевым терминам
+        article_text = f"{article.get('title', '').lower()} {article.get('abstract', '').lower()}"
+        article_terms = self._extract_key_terms(article_text)
+        
+        profile_terms = semantic_profile.get('key_terms', set())
+        if profile_terms:
+            common_terms = len(article_terms.intersection(profile_terms))
+            similarity_score += (common_terms / len(profile_terms)) * 0.6
+        
+        # 2. Сходство журнала
+        article_journal = article.get('journal', '').lower()
+        profile_journals = [j.lower() for j in semantic_profile.get('journals', [])]
+        
+        if article_journal and profile_journals:
+            for profile_journal in profile_journals:
+                if profile_journal in article_journal or article_journal in profile_journal:
+                    similarity_score += 0.2
+                    break
+        
+        # 3. Свежесть (меньший вес, так как важнее содержание)
+        current_year = datetime.now().year
+        article_year = article.get('publication_year', 0)
+        
+        if article_year >= current_year - 1:
+            similarity_score += 0.1  # Очень свежие
+        elif article_year >= current_year - 3:
+            similarity_score += 0.05  # Свежие
+        
+        # 4. Число цитирований (минимальный вес - важнее содержание)
+        citations = article.get('cited_by_count', 0) or article.get('citation_count', 0)
+        if citations >= 50:
+            similarity_score += 0.05
+        elif citations >= 20:
+            similarity_score += 0.02
+        
+        return min(1.0, similarity_score)
+    
+    def _rank_by_semantic_similarity(self, articles: List[Dict], semantic_profile: Dict) -> List[Dict]:
+        """Ранжирование статей по семантической близости"""
+        # Уже вычислено в _calculate_semantic_similarity
+        # Просто сортируем
+        articles.sort(key=lambda x: x.get('semantic_similarity', 0), reverse=True)
+        
+        # Убираем дубликаты по DOI
+        seen_dois = set()
+        unique_articles = []
+        
+        for article in articles:
+            doi = article.get('doi')
             if doi and doi not in seen_dois:
                 seen_dois.add(doi)
-                unique_recommendations.append(rec)
+                unique_articles.append(article)
         
-        return unique_recommendations[:Config.MAX_RECOMMENDATIONS]
+        return unique_articles[:Config.MAX_RECOMMENDATIONS]
     
-    def _create_recommendations_df(self, recommendations: List[Dict]) -> pd.DataFrame:
+    def _create_recommendations_df(self, articles: List[Dict]) -> pd.DataFrame:
         """Создание DataFrame с рекомендациями"""
         formatted_recommendations = []
         
-        for rec in recommendations:
-            # Форматируем авторов
-            authors = rec.get('authors', [])
+        for i, article in enumerate(articles):
+            # Авторы
+            authors = article.get('authors', [])
             if isinstance(authors, list):
                 authors_str = ', '.join(authors[:3])
             else:
                 authors_str = str(authors)[:100]
             
-            # Получаем аннотацию
-            abstract = rec.get('abstract', '')
-            if not abstract and rec.get('abstract_inverted_index'):
-                abstract = self.openalex_finder._reconstruct_abstract(rec['abstract_inverted_index'])
+            # Аннотация
+            abstract = article.get('abstract', '')
+            if not abstract and article.get('abstract_inverted_index'):
+                abstract = self.openalex_finder._reconstruct_abstract(article['abstract_inverted_index'])
+            
+            # Ключевые термины (концепты)
+            concepts = article.get('concepts', [])
+            if concepts:
+                common_terms = ', '.join(concepts[:5])
+            else:
+                # Извлекаем из заголовка
+                title_terms = self._extract_key_terms(article.get('title', ''))
+                common_terms = ', '.join(list(title_terms)[:5])
+            
+            # Цитирования
+            citation_count = article.get('citation_count', 
+                                       article.get('cited_by_count', 0)) or 0
             
             formatted_recommendations.append({
-                'doi': rec.get('doi', ''),
-                'title': rec.get('title', ''),
-                'year': rec.get('publication_year', ''),
-                'journal': rec.get('journal', ''),
+                'doi': article.get('doi', ''),
+                'title': article.get('title', ''),
+                'year': article.get('publication_year', ''),
+                'journal': article.get('journal', ''),
                 'authors': authors_str,
                 'abstract': abstract[:500] + '...' if len(abstract) > 500 else abstract,
-                'score': rec.get('relevance_score', 0),
-                'citation_count': rec.get('citation_count', rec.get('cited_by_count', 0)),
-                'source': 'openalex',
+                'score': article.get('semantic_similarity', 0),  # Используем семантическую близость как score
+                'citation_count': citation_count,
+                'source': article.get('source', 'unknown'),
                 'title_sim': 0.0,  # Заглушки для совместимости
-                'content_sim': 0.0,
-                'semantic_sim': 0.0,
-                'common_terms': ', '.join(rec.get('concepts', [])[:5]),
+                'content_sim': article.get('semantic_similarity', 0),  # Здесь реальное значение
+                'semantic_sim': article.get('semantic_similarity', 0),
+                'common_terms': common_terms,
                 'has_abstract': bool(abstract),
             })
         
@@ -3186,7 +3431,7 @@ class ArticleRecommender:
         output_txt_buffer.write(f"Showing top {len(recommendations_df)} recommendations from the last {Config.RECOMMENDATION_YEARS_BACK} years\n\n")
         
         for idx, row in recommendations_df.iterrows():
-            output_txt_buffer.write(f"{idx+1:2d}. [Score: {row['score']:.3f}] {row['title']}\n")
+            output_txt_buffer.write(f"{idx+1:2d}. [Semantic similarity: {row['score']:.3f}] {row['title']}\n")
             output_txt_buffer.write(f"    Authors: {row['authors']}\n")
             output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
             output_txt_buffer.write(f"    DOI: {row['doi']}\n")
@@ -6242,7 +6487,8 @@ class ResultsPage:
                     # Заголовок и оценка
                     col_score, col_year = st.columns([1, 1])
                     with col_score:
-                        st.markdown(f"**{get_text('recommendation_score')} {row['score']:.3f}**")
+                        # Показываем "Семантическая близость" вместо "Relevance score"
+                        st.markdown(f"**Семантическая близость: {row['score']:.3f}**")
                     with col_year:
                         st.markdown(f"**{get_text('recommendation_year')} {row['year']}**")
                     
@@ -6645,5 +6891,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
