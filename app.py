@@ -2200,19 +2200,18 @@ class TopicBasedRecommender:
                     works.extend(works_extended)
                 
                 # Парсим и добавляем рекомендации
-                 for work in works:
-                    if not work:  # Проверяем, что work не None
-                        continue
-                    parsed_work = self.openalex_finder._parse_work_data(work)
-                    if parsed_work and parsed_work.get('doi'):
-                        doi = parsed_work['doi']
-                        if doi not in seen_dois:
-                            seen_dois.add(doi)
-                            # Вычисляем релевантность на основе веса темы и свежести
-                            parsed_work['relevance_score'] = self._calculate_relevance_score(
-                                parsed_work, weight
-                            )
-                            all_recommendations.append(parsed_work)
+                    for work in works:
+                        if not work:  # Проверяем, что work не None
+                            continue
+                        parsed_work = self.openalex_finder._parse_work_data(work)
+                        if parsed_work and parsed_work.get('doi'):
+                            doi = parsed_work['doi']
+                            if doi not in seen_dois:
+                                seen_dois.add(doi)
+                                parsed_work['relevance_score'] = self._calculate_relevance_score(
+                                    parsed_work, weight
+                                )
+                                all_recommendations.append(parsed_work)
         
         # Если все еще мало результатов, используем простой поиск по теме
         if len(all_recommendations) < 10:
@@ -5784,6 +5783,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
