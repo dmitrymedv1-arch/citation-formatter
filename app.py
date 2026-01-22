@@ -36,12 +36,6 @@ import spacy
 from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
-import torch
-from transformers import AutoTokenizer, AutoModel
-import torch.nn.functional as F
-from scipy.sparse import csr_matrix
-from scipy.sparse.csgraph import connected_components
-import networkx as nx
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -96,20 +90,6 @@ class Config:
     # Retry failed DOI
     MAX_RETRY_ATTEMPTS = 2
     RETRY_DELAY_SECONDS = 1
-
-    # BERT settings
-    BERT_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-    BERT_BATCH_SIZE = 16
-    BERT_MAX_LENGTH = 256
-    
-    # Graph settings
-    MIN_CITATION_OVERLAP = 2
-    GRAPH_SIMILARITY_THRESHOLD = 0.3
-    
-    # Hybrid scoring weights
-    TEXT_SIMILARITY_WEIGHT = 0.4
-    CITATION_GRAPH_WEIGHT = 0.3
-    BERT_SIMILARITY_WEIGHT = 0.3
     
     # Styles
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
@@ -2178,208 +2158,6 @@ class EnhancedComparator:
         else:
             return 0.4
 
-class CitationGraphAnalyzer:
-    """Анализатор графа цитирований для улучшения рекомендаций"""
-    
-    def __init__(self):
-        self.citation_graph = nx.Graph()
-        self.paper_to_dois = {}  # DOI -> список цитируемых DOI
-        self.doi_to_paper = {}   # DOI -> информация о статье
-        
-    def build_citation_graph(self, references_metadata: List[Dict]):
-        """Построение графа цитирований из списка литературы"""
-        print("Building citation graph...")
-        
-        # Собираем информацию о статьях
-        for metadata in references_metadata:
-            if not metadata or 'doi' not in metadata:
-                continue
-                
-            doi = metadata['doi'].lower()
-            self.doi_to_paper[doi] = {
-                'title': metadata.get('title', ''),
-                'authors': metadata.get('authors', []),
-                'year': metadata.get('year'),
-                'journal': metadata.get('journal', '')
-            }
-            
-            # Добавляем вершину в граф
-            self.citation_graph.add_node(doi, **metadata)
-            
-            # Здесь могла бы быть реальная информация о цитировании
-            # Для демо - симулируем связи через общие термины
-            if 'title' in metadata:
-                title = metadata['title'].lower()
-                # Добавляем связи через общие ключевые слова
-                for other_doi, other_data in self.doi_to_paper.items():
-                    if doi != other_doi and 'title' in other_data:
-                        other_title = other_data['title'].lower()
-                        similarity = self._title_similarity(title, other_title)
-                        if similarity > Config.GRAPH_SIMILARITY_THRESHOLD:
-                            self.citation_graph.add_edge(doi, other_doi, weight=similarity)
-    
-    def get_co_citation_recommendations(self, target_doi: str, candidate_papers: List[Dict]) -> Dict[str, float]:
-        """Получение рекомендаций на основе совместного цитирования"""
-        if target_doi not in self.citation_graph:
-            return {}
-            
-        scores = {}
-        target_neighbors = set(self.citation_graph.neighbors(target_doi))
-        
-        for paper in candidate_papers:
-            paper_doi = paper.get('doi', '').lower()
-            if not paper_doi:
-                continue
-                
-            # Проверяем связи в графе
-            if paper_doi in self.citation_graph:
-                paper_neighbors = set(self.citation_graph.neighbors(paper_doi))
-                common_neighbors = target_neighbors.intersection(paper_neighbors)
-                
-                if common_neighbors:
-                    # Jaccard similarity для соседей
-                    jaccard = len(common_neighbors) / len(target_neighbors.union(paper_neighbors))
-                    
-                    # Учитываем вес ребер
-                    edge_weight_sum = sum(
-                        self.citation_graph[target_doi][n]['weight']
-                        for n in common_neighbors
-                        if self.citation_graph.has_edge(target_doi, n)
-                    )
-                    
-                    scores[paper_doi] = 0.7 * jaccard + 0.3 * (edge_weight_sum / len(common_neighbors) if common_neighbors else 0)
-        
-        return scores
-    
-    def find_connected_components(self):
-        """Нахождение связанных компонент в графе"""
-        return list(nx.connected_components(self.citation_graph))
-    
-    def get_community_recommendations(self, doi: str):
-        """Получение рекомендаций на основе сообщества в графе"""
-        if doi not in self.citation_graph:
-            return []
-            
-        # Находим компоненту связности
-        for component in nx.connected_components(self.citation_graph):
-            if doi in component:
-                # Возвращаем другие статьи из той же компоненты
-                return [n for n in component if n != doi]
-        
-        return []
-    
-    def _title_similarity(self, title1: str, title2: str) -> float:
-        """Вычисление сходства заголовков"""
-        words1 = set(re.findall(r'\b[a-z]{3,}\b', title1))
-        words2 = set(re.findall(r'\b[a-z]{3,}\b', title2))
-        
-        if not words1 or not words2:
-            return 0.0
-        
-        intersection = words1.intersection(words2)
-        union = words1.union(words2)
-        
-        return len(intersection) / len(union)
-
-class FastBERTEmbedder:
-    """Быстрый BERT-эмбеддер для научных текстов с кэшированием"""
-    
-    def __init__(self, model_name: str = Config.BERT_MODEL_NAME):
-        self.model_name = model_name
-        self.tokenizer = None
-        self.model = None
-        self.embedding_cache = {}  # Кэш эмбеддингов
-        self._initialize_model()
-    
-    def _initialize_model(self):
-        """Ленивая инициализация модели BERT"""
-        if self.tokenizer is None or self.model is None:
-            print(f"Loading BERT model: {self.model_name}")
-            try:
-                self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-                self.model = AutoModel.from_pretrained(self.model_name)
-                
-                # Переводим в режим оценки (не обучения)
-                self.model.eval()
-                
-                # Используем GPU если доступен
-                if torch.cuda.is_available():
-                    self.model = self.model.cuda()
-                    print("Using GPU for BERT embeddings")
-                else:
-                    print("Using CPU for BERT embeddings")
-                    
-            except Exception as e:
-                print(f"Error loading BERT model: {e}")
-                self.tokenizer = None
-                self.model = None
-    
-    def get_embedding(self, text: str, use_cache: bool = True) -> Optional[np.ndarray]:
-        """Получение BERT-эмбеддинга для текста"""
-        if not text or not self.model:
-            return None
-        
-        # Проверяем кэш
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        if use_cache and text_hash in self.embedding_cache:
-            return self.embedding_cache[text_hash]
-        
-        try:
-            # Токенизация
-            inputs = self.tokenizer(
-                text,
-                return_tensors="pt",
-                max_length=Config.BERT_MAX_LENGTH,
-                truncation=True,
-                padding=True
-            )
-            
-            # Используем GPU если доступно
-            if torch.cuda.is_available():
-                inputs = {k: v.cuda() for k, v in inputs.items()}
-            
-            # Получение эмбеддингов
-            with torch.no_grad():
-                outputs = self.model(**inputs)
-                
-                # Используем эмбеддинг [CLS] токена
-                embeddings = outputs.last_hidden_state[:, 0, :].cpu().numpy()
-            
-            # Нормализация
-            embeddings = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
-            
-            # Кэшируем результат
-            if use_cache and embeddings.size > 0:
-                self.embedding_cache[text_hash] = embeddings[0]
-            
-            return embeddings[0] if embeddings.size > 0 else None
-            
-        except Exception as e:
-            print(f"Error generating BERT embedding: {e}")
-            return None
-    
-    def batch_get_embeddings(self, texts: List[str]) -> List[Optional[np.ndarray]]:
-        """Пакетное получение эмбеддингов"""
-        if not self.model:
-            return [None] * len(texts)
-        
-        embeddings = []
-        
-        # Обрабатываем батчами для эффективности
-        for i in range(0, len(texts), Config.BERT_BATCH_SIZE):
-            batch_texts = texts[i:i + Config.BERT_BATCH_SIZE]
-            batch_embeddings = [self.get_embedding(text) for text in batch_texts]
-            embeddings.extend(batch_embeddings)
-        
-        return embeddings
-    
-    def cosine_similarity(self, embedding1: np.ndarray, embedding2: np.ndarray) -> float:
-        """Косинусное сходство между эмбеддингами"""
-        if embedding1 is None or embedding2 is None:
-            return 0.0
-        
-        return float(np.dot(embedding1, embedding2))
-
 # Intelligent Article Finder for Recommendations
 class EnhancedArticleFinder:
     def __init__(self, email: str = Config.RECOMMENDATION_EMAIL):
@@ -2390,82 +2168,34 @@ class EnhancedArticleFinder:
         }
         self.processor = EnhancedTextProcessor()
         self.comparator = EnhancedComparator(self.processor)
-        self.citation_analyzer = CitationGraphAnalyzer()  # Новое
-        self.bert_embedder = FastBERTEmbedder()           # Новое
-        self.max_workers = 4
+        self.max_workers = 4  # Параллельные запросы
         self.request_timeout = 30
-        self.rate_limit_delay = 0.5
+        self.rate_limit_delay = 0.5  # Задержка между запросами
     
     def find_similar_by_references(self, references_metadata: List[Dict], 
                                   max_results: int = Config.MAX_RECOMMENDATIONS,
                                   use_synonyms: bool = True,
                                   min_similarity: float = Config.MIN_SIMILARITY_SCORE):
-        """Улучшенный поиск с BERT и анализом цитирований"""
+        """Улучшенный поиск статей с использованием нескольких стратегий"""
         if not references_metadata:
             return None
         
-        # Шаг 0: Построение графа цитирований
-        self.citation_analyzer.build_citation_graph(references_metadata)
-        
-        # Шаг 1: Подготовка BERT-эмбеддингов для исходных статей
-        print("Generating BERT embeddings for source articles...")
-        source_embeddings = self._prepare_source_embeddings(references_metadata)
-        
-        # Шаг 2: Поиск кандидатов (остаётся как было, но оптимизировано)
-        all_candidates = self._find_candidates_parallel(references_metadata, max_results)
-        
-        print(f"Found {len(all_candidates)} candidates for analysis")
-        
-        if not all_candidates:
-            return None
-        
-        # Шаг 3: Гибридная оценка кандидатов
-        scored_candidates = self._hybrid_score_candidates(
-            all_candidates, references_metadata, source_embeddings, min_similarity
-        )
-        
-        # Шаг 4: Сортировка и отбор
-        scored_candidates.sort(key=lambda x: x['combined_score'], reverse=True)
-        top_candidates = scored_candidates[:max_results]
-        
-        return pd.DataFrame(top_candidates)
-    
-    def _prepare_source_embeddings(self, references_metadata: List[Dict]) -> Dict[str, np.ndarray]:
-        """Подготовка BERT-эмбеддингов для исходных статей"""
-        embeddings = {}
-        
-        texts_for_embedding = []
-        metadata_list = []
-        
-        for metadata in references_metadata:
-            if metadata and metadata.get('doi'):
-                text = f"{metadata.get('title', '')}. {metadata.get('abstract', '')}"
-                if text.strip():
-                    texts_for_embedding.append(text)
-                    metadata_list.append(metadata)
-        
-        if texts_for_embedding:
-            # Пакетное получение эмбеддингов
-            bert_embeddings = self.bert_embedder.batch_get_embeddings(texts_for_embedding)
-            
-            for i, (metadata, emb) in enumerate(zip(metadata_list, bert_embeddings)):
-                if emb is not None:
-                    embeddings[metadata['doi'].lower()] = emb
-        
-        return embeddings
-    
-    def _find_candidates_parallel(self, references_metadata: List[Dict], max_results: int) -> List[Dict]:
-        """Параллельный поиск кандидатов"""
         current_year = datetime.now().year
         min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
         
-        # Анализ ключевых терминов
+        # Шаг 1: Анализ списка литературы
         combined_text = self._analyze_references(references_metadata)
         key_terms = self._extract_key_terms(combined_text)
-        search_queries = self._generate_search_queries(key_terms, True)
         
-        # Параллельный поиск
+        print(f"Анализ {len(references_metadata)} статей...")
+        print(f"Ключевые термины: {', '.join(key_terms[:10])}")
+        
+        # Шаг 2: Параллельный поиск в нескольких источниках
+        search_queries = self._generate_search_queries(key_terms, use_synonyms)
+        
+        # Используем ThreadPoolExecutor для параллельных запросов
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            # Запускаем поиск в обоих источниках одновременно
             future_crossref = executor.submit(
                 self._search_multiple_strategies, 
                 'crossref', search_queries, max_results//2, min_year
@@ -2475,109 +2205,39 @@ class EnhancedArticleFinder:
                 'openalex', search_queries, max_results//2, min_year
             )
             
+            # Собираем результаты
             crossref_results = future_crossref.result()
             openalex_results = future_openalex.result()
         
-        # Объединение результатов
-        return self._merge_and_deduplicate(
+        # Шаг 3: Объединение и дедупликация результатов
+        all_candidates = self._merge_and_deduplicate(
             crossref_results, openalex_results, references_metadata
         )
-    
-    def _hybrid_score_candidates(self, candidates: List[Dict], references: List[Dict],
-                                source_embeddings: Dict[str, np.ndarray], min_similarity: float) -> List[Dict]:
-        """Гибридная оценка кандидатов с использованием трёх методов"""
-        scored_candidates = []
         
-        # Подготовка BERT-эмбеддингов для кандидатов
-        print("Generating BERT embeddings for candidates...")
-        candidate_embeddings = {}
-        candidate_texts = []
-        candidate_indices = []
+        print(f"Найдено {len(all_candidates)} кандидатов после объединения")
         
-        for i, candidate in enumerate(candidates):
-            text = f"{candidate.get('title', '')}. {candidate.get('abstract', '')}"
-            if text.strip():
-                candidate_texts.append(text)
-                candidate_indices.append(i)
+        if not all_candidates:
+            return None
         
-        if candidate_texts:
-            batch_embeddings = self.bert_embedder.batch_get_embeddings(candidate_texts)
-            for idx, emb in zip(candidate_indices, batch_embeddings):
-                if emb is not None:
-                    candidate_embeddings[idx] = emb
+        # Шаг 4: Оценка релевантности
+        scored_candidates = self._score_candidates(
+            all_candidates, references_metadata, min_similarity
+        )
         
-        # Оценка каждого кандидата
-        for i, candidate in enumerate(candidates):
-            best_scores = {
-                'text': 0.0,
-                'citation': 0.0,
-                'bert': 0.0
-            }
-            
-            doi = candidate.get('doi', '').lower()
-            candidate_embedding = candidate_embeddings.get(i)
-            
-            # Сравниваем с каждой исходной статьёй
-            for ref in references:
-                if not ref:
-                    continue
-                    
-                ref_doi = ref.get('doi', '').lower()
-                
-                # 1. Текстовая схожесть (старый метод)
-                text_score = self._calculate_text_similarity(ref, candidate)
-                best_scores['text'] = max(best_scores['text'], text_score)
-                
-                # 2. Анализ совместного цитирования
-                if doi and ref_doi:
-                    citation_scores = self.citation_analyzer.get_co_citation_recommendations(ref_doi, [candidate])
-                    if doi in citation_scores:
-                        best_scores['citation'] = max(best_scores['citation'], citation_scores[doi])
-                
-                # 3. BERT-схожесть
-                if candidate_embedding is not None and ref_doi in source_embeddings:
-                    bert_score = self.bert_embedder.cosine_similarity(
-                        source_embeddings[ref_doi], candidate_embedding
-                    )
-                    best_scores['bert'] = max(best_scores['bert'], bert_score)
-            
-            # Комбинированная оценка
-            combined_score = (
-                best_scores['text'] * Config.TEXT_SIMILARITY_WEIGHT +
-                best_scores['citation'] * Config.CITATION_GRAPH_WEIGHT +
-                best_scores['bert'] * Config.BERT_SIMILARITY_WEIGHT
-            )
-            
-            if combined_score >= min_similarity:
-                candidate_data = self._prepare_candidate_data(candidate, combined_score, best_scores)
-                scored_candidates.append(candidate_data)
+        # Шаг 5: Сортировка и отбор лучших
+        if not scored_candidates:
+            return None
         
-        return scored_candidates
-    
-    def _calculate_text_similarity(self, ref: Dict, candidate: Dict) -> float:
-        """Вычисление текстовой схожести"""
-        similarity = self.comparator.compare_articles(ref, candidate)
-        return similarity['final_score']
-    
-    def _prepare_candidate_data(self, candidate: Dict, combined_score: float, 
-                               method_scores: Dict) -> Dict:
-        """Подготовка данных кандидата для вывода"""
-        return {
-            'doi': candidate.get('doi', ''),
-            'title': candidate.get('title', ''),
-            'year': candidate.get('year', ''),
-            'journal': candidate.get('journal', ''),
-            'authors': ', '.join(candidate.get('authors', [])[:3]),
-            'abstract': candidate.get('abstract', '')[:300] + '...' if candidate.get('abstract') else '',
-            'score': combined_score,
-            'combined_score': combined_score,
-            'text_score': method_scores['text'],
-            'citation_score': method_scores['citation'],
-            'bert_score': method_scores['bert'],
-            'source': candidate.get('source', 'unknown'),
-            'has_abstract': candidate.get('has_abstract', False),
-            'cited_by_count': candidate.get('cited_by_count', 0)
-        }
+        # Сортируем по релевантности и году (новые статьи в приоритете)
+        scored_candidates.sort(
+            key=lambda x: (x['score'], x.get('year', 0)), 
+            reverse=True
+        )
+        
+        # Берем топ-N результатов
+        top_candidates = scored_candidates[:max_results]
+        
+        return pd.DataFrame(top_candidates)
     
     def _analyze_references(self, references_metadata: List[Dict]) -> str:
         """Анализ списка литературы"""
@@ -3035,10 +2695,10 @@ class EnhancedArticleFinder:
 # Article Recommendation System
 class ArticleRecommender:
     """Article recommendation system"""
-
+    
     @staticmethod
     def generate_recommendations(formatted_refs: List[Tuple[Any, bool, Any]]):
-        """Генерация рекомендаций с улучшенным поиском"""
+        """Generate article recommendations based on formatted references"""
         if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
             return None
         
@@ -3050,25 +2710,18 @@ class ArticleRecommender:
         if not valid_metadata:
             return None
         
-        # Используем улучшенный поиск с BERT и анализом цитирований
+        # Используем улучшенный поиск
         finder = EnhancedArticleFinder()
         
         # Настройка параметров поиска
-        max_results = min(Config.MAX_RECOMMENDATIONS * 2, len(valid_metadata) * 3)
+        max_results = min(Config.MAX_RECOMMENDATIONS, len(valid_metadata) * 3)
         
         recommendations = finder.find_similar_by_references(
             valid_metadata,
             max_results=max_results,
             use_synonyms=True,
-            min_similarity=Config.MIN_SIMILARITY_SCORE * 0.8  # Немного снижаем порог для разнообразия
+            min_similarity=Config.MIN_SIMILARITY_SCORE
         )
-        
-        if recommendations is not None and not recommendations.empty:
-            # Сортируем по комбинированному скору
-            recommendations = recommendations.sort_values('combined_score', ascending=False)
-            
-            # Ограничиваем количество
-            return recommendations.head(Config.MAX_RECOMMENDATIONS)
         
         return recommendations
     
@@ -3086,54 +2739,28 @@ class ArticleRecommender:
         output_txt_buffer.write(f"Showing top {len(recommendations_df)} recommendations from the last {Config.RECOMMENDATION_YEARS_BACK} years\n\n")
         
         for idx, row in recommendations_df.iterrows():
-            output_txt_buffer.write(f"{idx+1:2d}. [{row.get('combined_score', row.get('score', 0)):.3f}] {row['title']}\n")
-            output_txt_buffer.write(f"    Authors: {row.get('authors', '')}\n")
-            output_txt_buffer.write(f"    Journal: {row.get('journal', '')}, Year: {row.get('year', '')}\n")
-            output_txt_buffer.write(f"    DOI: {row.get('doi', '')}\n")
-            if row.get('abstract'):
-                output_txt_buffer.write(f"    Abstract: {row.get('abstract', '')}\n")
-            
-            # Используем новые названия с fallback на старые
-            title_score = row.get('text_score', row.get('title_sim', 0))
-            content_score = row.get('citation_score', row.get('content_sim', 0))
-            semantic_score = row.get('bert_score', row.get('semantic_sim', 0))
-            
-            output_txt_buffer.write(f"    Similarity: text={title_score:.3f}, citations={content_score:.3f}, semantic={semantic_score:.3f}\n")
-            
-            # Добавляем combined_score если есть
-            if 'combined_score' in row:
-                output_txt_buffer.write(f"    Combined score: {row['combined_score']:.3f}\n")
-            
-            output_txt_buffer.write(f"    Common terms: {row.get('common_terms', '')}\n")
-            output_txt_buffer.write(f"    Source: {row.get('source', 'unknown')}\n")
+            output_txt_buffer.write(f"{idx+1:2d}. [{row['score']:.3f}] {row['title']}\n")
+            output_txt_buffer.write(f"    Authors: {row['authors']}\n")
+            output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
+            output_txt_buffer.write(f"    DOI: {row['doi']}\n")
+            if row['abstract']:
+                output_txt_buffer.write(f"    Abstract: {row['abstract']}\n")
+            output_txt_buffer.write(f"    Similarity: title={row['title_sim']:.3f}, content={row['content_sim']:.3f}, semantic={row['semantic_sim']:.3f}\n")
+            output_txt_buffer.write(f"    Common terms: {row['common_terms']}\n")
+            output_txt_buffer.write(f"    Source: {row['source']}\n")
             output_txt_buffer.write("\n")
         
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
-
+    
     @staticmethod
     def create_recommendations_csv(recommendations_df) -> io.BytesIO:
         """Create CSV file with recommendations"""
         if recommendations_df is None or recommendations_df.empty:
             return None
         
-        # Создаем копию с обратной совместимостью для CSV
-        df_for_csv = recommendations_df.copy()
-        
-        # Переименовываем новые колонки в старые названия для совместимости
-        column_mapping = {
-            'text_score': 'title_sim',
-            'citation_score': 'content_sim',
-            'bert_score': 'semantic_sim',
-            'combined_score': 'score'
-        }
-        
-        for new_col, old_col in column_mapping.items():
-            if new_col in df_for_csv.columns and old_col not in df_for_csv.columns:
-                df_for_csv[old_col] = df_for_csv[new_col]
-        
         output_csv_buffer = io.StringIO()
-        df_for_csv.to_csv(output_csv_buffer, index=False)
+        recommendations_df.to_csv(output_csv_buffer, index=False)
         output_csv_buffer.seek(0)
         return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
 
@@ -3400,16 +3027,10 @@ class DocumentGenerator:
                 abstract_para.add_run(row['abstract'])
             
             similarity_para = doc.add_paragraph()
-            similarity_para.add_run(f"Similarity metrics: ").bold = True
-            
-            # Используем новые названия с fallback на старые
-            title_score = row.get('text_score', row.get('title_sim', 0))
-            content_score = row.get('citation_score', row.get('content_sim', 0))
-            semantic_score = row.get('bert_score', row.get('semantic_sim', 0))
-            
-            similarity_para.add_run(f"Text similarity: {title_score:.3f}, ")
-            similarity_para.add_run(f"Citation analysis: {content_score:.3f}, ")
-            similarity_para.add_run(f"Semantic similarity: {semantic_score:.3f}")
+            similarity_para.add_run("Similarity metrics: ").bold = True
+            similarity_para.add_run(f"Title similarity: {row['title_sim']:.3f}, ")
+            similarity_para.add_run(f"Content coverage: {row['content_sim']:.3f}, ")
+            similarity_para.add_run(f"Semantic similarity: {row['semantic_sim']:.3f}")
             
             terms_para = doc.add_paragraph()
             terms_para.add_run("Common terms: ").bold = True
@@ -6125,9 +5746,8 @@ class ResultsPage:
                         if st.checkbox(f"Show abstract", key=show_abstract_key):
                             st.markdown(f"<div class='recommendation-abstract'>{row['abstract']}</div>", unsafe_allow_html=True)
                     
-                    st.markdown(f"<div class='recommendation-meta'>Similarity scores: Text={row.get('text_score', row.get('title_sim', 0)):.3f}, Citations={row.get('citation_score', 0):.3f}, Semantic={row.get('bert_score', row.get('semantic_sim', 0)):.3f}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>Combined score: {row.get('combined_score', row.get('score', 0)):.3f}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>Common terms: {row.get('common_terms', '')}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>Similarity: Title={row['title_sim']:.3f}, Content={row['content_sim']:.3f}, Semantic={row['semantic_sim']:.3f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>Common terms: {row['common_terms']}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='recommendation-meta'>Source: {row['source']}</div>", unsafe_allow_html=True)
                     
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -6500,10 +6120,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
