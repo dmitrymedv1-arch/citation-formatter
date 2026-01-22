@@ -675,7 +675,7 @@ class LiteratureGapRecommender:
     def find_recommendations(self,
                            formatted_refs: List,
                            max_recommendations: int = 20,
-                           progress_callback=None) -> Optional[pd.DataFrame]:
+                           progress_callback=None) -> Optional[Any]:
         """
         Основная функция: находит рекомендации на основе всего списка литературы.
         Возвращает DataFrame с рекомендованными статьями.
@@ -5558,6 +5558,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
