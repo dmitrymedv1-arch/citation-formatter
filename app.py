@@ -1890,60 +1890,98 @@ class OptimizedArticleRecommender:
     def __init__(self):
         self.openalex_finder = OpenAlexArticleFinder()
         self.crossref_works = Works()
-        
+                
     def generate_recommendations_with_progress(self, formatted_refs: List[Tuple[Any, bool, Any]], 
-                                              progress_callback = None) -> Optional[pd.DataFrame]:
-        """Генерация рекомендаций с отслеживанием прогресса"""
+                                              progress_callback=None) -> Optional[pd.DataFrame]:
+        """Генерация рекомендаций по упрощенной логике с тематическим поиском"""
         if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
             return None
         
         if progress_callback:
-            progress_callback(5, "Анализ исходных статей...")
+            progress_callback(10, "Анализ исходных статей...")
         
-        # 1. Извлекаем метаданные и создаем семантический профиль
-        semantic_profile = self._build_semantic_profile(formatted_refs)
+        # 1. Извлекаем ключевые термины из названий статей
+        key_terms = self._extract_key_terms_from_titles(formatted_refs)
         
-        if not semantic_profile or not semantic_profile.get('key_terms'):
+        # 2. Извлекаем primary_topic из исходных статей
+        primary_topics = self._extract_primary_topics_from_references(formatted_refs)
+        
+        if not key_terms and not primary_topics:
             if progress_callback:
-                progress_callback(100, "Не удалось создать семантический профиль")
+                progress_callback(100, "Не удалось извлечь ключевые данные")
             return None
         
         if progress_callback:
-            progress_callback(20, f"Создан профиль с {len(semantic_profile['key_terms'])} ключевыми терминами...")
+            topic_info = f", {len(primary_topics)} тем" if primary_topics else ""
+            progress_callback(30, f"Найдено {len(key_terms)} ключевых терминов{topic_info}")
         
-        # 2. Поиск в OpenAlex (приоритетный источник)
-        openalex_results = []
-        if progress_callback:
-            progress_callback(30, "Поиск в OpenAlex...")
+        # 3. Поиск статей по разным стратегиям
+        all_candidates = []
+        search_strategies = []
         
-        openalex_results = self._search_in_openalex(semantic_profile, progress_callback, 30, 50)
+        # Стратегия 1: Поиск по primary_topic (самый точный)
+        if primary_topics:
+            for i, topic in enumerate(primary_topics[:2]):  # Берем топ-2 темы
+                if progress_callback:
+                    progress = 30 + (i * 15)
+                    progress_callback(progress, f"Поиск по теме: {topic['name'][:40]}...")
+                
+                candidates = self._search_openalex_simple("", topic['id'])
+                if candidates:
+                    # Помечаем, что эти статьи найдены по теме
+                    for candidate in candidates:
+                        candidate['search_strategy'] = 'primary_topic'
+                        candidate['topic_match_score'] = topic['normalized_score']
+                    all_candidates.extend(candidates)
+                    search_strategies.append(f"тема: {topic['name']}")
         
-        # 3. Поиск в Crossref (резервный, но с той же логикой)
-        crossref_results = []
-        if len(openalex_results) < Config.MAX_RECOMMENDATIONS // 2:
-            if progress_callback:
-                progress_callback(60, f"Дополнительный поиск в Crossref...")
+        # Стратегия 2: Поиск по ключевым словам (если нужно больше результатов)
+        if len(all_candidates) < 40 and key_terms:
+            search_queries = self._generate_search_queries(key_terms)
             
-            crossref_results = self._search_in_crossref(semantic_profile, progress_callback, 60, 80)
+            for i, query in enumerate(search_queries[:2]):  # Ограничиваем 2 запроса
+                if progress_callback:
+                    progress = 60 + (i * 10)
+                    progress_callback(progress, f"Поиск по ключевым словам: {query[:50]}...")
+                
+                candidates = self._search_openalex_simple(query)
+                if candidates:
+                    # Помечаем стратегию поиска
+                    for candidate in candidates:
+                        candidate['search_strategy'] = 'keywords'
+                    all_candidates.extend(candidates)
+                    search_strategies.append(f"ключ.слова: {query[:30]}...")
         
-        # 4. Объединяем и ранжируем результаты
-        if progress_callback:
-            progress_callback(85, "Оценка релевантности...")
-        
-        all_results = openalex_results + crossref_results
-        
-        if not all_results:
+        if not all_candidates:
             if progress_callback:
-                progress_callback(100, "Рекомендации не найдены")
+                progress_callback(100, "Статьи не найдены")
             return None
         
-        # 5. Сортируем по семантической близости, а не по цитированию
-        ranked_results = self._rank_by_semantic_similarity(all_results, semantic_profile)
+        # Удаляем дубликаты по DOI
+        unique_candidates = []
+        seen_dois = set()
+        for candidate in all_candidates:
+            doi = candidate.get('doi', '')
+            if doi and doi not in seen_dois:
+                seen_dois.add(doi)
+                unique_candidates.append(candidate)
+        
+        if progress_callback:
+            progress_callback(85, f"Найдено {len(unique_candidates)} уникальных статей")
+        
+        # 4. Фильтрация и ранжирование (БЕЗ ФИЛЬТРА ПО ЦИТИРОВАНИЯМ)
+        if progress_callback:
+            progress_callback(90, "Ранжирование статей...")
+        
+        filtered_candidates = self._filter_and_rank_candidates_enhanced(
+            unique_candidates, formatted_refs, key_terms, primary_topics
+        )
         
         if progress_callback:
             progress_callback(95, "Формирование итогового списка...")
         
-        return self._create_recommendations_df(ranked_results)
+        # Всегда возвращаем 20 статей или меньше, если не нашли достаточно
+        return self._create_final_dataframe(filtered_candidates[:20])
         
     def _extract_key_terms(self, text: str) -> Set[str]:
         """Извлечение ключевых терминов из текста"""
@@ -2368,6 +2406,58 @@ class SimpleArticleRecommender:
         
         # Возвращаем топ-30 самых частых терминов
         return [term for term, _ in term_counter.most_common(30)]
+
+    def _extract_primary_topics_from_references(self, formatted_refs: List[Tuple[Any, bool, Any]]) -> List[Dict]:
+    """Извлечение primary_topic из исходных статей через OpenAlex"""
+    primary_topics = []
+    
+    for _, is_error, metadata in formatted_refs:
+        if is_error or not metadata:
+            continue
+        
+        # Получаем DOI статьи
+        doi = metadata.get('doi', '')
+        if not doi:
+            continue
+        
+        try:
+            # Получаем данные статьи из OpenAlex
+            work_data = self.openalex_finder.get_work_by_doi(doi)
+            if work_data and 'primary_topic' in work_data:
+                primary_topic = work_data['primary_topic']
+                if primary_topic and 'id' in primary_topic:
+                    topic_id = primary_topic.get('id')
+                    topic_name = primary_topic.get('display_name', '')
+                    score = primary_topic.get('score', 0)
+                    
+                    if topic_id and topic_name:
+                        # Проверяем, есть ли уже такой topic
+                        existing_topic = next((t for t in primary_topics if t['id'] == topic_id), None)
+                        if existing_topic:
+                            existing_topic['count'] += 1
+                            existing_topic['total_score'] += score
+                        else:
+                            primary_topics.append({
+                                'id': topic_id,
+                                'name': topic_name,
+                                'count': 1,
+                                'total_score': score,
+                                'score': score
+                            })
+        except Exception as e:
+            logger.debug(f"Error getting primary_topic for DOI {doi}: {e}")
+            continue
+    
+    # Сортируем по частоте встречаемости
+    primary_topics.sort(key=lambda x: x['count'], reverse=True)
+    
+    # Нормализуем score
+    if primary_topics:
+        max_count = primary_topics[0]['count']
+        for topic in primary_topics:
+            topic['normalized_score'] = topic['count'] / max_count
+    
+    return primary_topics[:5]  # Возвращаем топ-5 тем
     
     def _generate_search_queries(self, key_terms: List[str]) -> List[str]:
         """Генерация поисковых запросов на основе ключевых терминов"""
@@ -2396,24 +2486,36 @@ class SimpleArticleRecommender:
         
         return queries
     
-    def _search_openalex_simple(self, query: str) -> List[Dict]:
-        """Упрощенный поиск в OpenAlex"""
+    def _search_openalex_simple(self, query: str, primary_topic_id: str = None) -> List[Dict]:
+        """Упрощенный поиск в OpenAlex с поддержкой primary_topic"""
         try:
             current_year = datetime.now().year
             from_year = current_year - 5  # Статьи за последние 5 лет
             
             params = {
-                'search': query,
-                'filter': f'publication_year:>{from_year-1}',
-                'sort': 'relevance_score:desc',
-                'per-page': 30,
+                'sort': 'publication_year:desc',  # Сначала новые статьи
+                'per-page': 50,  # Увеличиваем количество результатов
             }
+            
+            # Формируем фильтр
+            filters = [f'publication_year:>{from_year-1}']
+            
+            if primary_topic_id:
+                # Поиск по primary_topic (самый точный)
+                filters.append(f'primary_topic.id:{primary_topic_id}')
+                params['sort'] = 'cited_by_count:desc'  # Для тематического поиска сортируем по цитированиям
+            else:
+                # Общий поиск по ключевым словам
+                params['search'] = query
+                params['sort'] = 'publication_year:desc,cited_by_count:desc'
+            
+            params['filter'] = ','.join(filters)
             
             response = requests.get(
                 "https://api.openalex.org/works",
                 params=params,
                 headers={'User-Agent': 'CitationStyleConstructor/1.0'},
-                timeout=15
+                timeout=20
             )
             
             if response.status_code == 200:
@@ -2432,8 +2534,11 @@ class SimpleArticleRecommender:
                         'source': 'openalex',
                         'keywords': [k.get('display_name', '') for k in item.get('keywords', [])],
                         'primary_topic': item.get('primary_topic', {}).get('display_name', ''),
+                        'primary_topic_id': item.get('primary_topic', {}).get('id', ''),
+                        'primary_topic_score': item.get('primary_topic', {}).get('score', 0),
                         'topics': [t.get('display_name', '') for t in item.get('topics', [])],
-                        'concepts': [c.get('display_name', '') for c in item.get('concepts', [])]
+                        'concepts': [c.get('display_name', '') for c in item.get('concepts', [])],
+                        'has_topic': bool(item.get('primary_topic'))
                     }
                     
                     # Извлекаем авторов
@@ -2511,58 +2616,151 @@ class SimpleArticleRecommender:
         except Exception as e:
             logger.debug(f"Crossref search error: {e}")
             return []
-    
+
     def _filter_and_rank_candidates(self, candidates: List[Dict], 
                                    formatted_refs: List[Tuple[Any, bool, Any]],
                                    key_terms: List[str]) -> List[Dict]:
-        """Фильтрация и ранжирование кандидатов"""
+        """Фильтрация и ранжирование кандидатов (облегченная версия)"""
         if not candidates:
             return []
         
         scored_candidates = []
         current_year = datetime.now().year
         
-        for candidate in candidates:
-            # Фильтр 1: Исключаем статьи с >100 цитирований
-            if candidate.get('cited_by_count', 0) > 10:
-                continue
-            
-            # Фильтр 2: Исключаем статьи старше 5 лет
+        for candidate in candidates:          
             pub_year = candidate.get('publication_year', 0)
             if pub_year < current_year - 5:
                 continue
             
-            # Вычисляем сходство по названию
+            # Увеличиваем вес topic сходства
             title_similarity = self._calculate_title_similarity(
                 candidate['title'], key_terms
             )
             
-            # Вычисляем оценку новизны (чем новее - тем лучше)
             recency_score = 1.0 - min(1.0, (current_year - pub_year) / 5)
             
-            # Вычисляем оценку цитирований (чем меньше - тем лучше)
             citation_count = candidate.get('cited_by_count', 0)
             citation_score = 1.0 / (1.0 + (citation_count ** 0.5))
             
-            # Итоговая оценка по формуле: 0.6×сходство + 0.3×новизна + 0.1×цитирования
+            # НОВАЯ ФОРМУЛА: 80% topic + 15% новизна + 5% цитирования
             final_score = (
-                0.6 * title_similarity +
-                0.3 * recency_score +
+                0.8 * title_similarity +    # Увеличили с 60% до 80%
+                0.15 * recency_score +      # Уменьшили с 30% до 15%
+                0.05 * citation_score       # Уменьшили с 10% до 5%
+            )
+            
+            # Сильный бонус для статей последних 2 лет
+            if pub_year >= current_year - 2:
+                final_score *= 1.3
+            
+            candidate['score'] = min(1.0, final_score)
+            scored_candidates.append(candidate)
+        
+        scored_candidates.sort(key=lambda x: x['score'], reverse=True)
+        return scored_candidates
+
+    def _filter_and_rank_candidates_enhanced(self, candidates: List[Dict], 
+                                           formatted_refs: List[Tuple[Any, bool, Any]],
+                                           key_terms: List[str],
+                                           primary_topics: List[Dict]) -> List[Dict]:
+        """Улучшенная фильтрация и ранжирование кандидатов с акцентом на topic"""
+        if not candidates:
+            return []
+        
+        scored_candidates = []
+        current_year = datetime.now().year
+        
+        # Собираем DOI исходных статей, чтобы исключить их из рекомендаций
+        original_dois = set()
+        for _, is_error, metadata in formatted_refs:
+            if not is_error and metadata and metadata.get('doi'):
+                original_dois.add(metadata['doi'].lower())
+        
+        for candidate in candidates:
+            # Исключаем исходные статьи
+            candidate_doi = candidate.get('doi', '').lower()
+            if candidate_doi in original_dois:
+                continue
+            
+            pub_year = candidate.get('publication_year', 0)
+            
+            # 1. ОЦЕНКА ПО TOPIC (70% веса)
+            topic_score = 0.0
+            
+            # 1a. Совпадение по primary_topic (самый важный)
+            candidate_topic_id = candidate.get('primary_topic_id', '')
+            if candidate_topic_id:
+                for topic in primary_topics:
+                    if topic['id'] == candidate_topic_id:
+                        # Полное совпадение topic
+                        topic_score += 0.5 * topic['normalized_score']
+                        break
+            
+            # 1b. Совпадение по названию с ключевыми терминами
+            title_similarity = self._calculate_title_similarity(
+                candidate['title'], key_terms
+            )
+            topic_score += 0.2 * title_similarity
+            
+            # 1c. Дополнительные темы и концепты
+            candidate_topics = candidate.get('topics', [])
+            candidate_concepts = candidate.get('concepts', [])
+            
+            # Ищем пересечение названий тем
+            topic_names = [t['name'].lower() for t in primary_topics]
+            for ct in candidate_topics:
+                ct_lower = ct.lower()
+                for pt_name in topic_names:
+                    if pt_name in ct_lower or ct_lower in pt_name:
+                        topic_score += 0.1
+                        break
+            
+            # 2. ОЦЕНКА НОВИЗНЫ (20% веса)
+            recency_score = 0.0
+            if pub_year >= current_year - 1:
+                recency_score = 1.0  # Статьи последнего года
+            elif pub_year >= current_year - 2:
+                recency_score = 0.8  # Статьи 2-летней давности
+            elif pub_year >= current_year - 3:
+                recency_score = 0.6  # Статьи 3-летней давности
+            elif pub_year >= current_year - 5:
+                recency_score = 0.4  # Статьи 4-5 летней давности
+            
+            # 3. ОЦЕНКА ПО ЦИТИРОВАНИЯМ (10% веса) - инвертированная
+            citation_count = candidate.get('cited_by_count', 0)
+            citation_score = 0.0
+            
+            if citation_count == 0:
+                citation_score = 0.8  # Совсем нет цитирований
+            elif citation_count <= 10:
+                citation_score = 0.6  # Мало цитирований
+            elif citation_count <= 50:
+                citation_score = 0.4  # Умеренное цитирование
+            elif citation_count <= 100:
+                citation_score = 0.2  # Много цитирований
+            else:
+                citation_score = 0.1  # Очень много цитирований
+            
+            # ИТОГОВАЯ ОЦЕНКА: 70% topic + 20% новизна + 10% цитирования
+            final_score = (
+                0.7 * min(1.0, topic_score) +  # Ограничиваем topic_score
+                0.2 * recency_score +
                 0.1 * citation_score
             )
             
-            # Увеличиваем оценку для статей последних 2 лет
-            if pub_year >= current_year - 2:
+            # Бонус за статьи, найденные по primary_topic
+            if candidate.get('search_strategy') == 'primary_topic':
+                final_score *= 1.3
+            
+            # Бонус за совсем новые статьи (последний год)
+            if pub_year == current_year:
                 final_score *= 1.2
             
-            # Уменьшаем оценку для статей с 0 цитирований (возможно, слишком новые или неинтересные)
-            if citation_count == 0 and pub_year < current_year - 1:
-                final_score *= 0.8
-            
             candidate['score'] = min(1.0, final_score)
-            candidate['title_similarity'] = title_similarity
+            candidate['topic_score'] = topic_score
             candidate['recency_score'] = recency_score
             candidate['citation_score'] = citation_score
+            candidate['search_strategy'] = candidate.get('search_strategy', 'unknown')
             
             scored_candidates.append(candidate)
         
@@ -6071,6 +6269,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
