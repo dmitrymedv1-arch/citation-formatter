@@ -25,7 +25,28 @@ from pathlib import Path
 import sqlite3
 from contextlib import contextmanager
 import requests
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+import nltk
+from nltk.corpus import stopwords, wordnet
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+import spacy
+from sentence_transformers import SentenceTransformer, util
+from gensim.models import Phrases
+from gensim.models.phrases import Phraser
 
+# Download NLTK data
+try:
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    nltk.download('wordnet', quiet=True)
+    nltk.download('averaged_perceptron_tagger', quiet=True)
+except:
+    pass
+
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -36,31 +57,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Конфигурация
+# Configuration
 class Config:
-    """Конфигурационные константы приложения"""
-    # Пути к файлам
+    """Application configuration constants"""
+    # File paths
     DB_PATH = "doi_cache.db"
     LTWA_CSV_PATH = "ltwa.csv"
     USER_PREFS_DB = "user_preferences.db"
     
-    # Настройки API
+    # API settings
     CROSSREF_WORKERS = 3
     CROSSREF_RETRY_WORKERS = 2
     REQUEST_TIMEOUT = 30
     
-    # Кэширование
-    CACHE_TTL_HOURS = 24 * 7  # 1 неделя
+    # Caching
+    CACHE_TTL_HOURS = 24 * 7  # 1 week
     
-    # Валидация
+    # Validation
     MIN_REFERENCES_FOR_STATS = 5
     MAX_REFERENCES = 1000
+    MIN_REFERENCES_FOR_RECOMMENDATIONS = 10
     
-    # Повторная проверка неудачных DOI
-    MAX_RETRY_ATTEMPTS = 2  # Максимум 2 повторные попытки
-    RETRY_DELAY_SECONDS = 1  # Задержка между попытками
+    # Retry failed DOI
+    MAX_RETRY_ATTEMPTS = 2
+    RETRY_DELAY_SECONDS = 1
     
-    # Стили
+    # Styles
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
     AUTHOR_FORMATS = ["AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A."]
     PAGE_FORMATS = ["122 - 128", "122-128", "122 – 128", "122–128", "122–8", "122"]
@@ -68,17 +90,17 @@ class Config:
     JOURNAL_STYLES = ["{Full Journal Name}", "{J. Abbr.}", "{J Abbr}"]
     AVAILABLE_ELEMENTS = ["", "Authors", "Title", "Journal", "Year", "Volume", "Issue", "Pages", "DOI"]
     
-    # Цвета прогресс-бара
+    # Progress bar colors
     PROGRESS_COLORS = {
         'start': '#FF6B6B',
         'middle': '#4ECDC4', 
         'end': '#45B7D1'
     }
     
-    # Новые настройки тем (5 тем вместо 2)
+    # Themes
     THEMES = {
         'light': {
-            'name': 'Светлый',
+            'name': 'Light',
             'primary': '#1f77b4',
             'secondary': '#2ca02c',
             'accent': '#ff7f0e',
@@ -92,7 +114,7 @@ class Config:
             'shadow': '0 2px 4px rgba(0,0,0,0.1)'
         },
         'dark': {
-            'name': 'Темный',
+            'name': 'Dark',
             'primary': '#4ECDC4',
             'secondary': '#FF6B6B',
             'accent': '#45B7D1',
@@ -106,7 +128,7 @@ class Config:
             'shadow': '0 2px 8px rgba(0,0,0,0.3)'
         },
         'library': {
-            'name': 'Библиотечный',
+            'name': 'Library',
             'primary': '#8B4513',
             'secondary': '#654321',
             'accent': '#D2691E',
@@ -120,7 +142,7 @@ class Config:
             'shadow': '0 2px 6px rgba(139,69,19,0.2)'
         },
         'barbie': {
-            'name': 'Барби-style',
+            'name': 'Barbie-style',
             'primary': '#FF69B4',
             'secondary': '#FF1493',
             'accent': '#FFB6C1',
@@ -134,7 +156,7 @@ class Config:
             'shadow': '0 4px 12px rgba(255,105,180,0.3)'
         },
         'newspaper': {
-            'name': 'Газетный',
+            'name': 'Newspaper',
             'primary': '#C19A6B',
             'secondary': '#8B7355',
             'accent': '#E5C9A8',
@@ -149,7 +171,7 @@ class Config:
         }
     }
     
-    # Этапы приложения
+    # Application stages
     STAGES = {
         'start': 'Start',
         'select': 'Select',
@@ -158,10 +180,16 @@ class Config:
         'results': 'Results'
     }
     
-    # Настройки статистики
-    DISPLAY_STATISTICS = True  # Включить/выключить отображение статистики
+    # Statistics settings
+    DISPLAY_STATISTICS = True
+    
+    # Article recommendations settings
+    RECOMMENDATION_EMAIL = "citation.style.constructor@gmail.com"
+    MAX_RECOMMENDATIONS = 20
+    RECOMMENDATION_YEARS_BACK = 5
+    MIN_SIMILARITY_SCORE = 0.1
 
-# Полный словарь переводов (упрощенный до 2 языков)
+# Translations
 TRANSLATIONS = {
     'en': {
         'header': '🎨 Citation Style Constructor',
@@ -256,7 +284,6 @@ TRANSLATIONS = {
         'desktop_view': 'Desktop View',
         'clear_button': '🗑️ Clear',
         'back_button': '↩️ Back',
-        # Новые переводы для многостраничной структуры
         'stage_start': 'Start',
         'stage_select': 'Select',
         'stage_create': 'Create',
@@ -303,6 +330,23 @@ TRANSLATIONS = {
         'download_docx': 'Download DOCX',
         'try_again': 'Try Again',
         'new_session': 'New Session',
+        'recommend_similar_articles': '🔍 Recommend Similar Articles',
+        'recommendations_title': 'Article Recommendations',
+        'recommendations_description': 'Based on your reference list, here are similar articles from the last {} years:',
+        'recommendations_loading': '🔍 Searching for recommendations...',
+        'recommendations_not_enough': 'At least {} references are required for recommendations.',
+        'recommendations_no_results': 'No recommendations found. Try adjusting search parameters.',
+        'recommendations_error': 'Error fetching recommendations: {}',
+        'recommendations_count': 'Found {} recommendations',
+        'recommendation_score': 'Relevance score:',
+        'recommendation_year': 'Year:',
+        'recommendation_journal': 'Journal:',
+        'recommendation_abstract': 'Abstract:',
+        'recommendation_show_abstract': 'Show abstract',
+        'recommendation_hide_abstract': 'Hide abstract',
+        'recommendation_download': '📥 Download Recommendations',
+        'recommendation_download_txt': 'Download as TXT',
+        'recommendation_download_csv': 'Download as CSV',
     },
     'ru': {
         'header': '🎨 Конструктор стилей цитирования',
@@ -397,7 +441,6 @@ TRANSLATIONS = {
         'desktop_view': 'Десктопный вид',
         'clear_button': '🗑️ Очистить',
         'back_button': '↩️ Назад',
-        # Новые переводы для многостраничной структуры
         'stage_start': 'Старт',
         'stage_select': 'Выбор',
         'stage_create': 'Создание',
@@ -444,22 +487,39 @@ TRANSLATIONS = {
         'download_docx': 'Скачать DOCX',
         'try_again': 'Попробовать снова',
         'new_session': 'Новая сессия',
+        'recommend_similar_articles': '🔍 Рекомендовать похожие статьи',
+        'recommendations_title': 'Рекомендации статей',
+        'recommendations_description': 'На основе вашего списка литературы, вот похожие статьи за последние {} лет:',
+        'recommendations_loading': '🔍 Поиск рекомендаций...',
+        'recommendations_not_enough': 'Для рекомендаций требуется не менее {} ссылок.',
+        'recommendations_no_results': 'Рекомендации не найдены. Попробуйте изменить параметры поиска.',
+        'recommendations_error': 'Ошибка при получении рекомендаций: {}',
+        'recommendations_count': 'Найдено {} рекомендаций',
+        'recommendation_score': 'Оценка релевантности:',
+        'recommendation_year': 'Год:',
+        'recommendation_journal': 'Журнал:',
+        'recommendation_abstract': 'Аннотация:',
+        'recommendation_show_abstract': 'Показать аннотацию',
+        'recommendation_hide_abstract': 'Скрыть аннотацию',
+        'recommendation_download': '📥 Скачать рекомендации',
+        'recommendation_download_txt': 'Скачать как TXT',
+        'recommendation_download_csv': 'Скачать как CSV',
     }
 }
 
-# Инициализация Crossref
+# Initialize Crossref
 works = Works()
 
-# Кэширование DOI
+# DOI Cache
 class DOICache:
-    """Кэш для хранения метаданных DOI"""
+    """Cache for storing DOI metadata"""
     
     def __init__(self, db_path: str = Config.DB_PATH):
         self.db_path = db_path
         self._init_db()
     
     def _init_db(self):
-        """Инициализация базы данных"""
+        """Initialize database"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS doi_cache (
@@ -473,7 +533,7 @@ class DOICache:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_accessed_at ON doi_cache(accessed_at)')
     
     def get(self, doi: str) -> Optional[Dict]:
-        """Получение метаданных из кэша"""
+        """Get metadata from cache"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 result = conn.execute(
@@ -482,7 +542,6 @@ class DOICache:
                 ).fetchone()
                 
                 if result:
-                    # Обновляем время доступа
                     conn.execute(
                         'UPDATE doi_cache SET accessed_at = CURRENT_TIMESTAMP WHERE doi = ?',
                         (doi,)
@@ -493,7 +552,7 @@ class DOICache:
         return None
     
     def set(self, doi: str, metadata: Dict):
-        """Сохранение метаданных в кэш"""
+        """Save metadata to cache"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
@@ -504,7 +563,7 @@ class DOICache:
             logger.error(f"Cache set error for {doi}: {e}")
     
     def clear_old_entries(self):
-        """Очистка устаревших записей"""
+        """Clear outdated entries"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute(
@@ -514,18 +573,19 @@ class DOICache:
         except Exception as e:
             logger.error(f"Cache cleanup error: {e}")
 
-# Инициализация кэша
+# Initialize cache
 doi_cache = DOICache()
 
+# User Preferences Manager
 class UserPreferencesManager:
-    """Менеджер пользовательских предпочтений"""
+    """User preferences manager"""
     
     def __init__(self, db_path: str = Config.USER_PREFS_DB):
         self.db_path = db_path
         self._init_db()
     
     def _init_db(self):
-        """Инициализация базы данных предпочтений"""
+        """Initialize preferences database"""
         with sqlite3.connect(self.db_path) as conn:
             conn.execute('''
                 CREATE TABLE IF NOT EXISTS user_preferences (
@@ -539,7 +599,7 @@ class UserPreferencesManager:
             conn.execute('CREATE INDEX IF NOT EXISTS idx_ip ON user_preferences(ip_address)')
     
     def get_user_ip(self):
-        """Получение IP пользователя"""
+        """Get user IP address"""
         try:
             if hasattr(st, 'experimental_user'):
                 return getattr(st.experimental_user, 'ip', 'unknown')
@@ -548,7 +608,7 @@ class UserPreferencesManager:
         return 'unknown'
     
     def get_preferences(self, ip: str) -> Dict[str, Any]:
-        """Получение предпочтений пользователя"""
+        """Get user preferences"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 result = conn.execute(
@@ -570,7 +630,7 @@ class UserPreferencesManager:
         }
     
     def save_preferences(self, ip: str, preferences: Dict[str, Any]):
-        """Сохранение предпочтений пользователя"""
+        """Save user preferences"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 conn.execute('''
@@ -585,12 +645,13 @@ class UserPreferencesManager:
         except Exception as e:
             logger.error(f"Error saving preferences for {ip}: {e}")
 
+# Style Validator
 class StyleValidator:
-    """Валидатор настроек стиля"""
+    """Style configuration validator"""
     
     @staticmethod
     def validate_style_config(style_config: Dict) -> Tuple[bool, List[str]]:
-        """Валидация конфигурации стиля"""
+        """Validate style configuration"""
         errors = []
         warnings = []
         
@@ -617,7 +678,7 @@ class StyleValidator:
     
     @staticmethod
     def validate_references_count(references: List[str]) -> Tuple[bool, List[str]]:
-        """Валидация количества ссылок"""
+        """Validate references count"""
         errors = []
         warnings = []
         
@@ -629,8 +690,9 @@ class StyleValidator:
         
         return len(errors) == 0, errors + warnings
 
+# Progress Manager
 class ProgressManager:
-    """Менеджер прогресса обработки"""
+    """Processing progress manager"""
     
     def __init__(self):
         self.start_time = None
@@ -643,7 +705,7 @@ class ProgressManager:
         }
     
     def start_processing(self, total: int):
-        """Начало обработки"""
+        """Start processing"""
         self.start_time = time.time()
         self.progress_data = {
             'total': total,
@@ -654,7 +716,7 @@ class ProgressManager:
         }
 
     def update_progress(self, processed: int, found: int, errors: int, phase: str = None):
-        """Обновление прогресса"""
+        """Update progress"""
         self.progress_data.update({
             'processed': processed,
             'found': found,
@@ -663,18 +725,16 @@ class ProgressManager:
         if phase:
             self.progress_data['phase'] = phase
         
-        # Обновляем время
         if self.start_time:
             elapsed = time.time() - self.start_time
             total = self.progress_data['total']
             
-            # Обновляем оставшееся время
             if processed > 0 and total > 0:
                 estimated_total = (elapsed / processed) * total
                 self.progress_data['time_remaining'] = estimated_total - elapsed
     
     def get_progress_info(self) -> Dict[str, Any]:
-        """Получение информации о прогрессе"""
+        """Get progress information"""
         if not self.start_time:
             return self.progress_data
         
@@ -699,7 +759,7 @@ class ProgressManager:
         }
     
     def get_progress_color(self, progress_ratio: float) -> str:
-        """Получение цвета прогресс-бара на основе прогресса"""
+        """Get progress bar color based on progress"""
         if progress_ratio < 0.33:
             return Config.PROGRESS_COLORS['start']
         elif progress_ratio < 0.66:
@@ -707,9 +767,9 @@ class ProgressManager:
         else:
             return Config.PROGRESS_COLORS['end']
 
-# Инициализация глобальных состояний
+# Initialize session state
 def init_session_state():
-    """Инициализация состояния сессии"""
+    """Initialize session state"""
     defaults = {
         'current_language': 'en',
         'current_theme': 'light',
@@ -765,6 +825,11 @@ def init_session_state():
         'docx_buffer': None,
         'formatted_txt_buffer': None,
         'selected_style_preview': None,
+        'recommendations': None,
+        'recommendations_loading': False,
+        'recommendations_generated': False,
+        'recommendations_metadata': None,
+        'show_recommendations': False,
     }
     
     for key, default in defaults.items():
@@ -783,10 +848,10 @@ def init_session_state():
                     st.session_state[key] = False
 
 def get_text(key: str) -> str:
-    """Получение перевода по ключу"""
+    """Get translation by key"""
     return TRANSLATIONS[st.session_state.current_language].get(key, key)
 
-# Базовые классы форматирования
+# Journal Abbreviation System
 class JournalAbbreviation:
     def __init__(self):
         self.ltwa_data = {}
@@ -797,7 +862,7 @@ class JournalAbbreviation:
                                'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'}
     
     def load_ltwa_data(self):
-        """Загружает данные сокращений из файла ltwa.csv"""
+        """Load abbreviation data from ltwa.csv file"""
         try:
             csv_path = Config.LTWA_CSV_PATH
             if os.path.exists(csv_path):
@@ -810,12 +875,12 @@ class JournalAbbreviation:
                             abbreviation = row[1].strip() if row[1].strip() else None
                             self.ltwa_data[word] = abbreviation
             else:
-                logger.warning(f"Файл {csv_path} не найден, используется стандартное сокращение")
+                logger.warning(f"File {csv_path} not found, using standard abbreviation")
         except Exception as e:
-            logger.error(f"Ошибка загрузки ltwa.csv: {e}")
+            logger.error(f"Error loading ltwa.csv: {e}")
     
     def abbreviate_word(self, word: str) -> str:
-        """Сокращает одно слово на основе данных LTWA"""
+        """Abbreviate single word based on LTWA data"""
         word_lower = word.lower()
         
         if word_lower in self.ltwa_data:
@@ -829,7 +894,7 @@ class JournalAbbreviation:
         return word
     
     def extract_special_endings(self, journal_name: str) -> Tuple[str, str]:
-        """Извлекает специальные окончания (A, B, C и т.д.) из названия журнала"""
+        """Extract special endings (A, B, C, etc.) from journal name"""
         patterns = [
             r'\s+([A-Z])\s*$',
             r'\s+([IVX]+)\s*$',
@@ -848,7 +913,7 @@ class JournalAbbreviation:
         return journal_name, ""
     
     def abbreviate_journal_name(self, journal_name: str, style: str = "{J. Abbr.}") -> str:
-        """Сокращает название журнала в соответствии с выбранным стилем"""
+        """Abbreviate journal name according to selected style"""
         if not journal_name:
             return ""
         
@@ -893,21 +958,22 @@ class JournalAbbreviation:
         result = re.sub(r'\.\.+', '.', result)
         return result
 
-# Инициализация системы сокращений
+# Initialize abbreviation system
 journal_abbrev = JournalAbbreviation()
 
 def clean_double_dots(text: str) -> str:
-    """Убирает двойные точки в тексте"""
+    """Remove double dots in text"""
     return re.sub(r'\.\.+', '.', text)
 
+# Base Citation Formatter
 class BaseCitationFormatter:
-    """Базовый класс для форматирования цитирования"""
+    """Base class for citation formatting"""
     
     def __init__(self, style_config: Dict[str, Any]):
         self.style_config = style_config
     
     def format_authors(self, authors: List[Dict[str, str]]) -> str:
-        """Форматирует список авторов"""
+        """Format authors list"""
         if not authors:
             return ""
         
@@ -971,7 +1037,7 @@ class BaseCitationFormatter:
         return author_str.strip()
           
     def format_pages(self, pages: str, article_number: str, style_type: str = "default") -> str:
-        """Форматирует страницы в зависимости от стиля"""
+        """Format pages depending on style"""
         page_format = self.style_config['page_format']
         
         if pages:
@@ -1024,7 +1090,7 @@ class BaseCitationFormatter:
         return article_number
     
     def format_doi(self, doi: str) -> Tuple[str, str]:
-        """Форматирует DOI и возвращает текст и URL"""
+        """Format DOI and return text and URL"""
         doi_format = self.style_config['doi_format']
         
         if doi_format == "10.10/xxx":
@@ -1034,7 +1100,6 @@ class BaseCitationFormatter:
         elif doi_format == "DOI:10.10/xxx":
             value = f"DOI:{doi}"
         elif doi_format == "https://doi.org/10.10/xxx":
-            # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
             value = f"https://doi.org/{doi}"
         else:
             value = doi
@@ -1042,16 +1107,17 @@ class BaseCitationFormatter:
         return value, f"https://doi.org/{doi}"
     
     def format_journal_name(self, journal_name: str) -> str:
-        """Форматирует название журнала с учетом выбранного стиля"""
+        """Format journal name considering selected style"""
         journal_style = self.style_config.get('journal_style', '{Full Journal Name}')
         return journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
-        
+
+# Custom Citation Formatter
 class CustomCitationFormatter(BaseCitationFormatter):
-    """Форматировщик для пользовательских стилей с улучшенной обработкой Issue"""
+    """Formatter for custom styles with improved Issue handling"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         elements = []
@@ -1103,7 +1169,6 @@ class CustomCitationFormatter(BaseCitationFormatter):
                         separator = config['separator']
                 
                 if for_preview:
-                    # ИСПРАВЛЕНИЕ: Используем Markdown форматирование вместо HTML тегов
                     formatted_value = value
                     if config['italic'] and config['bold']:
                         formatted_value = f"**_{formatted_value}_**"
@@ -1145,12 +1210,13 @@ class CustomCitationFormatter(BaseCitationFormatter):
         else:
             return cleaned_elements, False
 
+# GOST Citation Formatter
 class GOSTCitationFormatter(BaseCitationFormatter):
-    """Форматировщик для стиля ГОСТ (обновленная версия)"""
+    """Formatter for GOST style (updated version)"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1209,12 +1275,13 @@ class GOSTCitationFormatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
+# ACS Citation Formatter
 class ACSCitationFormatter(BaseCitationFormatter):
-    """Форматировщик для стиля ACS (MDPI)"""
+    """Formatter for ACS (MDPI) style"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1254,7 +1321,6 @@ class ACSCitationFormatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         acs_ref = f"{authors_str} {metadata['title']}. {journal_name} {metadata['year']}, {metadata['volume']}, {pages_formatted}. {doi_url}"
@@ -1273,12 +1339,13 @@ class ACSCitationFormatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
+# RSC Citation Formatter
 class RSCCitationFormatter(BaseCitationFormatter):
-    """Форматировщик для стиля RSC"""
+    """Formatter for RSC style"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1332,12 +1399,13 @@ class RSCCitationFormatter(BaseCitationFormatter):
             elements.append((pages_formatted, False, False, ".", False, None))
             return elements, False
 
+# CTA Citation Formatter
 class CTACitationFormatter(BaseCitationFormatter):
-    """Форматировщик для стиля CTA"""
+    """Formatter for CTA style"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1382,18 +1450,18 @@ class CTACitationFormatter(BaseCitationFormatter):
                 elements.append(("", False, False, ":", False, None))
             elements.append((pages_formatted, False, False, ". ", False, None))
             
-            # ИСПРАВЛЕНО: разделяем "doi:" и сам DOI
-            elements.append(("doi:", False, False, "", False, None))  # "doi:" не гиперссылка
-            elements.append((metadata['doi'], False, False, "", True, metadata['doi']))  # DOI как гиперссылка
+            elements.append(("doi:", False, False, "", False, None))
+            elements.append((metadata['doi'], False, False, "", True, metadata['doi']))
             
             return elements, False
 
+# Style 5 Formatter
 class Style5Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 5"""
+    """Formatter for Style 5"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1417,7 +1485,6 @@ class Style5Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1445,12 +1512,13 @@ class Style5Formatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
+# Style 6 Formatter
 class Style6Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 6"""
+    """Formatter for Style 6"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1474,7 +1542,6 @@ class Style6Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
 
         pages = metadata['pages']
@@ -1486,7 +1553,7 @@ class Style6Formatter(BaseCitationFormatter):
             else:
                 pages_formatted = pages
         elif article_number:
-            pages_formatted = article_number  # Используем номер статьи если нет страниц
+            pages_formatted = article_number
         else:
             pages_formatted = ""
         
@@ -1506,12 +1573,13 @@ class Style6Formatter(BaseCitationFormatter):
             elements.append((".", False, False, "", False, None))
             return elements, False
 
+# Style 7 Formatter
 class Style7Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 7"""
+    """Formatter for Style 7"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1538,7 +1606,6 @@ class Style7Formatter(BaseCitationFormatter):
         
         journal_name = metadata['journal']
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1550,7 +1617,7 @@ class Style7Formatter(BaseCitationFormatter):
             else:
                 pages_formatted = pages
         elif article_number:
-            pages_formatted = article_number  # Используем номер статьи если нет страниц
+            pages_formatted = article_number
         else:
             pages_formatted = ""
         
@@ -1576,12 +1643,13 @@ class Style7Formatter(BaseCitationFormatter):
             elements.append((".", False, False, "", False, None))
             return elements, False
 
+# Style 8 Formatter
 class Style8Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 8"""
+    """Formatter for Style 8"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1614,7 +1682,7 @@ class Style8Formatter(BaseCitationFormatter):
             else:
                 pages_formatted = pages.strip()
         elif article_number:
-            pages_formatted = article_number  # Используем номер статьи если нет страниц
+            pages_formatted = article_number
         else:
             pages_formatted = ""
         
@@ -1631,12 +1699,13 @@ class Style8Formatter(BaseCitationFormatter):
             elements.append((pages_formatted, False, False, ".", False, None))
             return elements, False
 
+# Style 9 Formatter
 class Style9Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 9 (RCR)"""
+    """Formatter for Style 9 (RCR)"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1670,7 +1739,6 @@ class Style9Formatter(BaseCitationFormatter):
         else:
             pages_formatted = ""
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
@@ -1687,12 +1755,13 @@ class Style9Formatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
+# Style 10 Formatter
 class Style10Formatter(BaseCitationFormatter):
-    """Форматировщик для стиля 10"""
+    """Formatter for Style 10"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
-            error_message = "Ошибка: Не удалось отформатировать ссылку." if st.session_state.current_language == 'ru' else "Error: Could not format the reference."
+            error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
         
         authors_str = ""
@@ -1716,7 +1785,6 @@ class Style10Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
-        # ИСПРАВЛЕНИЕ: Используем doi.org вместо dx.doi.org
         doi_url = f"https://doi.org/{metadata['doi']}"
         
         pages = metadata['pages']
@@ -1750,8 +1818,9 @@ class Style10Formatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
+# Citation Formatter Factory
 class CitationFormatterFactory:
-    """Фабрика для создания форматировщиков цитирования"""
+    """Factory for creating citation formatters"""
     
     @staticmethod
     def create_formatter(style_config: Dict[str, Any]) -> BaseCitationFormatter:
@@ -1778,11 +1847,513 @@ class CitationFormatterFactory:
         else:
             return CustomCitationFormatter(style_config)
 
+# Enhanced Text Processor for Recommendations
+class EnhancedTextProcessor:
+    def __init__(self):
+        self.lemmatizer = WordNetLemmatizer()
+        try:
+            self.nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
+        except:
+            self.nlp = None
+        
+        self.scientific_stopwords = set([
+            'study', 'research', 'paper', 'article', 'work', 'result', 'method', 
+            'approach', 'analysis', 'experiment', 'investigation', 'show', 'demonstrate',
+            'propose', 'present', 'discuss', 'examine', 'evaluate', 'assess'
+        ])
+        
+        base_stopwords = set(stopwords.words('english'))
+        self.all_stopwords = base_stopwords.union(self.scientific_stopwords)
+        
+        self.synonym_cache = {}
+    
+    def get_wordnet_pos(self, word: str) -> str:
+        """Determine part of speech for lemmatization"""
+        tag = nltk.pos_tag([word])[0][1][0].upper()
+        tag_dict = {
+            'J': wordnet.ADJ,
+            'N': wordnet.NOUN,
+            'V': wordnet.VERB,
+            'R': wordnet.ADV
+        }
+        return tag_dict.get(tag, wordnet.NOUN)
+    
+    def process_document(self, text: str) -> Dict[str, Any]:
+        """Process document text"""
+        if not text:
+            return {'tokens': set(), 'weighted_terms': {}}
+        
+        text_clean = re.sub(r'[^\w\s.,;:-]', ' ', text.lower())
+        text_clean = re.sub(r'\b\d+\b', '', text_clean)
+        
+        if self.nlp:
+            doc = self.nlp(text_clean)
+            lemmas = [token.lemma_ for token in doc 
+                     if token.is_alpha and token.lemma_ not in self.all_stopwords 
+                     and len(token.lemma_) > 2]
+        else:
+            tokens = word_tokenize(text_clean)
+            lemmas = []
+            for token in tokens:
+                if token.isalpha() and token not in self.all_stopwords and len(token) > 2:
+                    lemmas.append(self.lemmatizer.lemmatize(token, self.get_wordnet_pos(token)))
+        
+        term_freq = Counter(lemmas)
+        
+        weighted_terms = {}
+        for term, freq in term_freq.items():
+            if len(term) > 6:
+                weight = freq * 2.0
+            elif freq > 2:
+                weight = freq * 1.5
+            else:
+                weight = freq * 1.0
+            weighted_terms[term] = weight
+        
+        return {
+            'tokens': set(lemmas),
+            'weighted_terms': weighted_terms,
+            'raw_lemmas': lemmas
+        }
+    
+    def extract_key_terms(self, text: str, top_k: int = 15) -> List[str]:
+        """Extract key terms from text"""
+        processed = self.process_document(text)
+        weighted = processed['weighted_terms']
+        
+        sorted_terms = sorted(weighted.items(), key=lambda x: x[1], reverse=True)
+        
+        key_terms = []
+        general_terms = {'use', 'make', 'take', 'give', 'see', 'find', 'come'}
+        
+        for term, weight in sorted_terms:
+            if term not in general_terms and len(term) > 2:
+                key_terms.append(term)
+            if len(key_terms) >= top_k:
+                break
+        
+        return key_terms
+    
+    def get_contextual_synonyms(self, terms: List[str], context: str = "") -> Set[str]:
+        """Get contextual synonyms for terms"""
+        synonyms = set()
+        
+        problematic_terms = {'tool', 'member', 'network', 'act', 'make', 'take'}
+        
+        for term in terms:
+            if term in problematic_terms:
+                continue
+                
+            if term in self.synonym_cache:
+                synonyms.update(self.synonym_cache[term])
+                continue
+            
+            term_synonyms = set()
+            try:
+                for syn in wordnet.synsets(term):
+                    for lemma in syn.lemmas()[:3]:
+                        synonym = lemma.name().replace('_', ' ')
+                        
+                        if (synonym != term and 
+                            len(synonym.split()) == 1 and
+                            synonym not in self.all_stopwords and
+                            len(synonym) > 3):
+                            term_synonyms.add(synonym)
+            except:
+                continue
+            
+            self.synonym_cache[term] = term_synonyms
+            synonyms.update(term_synonyms)
+        
+        return synonyms
+
+# Enhanced Comparator for Recommendations
+class EnhancedComparator:
+    def __init__(self, processor: EnhancedTextProcessor):
+        self.processor = processor
+        try:
+            self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
+        except:
+            self.sentence_model = None
+    
+    def compare_articles(self, article1: Dict, article2: Dict) -> Dict[str, float]:
+        """Compare two articles"""
+        
+        text1 = f"{article1['title']} {article1.get('abstract', '')}"
+        text2 = f"{article2['title']} {article2.get('abstract', '')}"
+        
+        proc1 = self.processor.process_document(text1)
+        proc2 = self.processor.process_document(text2)
+        
+        intersection = proc1['tokens'].intersection(proc2['tokens'])
+        union = proc1['tokens'].union(proc2['tokens'])
+        jaccard = len(intersection) / len(union) if union else 0
+        
+        weighted_coverage = 0.0
+        for term in intersection:
+            weight = proc1['weighted_terms'].get(term, 1.0)
+            weighted_coverage += weight
+        
+        total_weight = sum(proc1['weighted_terms'].values())
+        coverage = weighted_coverage / total_weight if total_weight > 0 else 0
+        
+        semantic_sim = 0.0
+        if self.sentence_model and text1 and text2:
+            try:
+                text_for_semantic1 = f"{article1['title']}. {article1.get('abstract', '')[:200]}"
+                text_for_semantic2 = f"{article2['title']}. {article2.get('abstract', '')[:200]}"
+                
+                if text_for_semantic1 and text_for_semantic2:
+                    emb1 = self.sentence_model.encode(text_for_semantic1, convert_to_tensor=True)
+                    emb2 = self.sentence_model.encode(text_for_semantic2, convert_to_tensor=True)
+                    semantic_sim = util.pytorch_cos_sim(emb1, emb2).item()
+            except:
+                semantic_sim = 0.0
+        
+        title1_proc = self.processor.process_document(article1['title'])
+        title2_proc = self.processor.process_document(article2['title'])
+        
+        title_intersection = title1_proc['tokens'].intersection(title2_proc['tokens'])
+        title_union = title1_proc['tokens'].union(title2_proc['tokens'])
+        
+        title_jaccard = len(title_intersection) / len(title_union) if title_union else 0
+        
+        final_score = (
+            title_jaccard * 0.4 +
+            semantic_sim * 0.3 +
+            coverage * 0.2 +
+            jaccard * 0.1
+        )
+        
+        if article1.get('year') and article2.get('year'):
+            year_diff = abs(article1['year'] - article2['year'])
+            if year_diff > 15:
+                final_score *= max(0.5, 1.0 - (year_diff - 15) * 0.02)
+        
+        return {
+            'final_score': min(1.0, final_score),
+            'title_jaccard': title_jaccard,
+            'content_coverage': coverage,
+            'semantic_similarity': semantic_sim,
+            'jaccard_index': jaccard,
+            'common_terms': list(intersection)[:8]
+        }
+
+# Intelligent Article Finder for Recommendations
+class IntelligentArticleFinder:
+    def __init__(self, email: str = Config.RECOMMENDATION_EMAIL):
+        self.email = email
+        self.headers = {'User-Agent': f'AcademicSearch/1.0 ({email})'}
+        self.processor = EnhancedTextProcessor()
+        self.comparator = EnhancedComparator(self.processor)
+        
+    def find_similar_by_references(self, references_metadata: List[Dict], max_results: int = Config.MAX_RECOMMENDATIONS,
+                                  use_synonyms: bool = True, min_similarity: float = Config.MIN_SIMILARITY_SCORE):
+        """Find similar articles based on reference list"""
+        if not references_metadata:
+            return None
+        
+        current_year = datetime.now().year
+        min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
+        
+        print(f"Analyzing {len(references_metadata)} references...")
+        
+        combined_text = ""
+        all_key_terms = []
+        
+        for metadata in references_metadata:
+            if metadata:
+                text = f"{metadata.get('title', '')} {metadata.get('abstract', '')}"
+                combined_text += text + " "
+                
+                key_terms = self.processor.extract_key_terms(text, top_k=10)
+                all_key_terms.extend(key_terms)
+        
+        key_terms_counter = Counter(all_key_terms)
+        top_key_terms = [term for term, _ in key_terms_counter.most_common(15)]
+        
+        print(f"Top key terms: {', '.join(top_key_terms[:10])}")
+        
+        search_terms = top_key_terms.copy()
+        if use_synonyms:
+            synonyms = self.processor.get_contextual_synonyms(top_key_terms[:8], combined_text)
+            search_terms.extend(list(synonyms)[:5])
+        
+        candidates = []
+        
+        search_strategies = [
+            " ".join(search_terms[:3]),
+            f"{search_terms[0]} {search_terms[1]}",
+            f"{search_terms[0]} {search_terms[2]}",
+            *[term for term in search_terms if len(term.split()) > 1]
+        ]
+        
+        search_strategies = list(dict.fromkeys(search_strategies))[:4]
+        
+        for i, strategy in enumerate(search_strategies):
+            print(f"Search strategy {i+1}: '{strategy}'")
+            
+            crossref_items = self._search_crossref(strategy, max_results // len(search_strategies), min_year)
+            candidates.extend(crossref_items)
+            
+            openalex_items = self._search_openalex(strategy, max_results // len(search_strategies), min_year)
+            candidates.extend(openalex_items)
+            
+            time.sleep(0.3)
+        
+        unique_candidates = []
+        seen_titles = set()
+        seen_dois = set()
+        
+        for metadata in references_metadata:
+            if metadata and metadata.get('doi'):
+                seen_dois.add(metadata['doi'].lower())
+        
+        for candidate in candidates:
+            title_key = candidate['title'][:80].lower()
+            candidate_doi = candidate.get('doi', '').lower()
+            
+            if title_key not in seen_titles and candidate_doi not in seen_dois:
+                seen_titles.add(title_key)
+                unique_candidates.append(candidate)
+        
+        print(f"Found {len(unique_candidates)} unique candidates")
+        
+        if not unique_candidates:
+            return None
+        
+        comparison_data = []
+        
+        for i, candidate in enumerate(unique_candidates):
+            if i % 10 == 0:
+                print(f"Processing {i}/{len(unique_candidates)}...")
+            
+            best_similarity = {'final_score': 0}
+            
+            for ref_metadata in references_metadata:
+                if ref_metadata:
+                    similarity = self.comparator.compare_articles(ref_metadata, candidate)
+                    if similarity['final_score'] > best_similarity['final_score']:
+                        best_similarity = similarity
+            
+            if best_similarity['final_score'] >= min_similarity:
+                comparison_data.append({
+                    'doi': candidate.get('doi', ''),
+                    'title': candidate.get('title', ''),
+                    'year': candidate.get('year', ''),
+                    'journal': candidate.get('journal', ''),
+                    'authors': ', '.join(candidate.get('authors', [])[:3]),
+                    'abstract': candidate.get('abstract', '')[:300] + '...' if candidate.get('abstract') else '',
+                    'score': best_similarity['final_score'],
+                    'title_sim': best_similarity['title_jaccard'],
+                    'content_sim': best_similarity['content_coverage'],
+                    'semantic_sim': best_similarity['semantic_similarity'],
+                    'common_terms': ', '.join(best_similarity['common_terms'][:5]),
+                    'source': candidate.get('source', 'unknown')
+                })
+        
+        if not comparison_data:
+            return None
+        
+        df_results = pd.DataFrame(comparison_data)
+        df_results = df_results.sort_values('score', ascending=False).head(Config.MAX_RECOMMENDATIONS)
+        
+        return df_results
+    
+    def _search_crossref(self, query: str, limit: int = 25, min_year: int = None) -> List[Dict]:
+        """Search Crossref API"""
+        try:
+            current_year = datetime.now().year
+            
+            params = {
+                'query': query,
+                'rows': min(limit, 50),
+                'select': 'DOI,title,abstract,author,issued,container-title',
+                'sort': 'relevance',
+                'order': 'desc'
+            }
+            
+            if min_year:
+                params['filter'] = f'from-pub-date:{min_year},until-pub-date:{current_year}'
+            
+            response = requests.get(
+                "https://api.crossref.org/works",
+                params=params,
+                headers=self.headers,
+                timeout=15
+            )
+            
+            if response.status_code == 200:
+                data = response.json().get('message', {}).get('items', [])
+                articles = []
+                
+                for item in data[:limit]:
+                    doi = item.get('DOI')
+                    title = item.get('title', [''])[0]
+                    
+                    if not doi or not title:
+                        continue
+                    
+                    abstract = item.get('abstract', '')
+                    if isinstance(abstract, str):
+                        abstract = re.sub(r'<[^>]+>', ' ', abstract)
+                    else:
+                        abstract = ''
+                    
+                    year = item.get('issued', {}).get('date-parts', [[0]])[0][0]
+                    
+                    if min_year and year and year < min_year:
+                        continue
+                    
+                    articles.append({
+                        'doi': doi,
+                        'title': title,
+                        'abstract': abstract,
+                        'year': year,
+                        'journal': item.get('container-title', [''])[0],
+                        'authors': [a.get('family', '') for a in item.get('author', [])[:3]],
+                        'source': 'crossref'
+                    })
+                
+                return articles
+                
+        except Exception as e:
+            print(f"Crossref search error: {e}")
+        
+        return []
+    
+    def _search_openalex(self, query: str, limit: int = 25, min_year: int = None) -> List[Dict]:
+        """Search OpenAlex API"""
+        try:
+            current_year = datetime.now().year
+            
+            params = {
+                'search': query,
+                'per-page': min(limit, 25),
+                'select': 'doi,title,abstract,publication_year,primary_location,authorships'
+            }
+            
+            if min_year:
+                params['filter'] = f'publication_year:{min_year}-{current_year}'
+            
+            response = requests.get(
+                "https://api.openalex.org/works",
+                params=params,
+                timeout=15
+            )
+            
+            if response.status_code == 200:
+                data = response.json().get('results', [])
+                articles = []
+                
+                for item in data[:limit]:
+                    doi = item.get('doi')
+                    if not doi:
+                        continue
+                    
+                    title = item.get('title', '')
+                    
+                    abstract = item.get('abstract', '')
+                    if isinstance(abstract, dict):
+                        abstract = ''
+                    
+                    year = item.get('publication_year', 0)
+                    
+                    if min_year and year and year < min_year:
+                        continue
+                    
+                    articles.append({
+                        'doi': doi,
+                        'title': title,
+                        'abstract': abstract or '',
+                        'year': year,
+                        'journal': item.get('primary_location', {}).get('source', {}).get('display_name', ''),
+                        'authors': [a.get('author', {}).get('display_name', '') 
+                                   for a in item.get('authorships', [])[:3]],
+                        'source': 'openalex'
+                    })
+                
+                return articles
+                
+        except Exception as e:
+            print(f"OpenAlex search error: {e}")
+        
+        return []
+
+# Article Recommendation System
+class ArticleRecommender:
+    """Article recommendation system"""
+    
+    @staticmethod
+    def generate_recommendations(formatted_refs: List[Tuple[Any, bool, Any]]):
+        """Generate article recommendations based on formatted references"""
+        if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+            return None
+        
+        valid_metadata = []
+        for _, is_error, metadata in formatted_refs:
+            if not is_error and metadata:
+                valid_metadata.append(metadata)
+        
+        if not valid_metadata:
+            return None
+        
+        finder = IntelligentArticleFinder()
+        recommendations = finder.find_similar_by_references(
+            valid_metadata,
+            max_results=Config.MAX_RECOMMENDATIONS,
+            use_synonyms=True,
+            min_similarity=Config.MIN_SIMILARITY_SCORE
+        )
+        
+        return recommendations
+    
+    @staticmethod
+    def create_recommendations_txt(recommendations_df) -> io.BytesIO:
+        """Create TXT file with recommendations"""
+        if recommendations_df is None or recommendations_df.empty:
+            return None
+        
+        output_txt_buffer = io.StringIO()
+        output_txt_buffer.write("ARTICLE RECOMMENDATIONS\n")
+        output_txt_buffer.write("=" * 80 + "\n\n")
+        output_txt_buffer.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        output_txt_buffer.write(f"Based on analysis of reference list\n")
+        output_txt_buffer.write(f"Showing top {len(recommendations_df)} recommendations from the last {Config.RECOMMENDATION_YEARS_BACK} years\n\n")
+        
+        for idx, row in recommendations_df.iterrows():
+            output_txt_buffer.write(f"{idx+1:2d}. [{row['score']:.3f}] {row['title']}\n")
+            output_txt_buffer.write(f"    Authors: {row['authors']}\n")
+            output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
+            output_txt_buffer.write(f"    DOI: {row['doi']}\n")
+            if row['abstract']:
+                output_txt_buffer.write(f"    Abstract: {row['abstract']}\n")
+            output_txt_buffer.write(f"    Similarity: title={row['title_sim']:.3f}, content={row['content_sim']:.3f}, semantic={row['semantic_sim']:.3f}\n")
+            output_txt_buffer.write(f"    Common terms: {row['common_terms']}\n")
+            output_txt_buffer.write(f"    Source: {row['source']}\n")
+            output_txt_buffer.write("\n")
+        
+        output_txt_buffer.seek(0)
+        return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
+    
+    @staticmethod
+    def create_recommendations_csv(recommendations_df) -> io.BytesIO:
+        """Create CSV file with recommendations"""
+        if recommendations_df is None or recommendations_df.empty:
+            return None
+        
+        output_csv_buffer = io.StringIO()
+        recommendations_df.to_csv(output_csv_buffer, index=False)
+        output_csv_buffer.seek(0)
+        return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
+
+# Document Generator with Recommendations
 class DocumentGenerator:
-    """Класс для генерации DOCX документов"""
+    """Class for generating DOCX documents"""
     
     @staticmethod
     def add_hyperlink(paragraph, text, url):
+        """Add hyperlink to paragraph"""
         part = paragraph.part
         r_id = part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
         
@@ -1812,18 +2383,21 @@ class DocumentGenerator:
     
     @staticmethod
     def apply_yellow_background(run):
+        """Apply yellow background to run"""
         shd = OxmlElement('w:shd')
         shd.set(qn('w:fill'), 'FFFF00')
         run._element.get_or_add_rPr().append(shd)
     
     @staticmethod
     def apply_blue_background(run):
+        """Apply blue background to run"""
         shd = OxmlElement('w:shd')
         shd.set(qn('w:fill'), 'E6F3FF')
         run._element.get_or_add_rPr().append(shd)
     
     @staticmethod
     def apply_red_color(run):
+        """Apply red color to run"""
         color = OxmlElement('w:color')
         color.set(qn('w:val'), 'FF0000')
         run._element.get_or_add_rPr().append(color)
@@ -1832,7 +2406,9 @@ class DocumentGenerator:
     def generate_document(formatted_refs: List[Tuple[Any, bool, Any]], 
                          statistics: Dict[str, Any],
                          style_config: Dict[str, Any],
-                         duplicates_info: Dict[int, int] = None) -> io.BytesIO:
+                         duplicates_info: Dict[int, int] = None,
+                         recommendations_df = None) -> io.BytesIO:
+        """Generate DOCX document with references, statistics, and recommendations"""
         output_doc = Document()
         output_doc.add_paragraph('Citation Style Construction / © IHTE, https://ihte.ru/ © CTA, https://chimicatechnoacta.ru / developed by daM©')
         output_doc.add_paragraph('See short stats after the References section')
@@ -1840,6 +2416,9 @@ class DocumentGenerator:
         
         DocumentGenerator._add_formatted_references(output_doc, formatted_refs, style_config, duplicates_info)
         DocumentGenerator._add_statistics_section(output_doc, statistics)
+        
+        if recommendations_df is not None and not recommendations_df.empty:
+            DocumentGenerator._add_recommendations_section(output_doc, recommendations_df)
         
         output_doc_buffer = io.BytesIO()
         output_doc.save(output_doc_buffer)
@@ -1851,6 +2430,7 @@ class DocumentGenerator:
                                 formatted_refs: List[Tuple[Any, bool, Any]], 
                                 style_config: Dict[str, Any],
                                 duplicates_info: Dict[int, int] = None):
+        """Add formatted references to document"""
         for i, (elements, is_error, metadata) in enumerate(formatted_refs):
             numbering = style_config['numbering_style']
             
@@ -1921,6 +2501,7 @@ class DocumentGenerator:
     
     @staticmethod
     def _add_statistics_section(doc: Document, statistics: Dict[str, Any]):
+        """Add statistics section to document"""
         doc.add_heading('Stats', level=1)
         
         doc.add_heading('Journal Frequency', level=2)
@@ -1985,17 +2566,71 @@ class DocumentGenerator:
             row_cells[0].text = author_stat['author']
             row_cells[1].text = str(author_stat['count'])
             row_cells[2].text = str(author_stat['percentage'])
+    
+    @staticmethod
+    def _add_recommendations_section(doc: Document, recommendations_df):
+        """Add recommendations section to document"""
+        doc.add_page_break()
+        doc.add_heading('Article Recommendations', level=1)
+        
+        current_year = datetime.now().year
+        min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
+        
+        intro_para = doc.add_paragraph()
+        intro_para.add_run(f"Based on analysis of your reference list, here are {len(recommendations_df)} similar articles from the last {Config.RECOMMENDATION_YEARS_BACK} years (from {min_year} to {current_year}):").bold = True
+        
+        doc.add_paragraph()
+        
+        for idx, row in recommendations_df.iterrows():
+            doc.add_heading(f"Recommendation {idx+1}: Score {row['score']:.3f}", level=2)
+            
+            title_para = doc.add_paragraph()
+            title_para.add_run("Title: ").bold = True
+            title_para.add_run(row['title'])
+            
+            authors_para = doc.add_paragraph()
+            authors_para.add_run("Authors: ").bold = True
+            authors_para.add_run(row['authors'])
+            
+            info_para = doc.add_paragraph()
+            info_para.add_run("Journal: ").bold = True
+            info_para.add_run(f"{row['journal']}, ")
+            info_para.add_run("Year: ").bold = True
+            info_para.add_run(f"{row['year']}, ")
+            info_para.add_run("Source: ").bold = True
+            info_para.add_run(row['source'])
+            
+            doi_para = doc.add_paragraph()
+            doi_para.add_run("DOI: ").bold = True
+            DocumentGenerator.add_hyperlink(doi_para, row['doi'], f"https://doi.org/{row['doi']}")
+            
+            if row['abstract']:
+                abstract_para = doc.add_paragraph()
+                abstract_para.add_run("Abstract: ").bold = True
+                abstract_para.add_run(row['abstract'])
+            
+            similarity_para = doc.add_paragraph()
+            similarity_para.add_run("Similarity metrics: ").bold = True
+            similarity_para.add_run(f"Title similarity: {row['title_sim']:.3f}, ")
+            similarity_para.add_run(f"Content coverage: {row['content_sim']:.3f}, ")
+            similarity_para.add_run(f"Semantic similarity: {row['semantic_sim']:.3f}")
+            
+            terms_para = doc.add_paragraph()
+            terms_para.add_run("Common terms: ").bold = True
+            terms_para.add_run(row['common_terms'])
+            
+            doc.add_paragraph()
 
-# Улучшенные функции обработки DOI
+# DOI Processor
 class DOIProcessor:
-    """Процессор для работы с DOI"""
+    """Processor for working with DOI"""
     
     def __init__(self):
         self.cache = doi_cache
         self.works = works
     
     def find_doi_enhanced(self, reference: str) -> Optional[str]:
-        """Улучшенный поиск DOI с использованием нескольких стратегий"""
+        """Enhanced DOI search using multiple strategies"""
         if self._is_section_header(reference):
             return None
         
@@ -2018,7 +2653,7 @@ class DOIProcessor:
         return None
     
     def _is_section_header(self, text: str) -> bool:
-        """Определяет, является ли текст заголовком раздела"""
+        """Check if text is a section header"""
         text_upper = text.upper().strip()
         section_patterns = [
             r'^NOTES?\s+AND\s+REFERENCES?$',
@@ -2038,7 +2673,7 @@ class DOIProcessor:
         return False
     
     def _find_explicit_doi(self, reference: str) -> Optional[str]:
-        """Поиск явного DOI в тексте"""
+        """Find explicit DOI in text"""
         doi_patterns = [
             r'https?://doi\.org/(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)',
             r'doi:\s*(10\.\d{4,9}/[-._;()/:A-Za-z0-9]+)',
@@ -2061,7 +2696,7 @@ class DOIProcessor:
         return None
     
     def _find_bibliographic_doi(self, reference: str) -> Optional[str]:
-        """Поиск DOI по библиографическим данным"""
+        """Find DOI by bibliographic data"""
         clean_ref = re.sub(r'\s*(https?://doi\.org/|doi:|DOI:)\s*[^\s,;]+', '', reference, flags=re.IGNORECASE)
         clean_ref = clean_ref.strip()
         
@@ -2079,11 +2714,11 @@ class DOIProcessor:
         return None
     
     def _find_openalex_doi(self, reference: str) -> Optional[str]:
-        """Поиск DOI через OpenAlex API"""
+        """Find DOI through OpenAlex API"""
         return None
 
     def extract_metadata_with_cache(self, doi: str) -> Optional[Dict]:
-        """Извлечение метаданных с использованием кэша"""
+        """Extract metadata using cache"""
         cached_metadata = self.cache.get(doi)
         if cached_metadata:
             logger.info(f"Cache hit for DOI: {doi}")
@@ -2098,7 +2733,7 @@ class DOIProcessor:
         return metadata
 
     def _extract_metadata_from_api(self, doi: str) -> Optional[Dict]:
-        """Извлечение метаданных из Crossref API"""
+        """Extract metadata from Crossref API"""
         try:
             result = self.works.doi(doi)
             if not result:
@@ -2123,26 +2758,21 @@ class DOIProcessor:
             if 'container-title' in result and result['container-title']:
                 journal = self._clean_text(result['container-title'][0])
             
-            # ИЗМЕНЕННАЯ ЛОГИКА: Сначала проверяем published-print, затем published
             year = None
             
-            # 1. Приоритет: published-print (дата печатной публикации)
             if 'published-print' in result and 'date-parts' in result['published-print']:
                 date_parts = result['published-print']['date-parts']
                 if date_parts and date_parts[0] and len(date_parts[0]) > 0:
-                    year = date_parts[0][0]  # Берем год из первого элемента массива
+                    year = date_parts[0][0]
                     logger.info(f"Using published-print year {year} for DOI {doi}")
             
-            # 2. Резервный вариант: published (общая дата публикации)
             if year is None and 'published' in result and 'date-parts' in result['published']:
                 date_parts = result['published']['date-parts']
                 if date_parts and date_parts[0] and len(date_parts[0]) > 0:
-                    year = date_parts[0][0]  # Берем год из первого элемента массива
+                    year = date_parts[0][0]
                     logger.info(f"Using published year {year} for DOI {doi}")
             
-            # 3. Дополнительные проверки (на всякий случай)
             if year is None:
-                # Проверяем другие поля с датами в порядке приоритета
                 date_fields = ['issued', 'published-online', 'created']
                 for field in date_fields:
                     if field in result and 'date-parts' in result[field]:
@@ -2157,6 +2787,10 @@ class DOIProcessor:
             pages = result.get('page', '')
             article_number = result.get('article-number', '')
             
+            abstract = ''
+            if 'abstract' in result:
+                abstract = self._clean_text(result['abstract'])
+            
             metadata = {
                 'authors': author_list,
                 'title': title,
@@ -2167,7 +2801,8 @@ class DOIProcessor:
                 'pages': pages,
                 'article_number': article_number,
                 'doi': doi,
-                'original_doi': doi
+                'original_doi': doi,
+                'abstract': abstract
             }
             
             return metadata
@@ -2177,7 +2812,7 @@ class DOIProcessor:
             return None
     
     def _normalize_name(self, name: str) -> str:
-        """Нормализует имя автора"""
+        """Normalize author name"""
         if not name:
             return ''
         
@@ -2200,7 +2835,7 @@ class DOIProcessor:
                 return name.upper()
     
     def _clean_text(self, text: str) -> str:
-        """Очищает текст от HTML тегов и entities"""
+        """Clean text from HTML tags and entities"""
         if not text:
             return ""
         
@@ -2209,9 +2844,9 @@ class DOIProcessor:
         text = re.sub(r'&[^;]+;', '', text)
         return text.strip()
 
-# Основные функции обработки
+# Reference Processor
 class ReferenceProcessor:
-    """Основной процессор для обработки ссылок"""
+    """Main processor for reference processing"""
     
     def __init__(self):
         self.doi_processor = DOIProcessor()
@@ -2220,8 +2855,7 @@ class ReferenceProcessor:
     
     def process_references(self, references: List[str], style_config: Dict, 
                          progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict]:
-        """Обработка списка ссылок с отображением прогресса"""
-        # Валидация
+        """Process list of references with progress display"""
         is_valid, validation_messages = self.validator.validate_references_count(references)
         for msg in validation_messages:
             if "error" in msg.lower():
@@ -2234,20 +2868,18 @@ class ReferenceProcessor:
         
         doi_list = []
         formatted_refs = []
-        formatted_texts = []  # Для отформатированных текстов
+        formatted_texts = []
         doi_found_count = 0
         doi_not_found_count = 0
         
-        # Сбор DOI для пакетной обработки
         valid_dois = []
         reference_doi_map = {}
         
-        # ПЕРВЫЙ ПРОХОД: сбор всех DOI
         for i, ref in enumerate(references):
             if self.doi_processor._is_section_header(ref):
                 doi_list.append(f"{ref} [SECTION HEADER - SKIPPED]")
                 formatted_refs.append((ref, False, None))
-                formatted_texts.append(ref)  # Сохраняем как есть
+                formatted_texts.append(ref)
                 continue
                 
             doi = self.doi_processor.find_doi_enhanced(ref)
@@ -2259,10 +2891,9 @@ class ReferenceProcessor:
                 error_msg = self._create_error_message(ref, st.session_state.current_language)
                 doi_list.append(error_msg)
                 formatted_refs.append((error_msg, True, None))
-                formatted_texts.append(error_msg)  # Сохраняем ошибку
+                formatted_texts.append(error_msg)
                 doi_not_found_count += 1
         
-        # ВТОРОЙ ПРОХОД: пакетная обработка DOI
         if valid_dois:
             self._process_doi_batch(
                 valid_dois, reference_doi_map, references, 
@@ -2270,13 +2901,10 @@ class ReferenceProcessor:
                 progress_container, status_container
             )
         
-        # Подсчет статистики
         doi_found_count = len([ref for ref in formatted_refs if not ref[1] and ref[2]])
         
-        # Поиск дубликатов
         duplicates_info = self._find_duplicates(formatted_refs)
         
-        # Создание TXT файлов
         formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
         original_txt_buffer = self._create_txt_file(doi_list)
         
@@ -2285,24 +2913,19 @@ class ReferenceProcessor:
     def _process_doi_batch(self, valid_dois, reference_doi_map, references, 
                           formatted_refs, formatted_texts, doi_list, style_config,
                           progress_container, status_container):
-        """Пакетная обработка DOI"""
+        """Batch process DOI"""
         status_container.info(get_text('batch_processing'))
         
-        # Начало обработки - УСТАНАВЛИВАЕМ ОБЩЕЕ КОЛИЧЕСТВО
         total_to_process = len(valid_dois)
         self.progress_manager.start_processing(total_to_process)
         
-        # Создаем прогресс-бар
         progress_bar = progress_container.progress(0)
         status_display = status_container.empty()
         
-        # Шаг 1: Извлечение метаданных для ВСЕХ DOI сразу
         metadata_results = self._extract_metadata_batch(valid_dois, progress_bar, status_display)
         
-        # Создаем маппинг DOI -> метаданные
         doi_to_metadata = dict(zip(valid_dois, metadata_results))
         
-        # Шаг 2: Форматирование найденных метаданных
         processed_count = 0
         found_count = 0
         error_count = 0
@@ -2313,12 +2936,9 @@ class ReferenceProcessor:
                 metadata = doi_to_metadata.get(doi)
                 
                 if metadata:
-                    # Форматирование для DOCX
                     formatted_ref, is_error = self._format_reference(metadata, style_config)
-                    # Форматирование для TXT
                     formatted_text = self._format_reference_for_text(metadata, style_config)
                     
-                    # Обновляем списки
                     if doi in doi_list:
                         index = doi_list.index(doi)
                         doi_list[index] = formatted_text
@@ -2337,24 +2957,20 @@ class ReferenceProcessor:
                 
                 processed_count += 1
                 
-                # Обновляем прогресс В РЕАЛЬНОМ ВРЕМЕНИ
                 self.progress_manager.update_progress(processed_count, found_count, error_count, 'formatting')
                 progress_ratio = processed_count / total_to_process if total_to_process > 0 else 0
                 progress_bar.progress(progress_ratio)
                 
-                # Обновляем статус
                 status_text = f"Processed: {processed_count}/{total_to_process} | Found: {found_count} | Errors: {error_count}"
                 status_display.text(status_text)
         
-        # Финальное обновление
         self.progress_manager.update_progress(total_to_process, found_count, error_count, 'complete')
         progress_bar.progress(1.0)
 
     def _extract_metadata_batch(self, doi_list, progress_bar, status_display) -> List:
-        """Пакетное извлечение метаданных с повторной попыткой"""
+        """Batch extract metadata with retry"""
         results = [None] * len(doi_list)
         
-        # ПЕРВЫЙ ПРОХОД
         with concurrent.futures.ThreadPoolExecutor(max_workers=Config.CROSSREF_WORKERS) as executor:
             future_to_index = {
                 executor.submit(self.doi_processor.extract_metadata_with_cache, doi): i 
@@ -2377,20 +2993,18 @@ class ReferenceProcessor:
                 progress_bar.progress(progress_ratio)
                 status_display.text(f"Fetching metadata: {completed}/{total}")
         
-        # ПРОВЕРКА НА НЕУДАЧНЫЕ ЗАПРОСЫ
         failed_indices = [i for i, result in enumerate(results) if result is None]
         
         if failed_indices:
             logger.info(f"Retrying {len(failed_indices)} failed requests...")
             status_display.text(f"Retrying {len(failed_indices)} failed requests...")
             
-            # ПОВТОРНАЯ ОБРАБОТКА
             self._retry_failed_requests(failed_indices, doi_list, results, progress_bar, status_display)
         
         return results
     
     def _retry_failed_requests(self, failed_indices, doi_list, results, progress_bar, status_display):
-        """Повторная попытка обработки неудачных запросов"""
+        """Retry failed requests"""
         completed = len(doi_list) - len(failed_indices)
         
         with concurrent.futures.ThreadPoolExecutor(max_workers=Config.CROSSREF_RETRY_WORKERS) as executor:
@@ -2413,7 +3027,7 @@ class ReferenceProcessor:
                 self._update_progress_display(progress_bar, status_display, completed, len(doi_list), len(failed_indices))
     
     def _update_progress_display(self, progress_bar, status_display, completed, total, errors):
-        """Обновление отображения прогресса"""
+        """Update progress display"""
         progress_info = self.progress_manager.get_progress_info()
         progress_ratio = completed / total if total > 0 else 0
         progress_color = self.progress_manager.get_progress_color(progress_ratio)
@@ -2436,12 +3050,12 @@ class ReferenceProcessor:
         status_display.text(status_text)
     
     def _format_reference(self, metadata: Dict, style_config: Dict) -> Tuple[Any, bool]:
-        """Форматирование ссылки для DOCX"""
+        """Format reference for DOCX"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
         return formatter.format_reference(metadata, False)
     
     def _format_reference_for_text(self, metadata: Dict, style_config: Dict) -> str:
-        """Форматирование ссылки для TXT файла (без HTML тегов)"""
+        """Format reference for TXT file"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
         elements, _ = formatter.format_reference(metadata, False)
         
@@ -2450,7 +3064,6 @@ class ReferenceProcessor:
         
         ref_str = ""
         for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
-            # Добавляем форматирование в виде символов Markdown
             if italic and bold:
                 formatted_value = f"***{value}***"
             elif italic:
@@ -2471,7 +3084,7 @@ class ReferenceProcessor:
         return ref_str
     
     def _find_duplicates(self, formatted_refs: List) -> Dict[int, int]:
-        """Поиск дубликатов ссылок"""
+        """Find duplicate references"""
         seen_hashes = {}
         duplicates_info = {}
         
@@ -2491,7 +3104,7 @@ class ReferenceProcessor:
         return duplicates_info
     
     def _generate_reference_hash(self, metadata: Dict) -> Optional[str]:
-        """Генерация хеша для идентификации дубликатов"""
+        """Generate hash for identifying duplicates"""
         if not metadata:
             return None
         
@@ -2513,20 +3126,20 @@ class ReferenceProcessor:
         return hashlib.md5(hash_string.encode('utf-8')).hexdigest()
     
     def _normalize_doi(self, doi: str) -> str:
-        """Нормализация DOI"""
+        """Normalize DOI"""
         if not doi:
             return ""
         return re.sub(r'^(https?://doi\.org/|doi:|DOI:)', '', doi, flags=re.IGNORECASE).lower().strip()
     
     def _create_error_message(self, ref: str, language: str) -> str:
-        """Создание сообщения об ошибке"""
+        """Create error message"""
         if language == 'ru':
             return f"{ref}\nПроверьте источник и добавьте DOI вручную."
         else:
             return f"{ref}\nPlease check this source and insert the DOI manually."
     
     def _create_formatted_txt_file(self, formatted_texts: List[str]) -> io.BytesIO:
-        """Создание TXT файла с отформатированными ссылками"""
+        """Create TXT file with formatted references"""
         output_txt_buffer = io.StringIO()
         for text in formatted_texts:
             output_txt_buffer.write(f"{text}\n\n")
@@ -2534,19 +3147,20 @@ class ReferenceProcessor:
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
     
     def _create_txt_file(self, doi_list: List[str]) -> io.BytesIO:
-        """Создание TXT файла со списком DOI (для обратной совместимости)"""
+        """Create TXT file with DOI list"""
         output_txt_buffer = io.StringIO()
         for doi in doi_list:
             output_txt_buffer.write(f"{doi}\n")
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
 
+# Theme Manager
 class ThemeManager:
-    """Менеджер тем оформления"""
+    """Theme manager"""
     
     @staticmethod
     def get_theme_css(theme_name: str) -> str:
-        """Получение CSS стилей для темы"""
+        """Get CSS styles for theme"""
         theme = Config.THEMES.get(theme_name, Config.THEMES['light'])
         
         button_styles = {
@@ -2573,14 +3187,12 @@ class ThemeManager:
                 --shadow: {theme['shadow']};
             }}
             
-            /* Основные стили темы */
             .main {{
                 background-color: {theme['background']};
                 color: {theme['text']};
                 font-family: {theme['font']};
             }}
             
-            /* Стили для этапов (дорожная карта) */
             .stage-container {{
                 background-color: {theme['secondaryBackground']};
                 border-radius: 10px;
@@ -2617,7 +3229,6 @@ class ThemeManager:
                 font-weight: bold;
             }}
             
-            /* Стили для кнопок */
             .stButton > button {{
                 {button_style}
                 background-color: {theme['primary']};
@@ -2635,7 +3246,6 @@ class ThemeManager:
                 box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             }}
             
-            /* Стили для карточек */
             .card {{
                 background-color: {theme['cardBackground']};
                 border-radius: 10px;
@@ -2652,7 +3262,6 @@ class ThemeManager:
                 font-size: 1.2rem;
             }}
             
-            /* Стили для стилей на странице Select */
             .style-item {{
                 background-color: {theme['cardBackground']};
                 border-radius: 6px;
@@ -2679,7 +3288,6 @@ class ThemeManager:
                 border: 1px solid {theme['border']};
             }}
             
-            /* Стили для выпадающих списков и полей ввода */
             .stSelectbox, .stTextInput, .stNumberInput, .stCheckbox, .stRadio, .stFileUploader, .stTextArea {{
                 margin-bottom: 10px;
             }}
@@ -2697,7 +3305,6 @@ class ThemeManager:
                 font-family: {theme['font']};
             }}
             
-            /* Стили для заголовков */
             h1, h2, h3 {{
                 color: {theme['text']} !important;
                 font-family: {theme['font']} !important;
@@ -2710,7 +3317,6 @@ class ThemeManager:
                 margin-bottom: 20px;
             }}
             
-            /* Стили для статистики */
             .stat-card {{
                 background-color: {theme['cardBackground']};
                 border-left: 4px solid {theme['primary']};
@@ -2731,7 +3337,6 @@ class ThemeManager:
                 font-size: 0.9rem;
             }}
             
-            /* Стили для глобальной статистики */
             .global-stats-container {{
                 background: linear-gradient(135deg, {theme['primary']} 0%, {theme['secondary']} 100%);
                 padding: 20px;
@@ -2805,7 +3410,6 @@ class ThemeManager:
                 z-index: 1;
             }}
             
-            /* Анимации */
             @keyframes fadeIn {{
                 from {{ opacity: 0; transform: translateY(20px); }}
                 to {{ opacity: 1; transform: translateY(0); }}
@@ -2815,7 +3419,6 @@ class ThemeManager:
                 animation: fadeIn 0.5s ease-out;
             }}
             
-            /* Стили для превью стиля на странице Create */
             .create-style-preview {{
                 background-color: {theme['secondaryBackground']};
                 padding: 15px;
@@ -2826,7 +3429,6 @@ class ThemeManager:
                 line-height: 1.5;
             }}
             
-            /* Стили для форматированного текста в style-preview (как в Results) */
             .create-style-preview .formatted-text {{
                 font-family: {theme['font']};
                 line-height: 1.5;
@@ -2845,7 +3447,6 @@ class ThemeManager:
                 font-weight: bold;
             }}
             
-            /* Стили для элемента конфигурации */
             .element-config-row {{
                 background-color: {theme['secondaryBackground']};
                 padding: 10px;
@@ -2854,7 +3455,6 @@ class ThemeManager:
                 border: 1px solid {theme['border']};
             }}
             
-            /* Стили для настроек */
             .setting-item {{
                 margin-bottom: 15px;
             }}
@@ -2866,7 +3466,6 @@ class ThemeManager:
                 display: block;
             }}
             
-            /* Стили для результатов */
             .result-item {{
                 background-color: {theme['secondaryBackground']};
                 padding: 10px;
@@ -2883,7 +3482,6 @@ class ThemeManager:
                 background-color: {theme['secondary']} !important;
             }}
             
-            /* Стили для прокручиваемого блока с результатами */
             .scrollable-results {{
                 max-height: 400px;
                 overflow-y: auto;
@@ -2912,7 +3510,6 @@ class ThemeManager:
                 background: {theme['secondary']};
             }}
             
-            /* Стили для форматированного текста в результатах */
             .formatted-text {{
                 font-family: {theme['font']};
                 line-height: 1.5;
@@ -2942,7 +3539,6 @@ class ThemeManager:
                 border-left: 3px solid #4ECDC4;
             }}
             
-            /* Стили для прокрутки на странице Select */
             .select-scroll-container {{
                 max-height: 600px;
                 overflow-y: auto;
@@ -2967,7 +3563,6 @@ class ThemeManager:
                 background: {theme['secondary']};
             }}
             
-            /* Компактные стили для страницы Select */
             .compact-select-row {{
                 display: flex;
                 align-items: center;
@@ -3005,20 +3600,60 @@ class ThemeManager:
                 color: {theme['primary']};
                 margin-right: 5px;
             }}
+            
+            .recommendation-item {{
+                background-color: {theme['secondaryBackground']};
+                padding: 15px;
+                margin-bottom: 10px;
+                border-radius: 5px;
+                border-left: 4px solid {theme['accent']};
+            }}
+            
+            .recommendation-score {{
+                font-weight: bold;
+                color: {theme['primary']};
+                font-size: 1.1rem;
+            }}
+            
+            .recommendation-title {{
+                font-weight: bold;
+                margin: 5px 0;
+            }}
+            
+            .recommendation-meta {{
+                color: {theme['text']};
+                opacity: 0.8;
+                font-size: 0.9rem;
+                margin-bottom: 5px;
+            }}
+            
+            .recommendation-abstract {{
+                background-color: {theme['background']};
+                padding: 10px;
+                border-radius: 3px;
+                margin-top: 5px;
+                font-size: 0.9rem;
+                line-height: 1.4;
+            }}
+            
+            .recommendation-progress {{
+                margin: 10px 0;
+            }}
             </style>
         """
 
     @staticmethod
     def apply_theme(theme_name: str):
-        """Применение темы к приложению"""
+        """Apply theme to application"""
         st.markdown(ThemeManager.get_theme_css(theme_name), unsafe_allow_html=True)
 
+# Stage Manager
 class StageManager:
-    """Менеджер этапов приложения"""
+    """Application stage manager"""
     
     @staticmethod
     def render_stage_indicator(current_stage: str):
-        """Рендер индикатора этапов (дорожной карты)"""
+        """Render stage indicator"""
         stages = list(Config.STAGES.keys())
         current_index = stages.index(current_stage)
         
@@ -3042,7 +3677,7 @@ class StageManager:
     
     @staticmethod
     def navigate_to(stage: str):
-        """Навигация на указанный этап"""
+        """Navigate to specified stage"""
         if stage not in st.session_state.stage_history:
             st.session_state.stage_history.append(stage)
         st.session_state.current_stage = stage
@@ -3050,7 +3685,7 @@ class StageManager:
     
     @staticmethod
     def go_back():
-        """Возврат к предыдущему этапу"""
+        """Go back to previous stage"""
         if len(st.session_state.stage_history) > 1:
             st.session_state.stage_history.pop()
             previous_stage = st.session_state.stage_history[-1]
@@ -3059,18 +3694,19 @@ class StageManager:
     
     @staticmethod
     def clear_all():
-        """Очистка всех данных и возврат к началу"""
+        """Clear all data and return to start"""
         init_session_state()
         st.session_state.current_stage = 'start'
         st.session_state.stage_history = ['start']
         st.rerun()
 
+# Start Page
 class StartPage:
-    """Страница Start"""
+    """Start page"""
     
     @staticmethod
     def render():
-        """Рендер страницы Start"""
+        """Render start page"""
         st.markdown(f"<h1>{get_text('start_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('start_description')}</p>", unsafe_allow_html=True)
         
@@ -3085,12 +3721,9 @@ class StartPage:
                 StageManager.navigate_to('create')
         
         with col3:
-            # Просто кнопка для перехода к загрузке стиля
             if st.button(get_text('start_load_style'), use_container_width=True, key="load_style_btn"):
-                # Устанавливаем флаг, что пользователь хочет загрузить стиль
                 st.session_state.show_style_loader = True
         
-        # Если пользователь нажал кнопку загрузки, показываем загрузчик
         if st.session_state.get('show_style_loader', False):
             st.markdown("---")
             st.subheader(get_text('load_style'))
@@ -3098,7 +3731,7 @@ class StartPage:
             uploaded_file = st.file_uploader(
                 get_text('import_file'),
                 type=['json'],
-                help="Загрузите файл стиля в формате JSON",
+                help="Load style file in JSON format",
                 key="style_loader"
             )
             
@@ -3112,30 +3745,28 @@ class StartPage:
                     else:
                         style_config = imported_style
                     
-                    # Применение стиля
                     apply_imported_style(style_config)
                     st.session_state.style_config = style_config
                     
                     st.success(get_text('style_loaded'))
                     
-                    # Даем пользователю кнопку для продолжения
                     if st.button(get_text('proceed_to_io'), type="primary"):
                         StageManager.navigate_to('io')
                         
                 except Exception as e:
                     st.error(f"{get_text('import_error')}: {str(e)}")
             
-            # Кнопка для отмены
             if st.button(get_text('back_button')):
                 st.session_state.show_style_loader = False
                 st.rerun()
 
+# Select Page
 class SelectPage:
-    """Страница Select"""
+    """Select page"""
     
     @staticmethod
     def _get_style_previews() -> List[Tuple[int, str, str]]:
-        """Получение превью для всех стилей"""
+        """Get previews for all styles"""
         previews = [
             (1, "ГОСТ", "Dreyer D.R., Park S., Bielawski C.W., Ruoff R.S. The chemistry of graphene oxide // Chemical Society Reviews. – 2010. – Vol. 39, № 1. – Р. 228-240. – https://doi.org/10.1039/B917103G"),
             (2, "ACS (MDPI)", "Dreyer, D.R.; Park, S.; Bielawski, C.W.; Ruoff, R.S. The chemistry of graphene oxide. *Chem. Soc. Rev.* **2010**, *39*, 228–240. https://doi.org/10.1039/B917103G"),
@@ -3152,7 +3783,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_1():
-        """Применение стиля 1 (ГОСТ)"""
+        """Apply style 1 (GOST)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith AA"
         st.session_state.sep = ", "
@@ -3184,7 +3815,6 @@ class SelectPage:
         st.session_state.style10 = False
         st.session_state.custom_style_created = True
         
-        # Создание конфигурации стиля
         st.session_state.style_config = {
             'author_format': st.session_state.auth,
             'author_separator': st.session_state.sep,
@@ -3212,7 +3842,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_2():
-        """Применение стиля 2 (ACS MDPI)"""
+        """Apply style 2 (ACS MDPI)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith, A.A."
         st.session_state.sep = "; "
@@ -3271,7 +3901,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_3():
-        """Применение стиля 3 (RSC)"""
+        """Apply style 3 (RSC)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "A.A. Smith"
         st.session_state.sep = ", "
@@ -3330,7 +3960,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_4():
-        """Применение стиля 4 (CTA)"""
+        """Apply style 4 (CTA)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith AA"
         st.session_state.sep = ", "
@@ -3389,7 +4019,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_5():
-        """Применение стиля 5"""
+        """Apply style 5"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "A.A. Smith"
         st.session_state.sep = ", "
@@ -3448,7 +4078,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_6():
-        """Применение стиля 6"""
+        """Apply style 6"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith, A.A."
         st.session_state.sep = ", "
@@ -3507,7 +4137,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_7():
-        """Применение стиля 7"""
+        """Apply style 7"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith, A.A."
         st.session_state.sep = ", "
@@ -3566,7 +4196,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_8():
-        """Применение стиля 8"""
+        """Apply style 8"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "A. A. Smith"
         st.session_state.sep = ", "
@@ -3625,7 +4255,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_9():
-        """Применение стиля 9 (RCR)"""
+        """Apply style 9 (RCR)"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "A.A.Smith"
         st.session_state.sep = ", "
@@ -3684,7 +4314,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_10():
-        """Применение стиля 10"""
+        """Apply style 10"""
         st.session_state.num = "No numbering"
         st.session_state.auth = "Smith AA"
         st.session_state.sep = " "
@@ -3743,7 +4373,7 @@ class SelectPage:
     
     @staticmethod
     def _apply_style_by_number(style_num: int):
-        """Применение стиля по номеру"""
+        """Apply style by number"""
         style_apply_functions = {
             1: SelectPage._apply_style_1,
             2: SelectPage._apply_style_2,
@@ -3762,31 +4392,26 @@ class SelectPage:
 
     @staticmethod
     def _render_compact_style_row(style_num: int, style_name: str, preview_text: str):
-        """Компактный рендер строки стиля с кнопкой и превью"""
-        # Используем Streamlit columns для компактного отображения
+        """Compact render style row with button and preview"""
         col_btn, col_preview = st.columns([1, 9])
         
         with col_btn:
-            # Компактная кнопка Streamlit
             btn_key = f"select_style_{style_num}_{hash(preview_text)}"
             if st.button(f"Style {style_num}", 
                         key=btn_key,
                         use_container_width=True,
                         type="primary" if style_num <= 4 else "secondary"):
-                # Применяем стиль по номеру
                 SelectPage._apply_style_by_number(style_num)
-                # Переход к следующему шагу
                 StageManager.navigate_to('io')
         
         with col_preview:
             preview_clean = preview_text.replace('\n', ' ')
-            display_text = preview_clean  # Показываем полный текст
+            display_text = preview_clean
             formatted_html = display_text
             formatted_html = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', formatted_html)
             formatted_html = re.sub(r'\*(?!\*)(.*?)(?<!\*)\*', r'<em>\1</em>', formatted_html)
             formatted_html = re.sub(r'_(.*?)_', r'<em>\1</em>', formatted_html)
             
-            # Отображаем с HTML форматированием
             html_content = f"""
             <div style="font-family: 'Courier New', monospace; font-size: 0.8rem; 
                         line-height: 1.2; padding: 3px; background-color: var(--secondaryBackground); 
@@ -3796,46 +4421,43 @@ class SelectPage:
             </div>
             """
             st.markdown(html_content, unsafe_allow_html=True)
-        
+    
     @staticmethod
     def render():
-        """Компактный рендер страницы Select - все стили на одной странице без прокрутки"""
+        """Compact render select page"""
         st.markdown(f"<h1 style='margin-bottom: 5px; font-size: 1.4rem;'>{get_text('select_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 10px; font-size: 0.85rem;'>{get_text('select_description')}</p>", unsafe_allow_html=True)
         
-        # Получаем все превью стилей
         style_previews = SelectPage._get_style_previews()
         
-        # Отображаем все стили в компактном формате с использованием Streamlit
         for style_num, style_name, preview_text in style_previews:
-            SelectPage._render_compact_style_row(style_num, style_name, preview_text)  # <-- ИСПРАВЛЕНО: используем существующую функцию
+            SelectPage._render_compact_style_row(style_num, style_name, preview_text)
         
-        # Кнопки навигации (компактные)
         st.markdown("<div style='margin-top: 15px; padding-top: 10px; border-top: 1px solid var(--border);'>", unsafe_allow_html=True)
         col_back, col_custom = st.columns([1, 1])
         
         with col_back:
             if st.button(get_text('back_to_start'), use_container_width=True, key="back_from_select", 
-                        help="Вернуться на начальную страницу"):
+                        help="Return to start page"):
                 StageManager.navigate_to('start')
         
         with col_custom:
             if st.button("Create Custom Style", use_container_width=True, key="go_to_custom",
-                        help="Перейти к созданию пользовательского стиля"):
+                        help="Go to custom style creation"):
                 StageManager.navigate_to('create')
         
         st.markdown("</div>", unsafe_allow_html=True)
 
+# Create Page
 class CreatePage:
-    """Страница Create"""
+    """Create page"""
     
     @staticmethod
     def render():
-        """Рендер страницы Create"""
+        """Render create page"""
         st.markdown(f"<h1>{get_text('create_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('create_description')}</p>", unsafe_allow_html=True)
         
-        # Контейнер для настроек
         with st.container():
             CreatePage._render_general_settings()
             CreatePage._render_element_configuration()
@@ -3844,7 +4466,7 @@ class CreatePage:
     
     @staticmethod
     def _render_general_settings():
-        """Рендер общих настроек в формате 3x4"""
+        """Render general settings in 3x4 format"""
         st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('general_settings')}</div>", unsafe_allow_html=True)
 
         st.markdown("""
@@ -3859,12 +4481,11 @@ class CreatePage:
         </style>
         """, unsafe_allow_html=True)
         
-        # Строка 1
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
             num_value = st.session_state.num
-            num_index = 0  # значение по умолчанию
+            num_index = 0
             if num_value in Config.NUMBERING_STYLES:
                 num_index = Config.NUMBERING_STYLES.index(num_value)
             
@@ -3877,7 +4498,7 @@ class CreatePage:
 
         with col2:
             auth_value = st.session_state.auth
-            auth_index = 0  # значение по умолчанию
+            auth_index = 0
             if auth_value in Config.AUTHOR_FORMATS:
                 auth_index = Config.AUTHOR_FORMATS.index(auth_value)
             
@@ -3905,7 +4526,6 @@ class CreatePage:
                 value=st.session_state.etal
             )
         
-        # Строка 2
         col5, col6, col7, col8 = st.columns(4)
         
         with col5:
@@ -3924,7 +4544,7 @@ class CreatePage:
         
         with col7:
             journal_style_value = st.session_state.journal_style
-            journal_index = 0  # значение по умолчанию
+            journal_index = 0
             if journal_style_value in Config.JOURNAL_STYLES:
                 journal_index = Config.JOURNAL_STYLES.index(journal_style_value)
             
@@ -3942,7 +4562,7 @@ class CreatePage:
         
         with col8:
             current_page = st.session_state.page
-            page_index = 0  # значение по умолчанию
+            page_index = 0
             if current_page in Config.PAGE_FORMATS:
                 page_index = Config.PAGE_FORMATS.index(current_page)
             
@@ -3953,12 +4573,11 @@ class CreatePage:
                 index=page_index
             )
         
-        # Строка 3
         col9, col10, col11, col12 = st.columns(4)
 
         with col9:
             doi_value = st.session_state.doi
-            doi_index = 0  # значение по умолчанию
+            doi_index = 0
             if doi_value in Config.DOI_FORMATS:
                 doi_index = Config.DOI_FORMATS.index(doi_value)
             
@@ -3985,17 +4604,15 @@ class CreatePage:
             )
         
         with col12:
-            # Пустая колонка для выравнивания
             st.write("")
         
         st.markdown("</div>", unsafe_allow_html=True)
     
     @staticmethod
     def _render_element_configuration():
-        """Рендер конфигурации элементов в формате 5 колонок"""
+        """Render element configuration in 5 columns"""
         st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('element_config')}</div>", unsafe_allow_html=True)
         
-        # Заголовки колонок
         cols = st.columns([2, 1, 1, 1, 2])
         with cols[0]:
             st.markdown(f"<small><b>{get_text('element')}</b></small>", unsafe_allow_html=True)
@@ -4008,13 +4625,12 @@ class CreatePage:
         with cols[4]:
             st.markdown(f"<small><b>{get_text('separator')}</b></small>", unsafe_allow_html=True)
         
-        # Элементы конфигурации
         for i in range(8):
             cols = st.columns([2, 1, 1, 1, 2])
             
             with cols[0]:
                 el_value = st.session_state[f"el{i}"]
-                el_index = 0  # значение по умолчанию
+                el_index = 0
                 if el_value in Config.AVAILABLE_ELEMENTS:
                     el_index = Config.AVAILABLE_ELEMENTS.index(el_value)
                 
@@ -4059,8 +4675,7 @@ class CreatePage:
         
     @staticmethod              
     def _render_style_preview():
-        """Рендер предпросмотра стиля"""
-        # Создание конфигурации стиля для предпросмотра
+        """Render style preview"""
         style_config = CreatePage._get_style_config()
         
         if style_config['elements'] or any([style_config.get('gost_style', False), 
@@ -4076,24 +4691,18 @@ class CreatePage:
             
             preview_metadata = CreatePage._get_preview_metadata(style_config)
             if preview_metadata:
-                # Получаем отформатированные элементы (не строку)
                 elements, _ = format_reference(preview_metadata, style_config, for_preview=False)
                 preview_with_numbering = CreatePage._add_numbering_to_elements(elements, style_config)
                 
                 st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
                 
-                # Используем ту же логику, что и в ResultsPage
                 st.markdown(f"<small><b>{get_text('example')}</b></small>", unsafe_allow_html=True)
                 
-                # Создаем HTML с форматированием, как в ResultsPage
                 if isinstance(elements, str):
-                    # Если элементы уже строка
                     display_html = f'<div class="formatted-text">{preview_with_numbering}</div>'
                 else:
-                    # Формируем HTML с форматированием, как в ResultsPage
                     html_parts = []
                     
-                    # Добавляем нумерацию
                     numbering = style_config.get('numbering_style', 'No numbering')
                     prefix = ""
                     if numbering != "No numbering":
@@ -4115,7 +4724,6 @@ class CreatePage:
                     for j, element_data in enumerate(elements):
                         value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
                         
-                        # Определяем классы форматирования как в ResultsPage
                         format_classes = []
                         if italic and bold:
                             format_classes.append("formatted-text-italic-bold")
@@ -4126,7 +4734,6 @@ class CreatePage:
                         
                         format_class = " ".join(format_classes) if format_classes else ""
                         
-                        # Создаем HTML элемент
                         if format_class:
                             value_html = f'<span class="{format_class}">{value}</span>'
                         else:
@@ -4137,9 +4744,7 @@ class CreatePage:
                         if separator and j < len(elements) - 1:
                             html_parts.append(f'<span>{separator}</span>')
                     
-                    # Добавляем конечную пунктуацию
                     if style_config.get('final_punctuation'):
-                        # Убираем точку, если уже есть
                         if html_parts and html_parts[-1].endswith('.'):
                             html_parts[-1] = html_parts[-1][:-1]
                         html_parts.append('<span>.</span>')
@@ -4153,7 +4758,7 @@ class CreatePage:
     
     @staticmethod
     def _add_numbering_to_elements(elements, style_config):
-        """Добавление нумерации к элементам (для обратной совместичности)"""
+        """Add numbering to elements"""
         if isinstance(elements, str):
             numbering = style_config.get('numbering_style', 'No numbering')
             if numbering == "No numbering":
@@ -4174,7 +4779,7 @@ class CreatePage:
     
     @staticmethod
     def _get_style_config() -> Dict:
-        """Получение конфигурации стиля"""
+        """Get style configuration"""
         element_configs = []
         used_elements = set()
         
@@ -4219,7 +4824,7 @@ class CreatePage:
 
     @staticmethod
     def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
-        """Получение метаданных для предпросмотра"""
+        """Get metadata for preview"""
         if style_config.get('gost_style', False) or style_config.get('style5', False) or style_config.get('style6', False) or style_config.get('style7', False) or style_config.get('style8', False) or style_config.get('style9', False) or style_config.get('style10', False):
             return {
                 'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
@@ -4274,7 +4879,6 @@ class CreatePage:
                 'doi': '10.1039/B917103G'
             }
         elif style_config.get('elements'):
-            # Возвращаем данные, которые хорошо демонстрируют форматирование
             return {
                 'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
                 'title': 'Advanced Research in Materials Science',
@@ -4291,7 +4895,7 @@ class CreatePage:
     
     @staticmethod
     def _add_numbering(preview_ref: str, style_config: Dict) -> str:
-        """Добавление нумерации к предпросмотру"""
+        """Add numbering to preview"""
         numbering = style_config['numbering_style']
         if numbering == "No numbering":
             return preview_ref
@@ -4310,7 +4914,7 @@ class CreatePage:
     
     @staticmethod
     def _render_action_buttons():
-        """Рендер кнопок действий"""
+        """Render action buttons"""
         col1, col2, col3 = st.columns([1, 1, 1])
         
         with col1:
@@ -4340,7 +4944,7 @@ class CreatePage:
     
     @staticmethod
     def _export_style(style_config: Dict) -> Optional[bytes]:
-        """Экспорт стиля"""
+        """Export style"""
         try:
             export_data = {
                 'version': '1.0',
@@ -4353,23 +4957,22 @@ class CreatePage:
             st.error(f"Export error: {str(e)}")
             return None
 
+# Input/Output Page
 class InputOutputPage:
-    """Страница Input/Output"""
+    """Input/Output page"""
     
     @staticmethod
     def render():
-        """Рендер страницы Input/Output"""
+        """Render Input/Output page"""
         st.markdown(f"<h1>{get_text('io_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('io_description')}</p>", unsafe_allow_html=True)
         
-        # Проверка наличия конфигурации стиля
         if not hasattr(st.session_state, 'style_config') or not st.session_state.style_config:
             st.warning(get_text('validation_error_no_elements'))
             if st.button(get_text('back_to_start'), use_container_width=True):
                 StageManager.navigate_to('start')
             return
         
-        # Ввод данных
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('data_input')}</div>", unsafe_allow_html=True)
         
         input_method = st.radio(
@@ -4399,7 +5002,6 @@ class InputOutputPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Вывод данных
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('data_output')}</div>", unsafe_allow_html=True)
         
         output_method = st.radio(
@@ -4411,7 +5013,6 @@ class InputOutputPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Кнопки действий
         col1, col2, col3 = st.columns([1, 2, 1])
         
         with col1:
@@ -4428,13 +5029,11 @@ class InputOutputPage:
     
     @staticmethod
     def _process_data():
-        """Обработка данных"""
-        # Проверка наличия конфигурации стиля
+        """Process data"""
         if not hasattr(st.session_state, 'style_config') or not st.session_state.style_config:
             st.error(get_text('validation_error_no_elements'))
             return
         
-        # Проверка ввода данных
         if st.session_state.input_method == 'DOCX':
             if not st.session_state.uploaded_file:
                 st.error(get_text('upload_file'))
@@ -4446,7 +5045,6 @@ class InputOutputPage:
                 return
             references = [ref.strip() for ref in st.session_state.text_input.split('\n') if ref.strip()]
         
-        # Обработка ссылок
         processor = ReferenceProcessor()
         progress_container = st.empty()
         status_container = st.empty()
@@ -4457,37 +5055,43 @@ class InputOutputPage:
             )
             
             statistics = generate_statistics(formatted_refs)
+            
+            recommendations_df = None
+            if len(formatted_refs) >= Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+                st.info(f"Found {len(formatted_refs)} references. Recommendations will be available on the Results page.")
+            
             docx_buffer = DocumentGenerator.generate_document(
-                formatted_refs, statistics, st.session_state.style_config, duplicates_info
+                formatted_refs, statistics, st.session_state.style_config, duplicates_info, recommendations_df
             )
             
-            # Сохранение результатов
             st.session_state.formatted_refs = formatted_refs
-            st.session_state.txt_buffer = formatted_txt_buffer  # Используем отформатированный TXT
-            st.session_state.formatted_txt_buffer = formatted_txt_buffer  # Сохраняем отдельно
-            st.session_state.original_txt_buffer = original_txt_buffer  # Сохраняем оригинальный для совместимости
+            st.session_state.txt_buffer = formatted_txt_buffer
+            st.session_state.formatted_txt_buffer = formatted_txt_buffer
+            st.session_state.original_txt_buffer = original_txt_buffer
             st.session_state.docx_buffer = docx_buffer
             st.session_state.doi_found_count = doi_found_count
             st.session_state.doi_not_found_count = doi_not_found_count
             st.session_state.duplicates_info = duplicates_info
             st.session_state.processing_complete = True
             st.session_state.processing_start_time = time.time()
+            st.session_state.recommendations_generated = False
+            st.session_state.recommendations = None
             
-            # Переход к результатам
             StageManager.navigate_to('results')
     
     @staticmethod
     def _extract_references_from_docx(uploaded_file) -> List[str]:
-        """Извлечение ссылок из DOCX файла"""
+        """Extract references from DOCX file"""
         doc = Document(uploaded_file)
         return [para.text.strip() for para in doc.paragraphs if para.text.strip()]
 
+# Results Page with Recommendations
 class ResultsPage:
-    """Страница Results"""
+    """Results page with recommendations"""
     
     @staticmethod
     def render():
-        """Рендер страницы Results"""
+        """Render results page"""
         st.markdown(f"<h1>{get_text('results_title')}</h1>", unsafe_allow_html=True)
         st.markdown(f"<p style='margin-bottom: 30px;'>{get_text('results_description')}</p>", unsafe_allow_html=True)
         
@@ -4497,7 +5101,6 @@ class ResultsPage:
                 StageManager.navigate_to('start')
             return
         
-        # Статистика
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('statistics_title')}</div>", unsafe_allow_html=True)
         
         col1, col2, col3, col4 = st.columns(4)
@@ -4517,37 +5120,29 @@ class ResultsPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Превью результатов с прокруткой
         st.markdown(f"<div class='card'><div class='card-title'>Preview of Results ({len(st.session_state.formatted_refs)} references)</div>", unsafe_allow_html=True)
         
-        # Создаем прокручиваемый контейнер
         st.markdown('<div class="scrollable-results">', unsafe_allow_html=True)
         
         for i, (elements, is_error, metadata) in enumerate(st.session_state.formatted_refs):
-            # Определяем стиль в зависимости от типа ссылки
             css_class = "formatted-text"
             if is_error:
                 css_class += " error-reference"
             elif i in st.session_state.duplicates_info:
                 css_class += " duplicate-reference"
             
-            # Формируем текст с форматированием
             if is_error:
-                # Для ошибок просто показываем текст
                 formatted_text = str(elements)
                 display_html = f'<div class="{css_class}">{formatted_text}</div>'
             else:
                 if isinstance(elements, str):
-                    # Если элементы уже строка
                     formatted_text = elements
                     display_html = f'<div class="{css_class}">{formatted_text}</div>'
                 else:
-                    # Формируем HTML с форматированием
                     html_parts = []
                     for j, element_data in enumerate(elements):
                         value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
                         
-                        # Определяем классы форматирования
                         format_classes = []
                         if italic and bold:
                             format_classes.append("formatted-text-italic-bold")
@@ -4558,7 +5153,6 @@ class ResultsPage:
                         
                         format_class = " ".join(format_classes) if format_classes else ""
                         
-                        # Создаем HTML элемент
                         if format_class:
                             value_html = f'<span class="{format_class}">{value}</span>'
                         else:
@@ -4569,20 +5163,16 @@ class ResultsPage:
                         if separator and j < len(elements) - 1:
                             html_parts.append(separator)
                     
-                    # Добавляем примечание о дубликате
                     if i in st.session_state.duplicates_info:
                         original_index = st.session_state.duplicates_info[i] + 1
                         duplicate_note = get_text('duplicate_reference').format(original_index)
                         html_parts.append(f' - <em>{duplicate_note}</em>')
                     
-                    # Добавляем конечную пунктуацию
                     if st.session_state.style_config.get('final_punctuation') and not is_error:
-                        # Убираем точку, если уже есть
                         if html_parts and html_parts[-1].endswith('.'):
                             html_parts[-1] = html_parts[-1][:-1]
                         html_parts.append('.')
                     
-                    # Добавляем нумерацию
                     numbering = st.session_state.style_config.get('numbering_style', 'No numbering')
                     prefix = ""
                     if numbering != "No numbering":
@@ -4608,7 +5198,6 @@ class ResultsPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Кнопки скачивания
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('download_results')}</div>", unsafe_allow_html=True)
         
         col_download1, col_download2 = st.columns(2)
@@ -4639,7 +5228,9 @@ class ResultsPage:
         
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Кнопки навигации
+        if len(st.session_state.formatted_refs) >= Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+            ResultsPage._render_recommendations_section()
+        
         col_nav1, col_nav2, col_nav3 = st.columns([1, 1, 1])
         
         with col_nav1:
@@ -4653,40 +5244,140 @@ class ResultsPage:
         with col_nav3:
             if st.button(get_text('new_session'), use_container_width=True, key="new_session_results"):
                 StageManager.clear_all()
+    
+    @staticmethod
+    def _render_recommendations_section():
+        """Render recommendations section"""
+        st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendations_title')}</div>", unsafe_allow_html=True)
+        
+        current_year = datetime.now().year
+        min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
+        
+        st.markdown(f"<p>{get_text('recommendations_description').format(Config.RECOMMENDATION_YEARS_BACK)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
+        
+        if not st.session_state.recommendations_generated:
+            col_rec1, col_rec2 = st.columns([3, 1])
+            
+            with col_rec1:
+                st.info(get_text('recommendations_not_enough').format(Config.MIN_REFERENCES_FOR_RECOMMENDATIONS))
+            
+            with col_rec2:
+                if st.button(get_text('recommend_similar_articles'), use_container_width=True, key="generate_recommendations"):
+                    st.session_state.recommendations_loading = True
+                    st.rerun()
+        
+        if st.session_state.recommendations_loading:
+            with st.spinner(get_text('recommendations_loading')):
+                recommendations_df = ArticleRecommender.generate_recommendations(st.session_state.formatted_refs)
+                
+                if recommendations_df is not None and not recommendations_df.empty:
+                    st.session_state.recommendations = recommendations_df
+                    st.session_state.recommendations_generated = True
+                    
+                    recommendations_txt = ArticleRecommender.create_recommendations_txt(recommendations_df)
+                    recommendations_csv = ArticleRecommender.create_recommendations_csv(recommendations_df)
+                    
+                    st.session_state.recommendations_txt_buffer = recommendations_txt
+                    st.session_state.recommendations_csv_buffer = recommendations_csv
+                    
+                    docx_buffer_with_recs = DocumentGenerator.generate_document(
+                        st.session_state.formatted_refs,
+                        generate_statistics(st.session_state.formatted_refs),
+                        st.session_state.style_config,
+                        st.session_state.duplicates_info,
+                        recommendations_df
+                    )
+                    st.session_state.docx_buffer = docx_buffer_with_recs
+                    
+                    st.success(get_text('recommendations_count').format(len(recommendations_df)))
+                    st.rerun()
+                else:
+                    st.warning(get_text('recommendations_no_results'))
+                    st.session_state.recommendations_loading = False
+        
+        if st.session_state.recommendations_generated and st.session_state.recommendations is not None:
+            recommendations_df = st.session_state.recommendations
+            
+            st.markdown(f"<h3>{get_text('recommendations_count').format(len(recommendations_df))}</h3>", unsafe_allow_html=True)
+            
+            for idx, row in recommendations_df.iterrows():
+                with st.expander(f"Recommendation {idx+1}: {row['title'][:80]}... (Score: {row['score']:.3f})"):
+                    st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<div class='recommendation-score'>{get_text('recommendation_score')} {row['score']:.3f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-title'>{row['title']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>{get_text('recommendation_year')} {row['year']} | {get_text('recommendation_journal')} {row['journal']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>Authors: {row['authors']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>DOI: {row['doi']}</div>", unsafe_allow_html=True)
+                    
+                    if row['abstract']:
+                        if st.checkbox(f"Show abstract for recommendation {idx+1}", key=f"show_abstract_{idx}"):
+                            st.markdown(f"<div class='recommendation-abstract'>{row['abstract']}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown(f"<div class='recommendation-meta'>Similarity: Title={row['title_sim']:.3f}, Content={row['content_sim']:.3f}, Semantic={row['semantic_sim']:.3f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>Common terms: {row['common_terms']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>Source: {row['source']}</div>", unsafe_allow_html=True)
+                    
+                    st.markdown("</div>", unsafe_allow_html=True)
+            
+            st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
+            
+            col_rec_download1, col_rec_download2 = st.columns(2)
+            
+            with col_rec_download1:
+                if st.session_state.recommendations_txt_buffer:
+                    st.download_button(
+                        label=get_text('recommendation_download_txt'),
+                        data=st.session_state.recommendations_txt_buffer.getvalue(),
+                        file_name='article_recommendations.txt',
+                        mime='text/plain',
+                        use_container_width=True,
+                        key="download_recommendations_txt"
+                    )
+            
+            with col_rec_download2:
+                if st.session_state.recommendations_csv_buffer:
+                    st.download_button(
+                        label=get_text('recommendation_download_csv'),
+                        data=st.session_state.recommendations_csv_buffer.getvalue(),
+                        file_name='article_recommendations.csv',
+                        mime='text/csv',
+                        use_container_width=True,
+                        key="download_recommendations_csv"
+                    )
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("</div>", unsafe_allow_html=True)
 
-# Главный класс приложения
+# Main Application Class
 class CitationStyleApp:
-    """Основной класс приложения"""
+    """Main application class"""
     
     def __init__(self):
         self.user_prefs = UserPreferencesManager()
         init_session_state()
     
     def run(self):
-        """Запуск приложения"""
+        """Run application"""
         st.set_page_config(
             page_title="Citation Style Constructor",
             page_icon="🎨",
             layout="wide"
         )
         
-        # Загрузка пользовательских предпочтений
         self._load_user_preferences()
         
-        # Применение темы
         ThemeManager.apply_theme(st.session_state.current_theme)
         
-        # Рендер заголовка и контролов
         self._render_header()
         
-        # Рендер индикатора этапов
         StageManager.render_stage_indicator(st.session_state.current_stage)
         
-        # Рендер текущей страницы
         self._render_current_page()
 
     def _load_user_preferences(self):
-        """Загрузка пользовательских предпочтений"""
+        """Load user preferences"""
         if not st.session_state.user_prefs_loaded:
             ip = self.user_prefs.get_user_ip()
             prefs = self.user_prefs.get_preferences(ip)
@@ -4700,7 +5391,7 @@ class CitationStyleApp:
             st.session_state.user_prefs_loaded = True
 
     def _render_header(self):
-        """Рендер заголовка и контролов"""
+        """Render header and controls"""
         col_title, col_lang, col_theme = st.columns([2, 1, 1])
         
         with col_title:
@@ -4717,12 +5408,11 @@ class CitationStyleApp:
             )
             
             if selected_language[1] != st.session_state.current_language:
-                # Сохраняем текущую тему вместе с новым языком
                 self.user_prefs.save_preferences(
                     self.user_prefs.get_user_ip(),
                     {
                         'language': selected_language[1],
-                        'theme': st.session_state.current_theme  # Сохраняем текущую тему!
+                        'theme': st.session_state.current_theme
                     }
                 )
                 st.session_state.current_language = selected_language[1]
@@ -4737,7 +5427,6 @@ class CitationStyleApp:
                 (get_text('newspaper_theme'), 'newspaper')
             ]
             
-            # Находим индекс текущей темы
             current_theme_index = 0
             for i, (_, theme_id) in enumerate(themes):
                 if theme_id == st.session_state.current_theme:
@@ -4764,7 +5453,7 @@ class CitationStyleApp:
                 st.rerun()
     
     def _render_current_page(self):
-        """Рендер текущей страницы"""
+        """Render current page"""
         current_stage = st.session_state.current_stage
         
         if current_stage == 'start':
@@ -4780,7 +5469,7 @@ class CitationStyleApp:
         else:
             StartPage.render()
 
-# Вспомогательные функции для обратной совместимости
+# Compatibility functions
 def clean_text(text):
     return DOIProcessor()._clean_text(text)
 
@@ -4934,7 +5623,7 @@ def import_style(uploaded_file):
         return None
 
 def apply_imported_style(imported_style):
-    """Применение импортированного стиля"""
+    """Apply imported style"""
     if not imported_style:
         return
     
@@ -4992,7 +5681,7 @@ def apply_imported_style(imported_style):
     st.session_state.custom_style_created = True
 
 def main():
-    """Основная функция"""
+    """Main function"""
     app = CitationStyleApp()
     app.run()
 
