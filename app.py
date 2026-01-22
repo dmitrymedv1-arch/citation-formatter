@@ -4973,7 +4973,7 @@ class InputOutputPage:
                 StageManager.clear_all()
     
     @staticmethod
-    def _process_data(self):
+    def _process_data():
         """Обработка данных с поиском рекомендаций"""
         # Проверка наличия конфигурации стиля
         if not hasattr(st.session_state, 'style_config') or not st.session_state.style_config:
@@ -5559,6 +5559,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
