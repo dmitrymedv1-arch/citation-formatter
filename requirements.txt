@@ -7,3 +7,10 @@ rich
 plotly
 pandas
 kaleido
+scikit-learn
+nltk
+spacy
+sentence-transformers
+gensim
+transformers
+torch
