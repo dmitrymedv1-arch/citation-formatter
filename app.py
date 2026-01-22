@@ -2524,7 +2524,7 @@ class SimpleArticleRecommender:
         
         for candidate in candidates:
             # Фильтр 1: Исключаем статьи с >100 цитирований
-            if candidate.get('cited_by_count', 0) > 100:
+            if candidate.get('cited_by_count', 0) > 10:
                 continue
             
             # Фильтр 2: Исключаем статьи старше 5 лет
@@ -6071,6 +6071,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
