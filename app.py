@@ -3190,7 +3190,8 @@ class ArticleRecommender:
             output_txt_buffer.write(f"    Authors: {row['authors']}\n")
             output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
             output_txt_buffer.write(f"    DOI: {row['doi']}\n")
-            output_txt_buffer.write(f"    Citations: {row.get('citation_count', 'N/A')}\n")
+            citations = row.get('citation_count', 0) or 0  # ← добавляем or 0 для None
+            output_txt_buffer.write(f"    Citations: {citations}\n")
             if row.get('abstract'):
                 output_txt_buffer.write(f"    Abstract: {row['abstract']}\n")
             output_txt_buffer.write(f"    Source: {row['source']}\n")
@@ -6217,14 +6218,18 @@ class ResultsPage:
         if st.session_state.recommendations_generated and st.session_state.recommendations is not None:
             recommendations_df = st.session_state.recommendations
             
-            # Показываем статистику
+            # Вычисляем среднее число цитирований отдельно
+            avg_citations = recommendations_df['citation_count'].mean() if not recommendations_df.empty else 0
+            avg_citations_str = f"{avg_citations:.1f}" if not recommendations_df.empty else "0"
+            source_str = recommendations_df['source'].iloc[0] if not recommendations_df.empty else 'unknown'
+            
             st.markdown(f"""
             <div class='stat-card' style='margin: 20px 0;'>
                 <div class='stat-value'>{len(recommendations_df)}</div>
                 <div class='stat-label'>Recommendations found</div>
                 <div style='font-size: 0.8rem; margin-top: 5px;'>
-                    Source: {recommendations_df['source'].iloc[0] if not recommendations_df.empty else 'unknown'} | 
-                    Avg citations: {recommendations_df['citation_count'].mean():.1f if not recommendations_df.empty else 0}
+                    Source: {source_str} | 
+                    Avg citations: {avg_citations_str}
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -6640,4 +6645,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
