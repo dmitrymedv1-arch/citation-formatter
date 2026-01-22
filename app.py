@@ -25,7 +25,6 @@ from pathlib import Path
 import sqlite3
 from contextlib import contextmanager
 import requests
-import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO,
@@ -629,488 +628,6 @@ class StyleValidator:
             warnings.append(get_text('validation_warning_few_references'))
         
         return len(errors) == 0, errors + warnings
-
-class LiteratureGapRecommender:
-    """
-    Интеллектуальный рекомендатель недостающих ключевых работ.
-    Анализирует список литературы и предлагает схожие статьи за последние 5 лет.
-    """
-
-    def __init__(self, email: str = "citation-constructor@example.com"):
-        self.email = email
-        self.headers = {'User-Agent': f'CitationConstructor/1.0 ({email})'}
-        # Используем те же процессоры, что и в IntelligentArticleFinder
-        self.text_processor = EnhancedTextProcessor()
-        self.comparator = EnhancedComparator(self.text_processor)
-
-    def should_recommend(self, formatted_refs: List) -> bool:
-        """
-        Определяет, нужно ли показывать рекомендации.
-        Правило: рекомендации только если есть >=10 успешно обработанных ссылок.
-        """
-        # Подсчитываем только успешно обработанные ссылки (не ошибки)
-        valid_refs = [ref for ref in formatted_refs if not ref[1]]  # ref[1] = is_error
-        return len(valid_refs) >= 10
-
-    def get_collective_key_terms(self, formatted_refs: List, top_k: int = 20) -> List[str]:
-        """
-        Извлекает общие ключевые термины из всего списка литературы.
-        Объединяет заголовки и аннотации всех статей.
-        """
-        if not formatted_refs:
-            return []
-
-        all_text = []
-        for elements, is_error, metadata in formatted_refs:
-            if is_error or not metadata:
-                continue
-            # Используем title и abstract из метаданных
-            if metadata.get('title'):
-                all_text.append(metadata['title'])
-            if metadata.get('abstract'):
-                all_text.append(metadata['abstract'])
-
-        combined_text = " ".join(all_text)
-        return self.text_processor.extract_key_terms(combined_text, top_k=top_k)
-
-    def find_recommendations(self,
-                           formatted_refs: List,
-                           max_recommendations: int = 20,
-                           progress_callback=None) -> Optional[Any]:
-        """
-        Основная функция: находит рекомендации на основе всего списка литературы.
-        Возвращает DataFrame с рекомендованными статьями.
-        """
-        if not self.should_recommend(formatted_refs):
-            return None
-
-        print("\n" + "="*70)
-        print("🔍 АНАЛИЗ СПИСКА ЛИТЕРАТУРЫ И ПОИСК РЕКОМЕНДАЦИЙ")
-        print("="*70)
-
-        if progress_callback:
-            progress_callback(10, "Анализ списка литературы")
-
-        # 1. Извлекаем DOI и метаданные из успешно обработанных ссылок
-        existing_dois = set()
-        recent_year = datetime.now().year
-        min_year = recent_year - 5  # Статьи за последние 5 лет
-
-        for _, is_error, metadata in formatted_refs:
-            if is_error or not metadata:
-                continue
-            if metadata.get('doi'):
-                existing_dois.add(metadata['doi'])
-            # Также учитываем год для фильтрации
-            if metadata.get('year'):
-                min_year = min(min_year, metadata['year'])
-
-        # Берем дату анализа за точку отсчета
-        min_year = recent_year - 5
-        print(f"Текущий год анализа: {recent_year}")
-        print(f"Ищем статьи, начиная с: {min_year}")
-        print(f"Известных DOI в текущем списке: {len(existing_dois)}")
-
-        if progress_callback:
-            progress_callback(20, "Извлечение ключевых терминов")
-
-        # 2. Извлекаем общие ключевые термины
-        key_terms = self.get_collective_key_terms(formatted_refs, top_k=15)
-        print(f"Выявлены ключевые термины: {', '.join(key_terms[:10])}")
-
-        # 3. Расширяем синонимами
-        all_search_terms = key_terms.copy()
-        # Берем контекст из нескольких статей для лучшего подбора синонимов
-        sample_context = ""
-        for _, is_error, metadata in formatted_refs[:3]:
-            if not is_error and metadata:
-                if metadata.get('title'):
-                    sample_context += metadata['title'] + " "
-                if metadata.get('abstract'):
-                    sample_context += metadata.get('abstract', '') + " "
-
-        synonyms = self.text_processor.get_contextual_synonyms(key_terms[:8], sample_context)
-        all_search_terms.extend(list(synonyms)[:5])
-        print(f"Дополнительные термины (синонимы): {', '.join(list(synonyms)[:5])}")
-
-        if progress_callback:
-            progress_callback(30, "Поиск кандидатов в базах данных")
-
-        # 4. ИНТЕЛЛЕКТУАЛЬНЫЙ ПОИСК КАНДИДАТОВ (аналогично IntelligentArticleFinder)
-        candidates = []
-        search_strategies = [
-            " ".join(all_search_terms[:3]),  # 3 самых важных термина
-            f"{all_search_terms[0]} {all_search_terms[1]}",
-            " ".join(all_search_terms[1:4]),
-        ]
-
-        # Добавляем фразы из 2+ слов как отдельные стратегии
-        multi_word_terms = [term for term in all_search_terms if len(term.split()) > 1]
-        search_strategies.extend(multi_word_terms[:2])
-
-        search_strategies = list(dict.fromkeys(search_strategies))[:4]
-        print(f"Стратегии поиска: {search_strategies}")
-
-        for i, strategy in enumerate(search_strategies):
-            if progress_callback:
-                progress_callback(30 + i * 10, f"Поиск {i+1}/{len(search_strategies)}")
-
-            # Поиск в Crossref (используя предоставленный API endpoint)
-            crossref_items = self._search_crossref_with_filters(
-                strategy,
-                max_results=25,
-                min_year=min_year
-            )
-            candidates.extend(crossref_items)
-
-            # Поиск в OpenAlex (используя предоставленный API endpoint)
-            openalex_items = self._search_openalex_with_filters(
-                strategy,
-                max_results=25,
-                min_year=min_year
-            )
-            candidates.extend(openalex_items)
-
-            time.sleep(0.5)  # Уважаем rate limits API
-
-        # 5. ФИЛЬТРАЦИЯ КАНДИДАТОВ
-        if progress_callback:
-            progress_callback(70, "Фильтрация кандидатов")
-
-        # Удаляем дубликаты по заголовку и исключаем уже имеющиеся DOI
-        unique_candidates = []
-        seen_titles = set()
-
-        for candidate in candidates:
-            # Проверка по DOI
-            if candidate.get('doi') in existing_dois:
-                continue
-
-            # Проверка года (только свежие статьи)
-            if candidate.get('year', 0) < min_year:
-                continue
-
-            # Проверка на уникальность заголовка
-            title_key = candidate['title'][:80].lower()
-            if title_key not in seen_titles:
-                seen_titles.add(title_key)
-                unique_candidates.append(candidate)
-
-        print(f"\n✅ После фильтрации осталось {len(unique_candidates)} релевантных кандидатов")
-
-        if len(unique_candidates) < 5:
-            print("⚠️  Найдено слишком мало кандидатов для качественных рекомендаций")
-            return None
-
-        if progress_callback:
-            progress_callback(80, "Оценка релевантности")
-
-        # 6. ОЦЕНКА РЕЛЕВАНТНОСТИ ОТНОСИТЕЛЬНО ВСЕГО СПИСКА ЛИТЕРАТУРЫ
-        # Создаем "профиль" всего списка литературы
-        all_refs_text = " ".join([
-            f"{metadata.get('title', '')} {metadata.get('abstract', '')}"
-            for _, is_error, metadata in formatted_refs
-            if not is_error and metadata
-        ])
-
-        profile_processed = self.text_processor.process_document(all_refs_text)
-
-        comparison_data = []
-        for i, candidate in enumerate(unique_candidates):
-            if i % 5 == 0 and progress_callback:
-                progress_callback(80 + (i/len(unique_candidates))*10, f"Оценка {i}/{len(unique_candidates)}")
-
-            # Сравниваем кандидата с общим профилем
-            candidate_text = f"{candidate['title']} {candidate.get('abstract', '')}"
-            candidate_processed = self.text_processor.process_document(candidate_text)
-
-            # Вычисляем сходство с профилем
-            intersection = profile_processed['tokens'].intersection(candidate_processed['tokens'])
-            union = profile_processed['tokens'].union(candidate_processed['tokens'])
-            jaccard_similarity = len(intersection) / len(union) if union else 0
-
-            # Взвешенное покрытие
-            weighted_coverage = 0.0
-            for term in intersection:
-                weight = profile_processed['weighted_terms'].get(term, 1.0)
-                weighted_coverage += weight
-
-            total_weight = sum(profile_processed['weighted_terms'].values())
-            coverage_score = weighted_coverage / total_weight if total_weight > 0 else 0
-
-            # Бонус за свежесть
-            freshness_bonus = 0.0
-            if candidate.get('year'):
-                year_diff = recent_year - candidate['year']
-                if year_diff <= 2:
-                    freshness_bonus = 0.15
-                elif year_diff <= 5:
-                    freshness_bonus = 0.05
-
-            # Итоговый скоринг (учитываем сходство, покрытие и свежесть)
-            final_score = (jaccard_similarity * 0.4 + coverage_score * 0.4 + freshness_bonus)
-
-            # Порог релевантности
-            if final_score >= 0.1:  # Минимальный порог
-                comparison_data.append({
-                    'doi': candidate.get('doi', ''),
-                    'title': candidate.get('title', ''),
-                    'year': candidate.get('year', ''),
-                    'journal': candidate.get('journal', ''),
-                    'authors': ', '.join(candidate.get('authors', [])[:2]),
-                    'score': round(final_score, 3),
-                    'jaccard_similarity': round(jaccard_similarity, 3),
-                    'coverage_score': round(coverage_score, 3),
-                    'freshness_bonus': round(freshness_bonus, 3),
-                    'common_terms': ', '.join(list(intersection)[:5]),
-                    'source': candidate.get('source', 'unknown'),
-                    'abstract_preview': (candidate.get('abstract', '')[:150] + '...') if candidate.get('abstract') else ''
-                })
-
-        if not comparison_data:
-            print("⚠️  Нет статей, удовлетворяющих критериям релевантности")
-            return None
-
-        # 7. СОРТИРОВКА И ВЫБОР ЛУЧШИХ
-        if progress_callback:
-            progress_callback(95, "Формирование рекомендаций")
-
-        df_recommendations = pd.DataFrame(comparison_data)
-        df_recommendations = df_recommendations.sort_values('score', ascending=False)
-
-        # Выбираем топ рекомендации, но не более max_recommendations
-        top_recommendations = df_recommendations.head(max_recommendations)
-
-        # Вывод результатов
-        print("\n" + "="*70)
-        print(f"🏆 РЕКОМЕНДОВАНО {len(top_recommendations)} СТАТЕЙ")
-        print("="*70)
-        print(f"Критерии: опубликованы в {min_year}-{recent_year} гг., не дублируют существующие DOI")
-        print(f"Лучшая оценка релевантности: {top_recommendations['score'].max():.3f}")
-        print(f"Средняя оценка: {top_recommendations['score'].mean():.3f}")
-
-        for idx, row in top_recommendations.iterrows():
-            print(f"\n{idx+1:2d}. [{row['score']:.3f}] {row['title'][:80]}...")
-            print(f"    📅 {row['year']} | 👥 {row['authors']} | 📰 {row['journal'][:40]}...")
-            print(f"    🔗 {row['doi']}")
-            print(f"    📊 Сходство: Jaccard={row['jaccard_similarity']:.3f}, "
-                  f"Покрытие={row['coverage_score']:.3f}, Свежесть={row['freshness_bonus']:.3f}")
-            print(f"    🔑 Общие термины: {row['common_terms']}")
-            if row['abstract_preview']:
-                print(f"    📄 {row['abstract_preview']}")
-
-        return top_recommendations
-
-    def _search_crossref_with_filters(self, query: str, max_results: int = 25, min_year: int = None) -> List[Dict]:
-        """
-        Поиск в Crossref с фильтрацией по году.
-        Использует предоставленный API endpoint: https://api.crossref.org/works
-        """
-        try:
-            params = {
-                'query': query,
-                'rows': min(max_results, 50),
-                'sort': 'relevance',
-                'order': 'desc',
-                'select': 'DOI,title,abstract,author,issued,container-title'
-            }
-
-            # Добавляем фильтр по году если указан
-            if min_year:
-                # Crossref использует фильтр по году публикации
-                params['filter'] = f'from-pub-date:{min_year}'
-
-            response = requests.get(
-                "https://api.crossref.org/works",
-                params=params,
-                headers=self.headers,
-                timeout=15
-            )
-
-            if response.status_code == 200:
-                data = response.json().get('message', {}).get('items', [])
-                articles = []
-
-                for item in data[:max_results]:
-                    doi = item.get('DOI')
-                    title = item.get('title', [''])[0]
-
-                    if not doi or not title:
-                        continue
-
-                    # Извлекаем год из даты публикации
-                    year = 0
-                    date_parts = item.get('issued', {}).get('date-parts', [[0]])
-                    if date_parts and date_parts[0]:
-                        year = date_parts[0][0]
-
-                    # Фильтрация по году
-                    if min_year and year < min_year:
-                        continue
-
-                    # Обработка аннотации
-                    abstract = item.get('abstract', '')
-                    if isinstance(abstract, str):
-                        # Удаляем HTML теги если есть
-                        abstract = re.sub(r'<[^>]+>', ' ', abstract)
-                    else:
-                        abstract = ''
-
-                    articles.append({
-                        'doi': doi,
-                        'title': title,
-                        'abstract': abstract[:2000] if abstract else '',  # Ограничиваем длину
-                        'year': year,
-                        'journal': item.get('container-title', [''])[0],
-                        'authors': [a.get('family', '') for a in item.get('author', [])[:3]],
-                        'source': 'crossref'
-                    })
-
-                return articles
-
-        except requests.exceptions.Timeout:
-            print(f"⏱️  Таймаут при поиске в Crossref: '{query}'")
-        except Exception as e:
-            print(f"⚠️  Ошибка при поиске в Crossref: {e}")
-
-        return []
-
-    def _search_openalex_with_filters(self, query: str, max_results: int = 25, min_year: int = None) -> List[Dict]:
-        """
-        Поиск в OpenAlex с фильтрацией по году.
-        Использует предоставленный API endpoint: https://api.openalex.org/works
-        """
-        try:
-            params = {
-                'search': query,
-                'per-page': min(max_results, 25),
-            }
-
-            # OpenAlex поддерживает фильтрацию по году через параметр filter
-            if min_year:
-                params['filter'] = f'publication_year:{min_year}-2025'
-
-            response = requests.get(
-                "https://api.openalex.org/works",
-                params=params,
-                timeout=15
-            )
-
-            if response.status_code == 200:
-                data = response.json().get('results', [])
-                articles = []
-
-                for item in data[:max_results]:
-                    doi = item.get('doi')
-                    if not doi:
-                        continue
-
-                    title = item.get('title', '')
-
-                    # Извлекаем год
-                    year = item.get('publication_year', 0)
-
-                    # Фильтрация по году
-                    if min_year and year < min_year:
-                        continue
-
-                    # Обработка аннотации
-                    abstract = item.get('abstract', '')
-                    if isinstance(abstract, dict):
-                        abstract = abstract.get('inverted_index', '')
-                    if not isinstance(abstract, str):
-                        abstract = ''
-
-                    articles.append({
-                        'doi': doi,
-                        'title': title,
-                        'abstract': abstract[:2000] if abstract else '',
-                        'year': year,
-                        'journal': item.get('primary_location', {}).get('source', {}).get('display_name', ''),
-                        'authors': [a.get('author', {}).get('display_name', '')
-                                   for a in item.get('authorships', [])[:3]],
-                        'source': 'openalex'
-                    })
-
-                return articles
-
-        except requests.exceptions.Timeout:
-            print(f"⏱️  Таймаут при поиске в OpenAlex: '{query}'")
-        except Exception as e:
-            print(f"⚠️  Ошибка при поиске в OpenAlex: {e}")
-
-        return []
-
-    def generate_recommendation_document(self, recommendations: pd.DataFrame) -> io.BytesIO:
-        """
-        Генерирует DOCX документ с рекомендациями.
-        """
-        doc = Document()
-        doc.add_heading('Рекомендации по дополнению списка литературы', level=1)
-
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        doc.add_paragraph(f'Сформировано: {current_date}')
-        doc.add_paragraph('На основе анализа списка литературы и поиска схожих работ за последние 5 лет.')
-
-        if recommendations.empty:
-            doc.add_paragraph('Рекомендации не найдены.')
-            output_buffer = io.BytesIO()
-            doc.save(output_buffer)
-            output_buffer.seek(0)
-            return output_buffer
-
-        doc.add_heading('Топ рекомендуемых статей', level=2)
-
-        for idx, row in recommendations.iterrows():
-            # Добавляем заголовок рекомендации
-            title_para = doc.add_paragraph()
-            title_para.add_run(f"{idx+1}. ").bold = True
-            title_para.add_run(f"{row['title']}")
-
-            # Добавляем метаданные
-            meta_text = f"Авторы: {row['authors']} | Год: {row['year']} | Журнал: {row['journal']}"
-            doc.add_paragraph(meta_text).style = 'List Bullet'
-
-            # Добавляем DOI с гиперссылкой
-            if row['doi']:
-                doi_para = doc.add_paragraph()
-                doi_text = f"DOI: {row['doi']}"
-                try:
-                    # Пытаемся добавить гиперссылку
-                    DocumentGenerator.add_hyperlink(doi_para, doi_text, f"https://doi.org/{row['doi']}")
-                except:
-                    # Если не получается, добавляем обычный текст
-                    doi_para.add_run(doi_text)
-
-            # Добавляем предпросмотр аннотации
-            if row.get('abstract_preview'):
-                doc.add_paragraph(f"Аннотация: {row['abstract_preview']}").style = 'List Bullet 2'
-
-            # Добавляем оценку релевантности
-            score_text = f"Оценка релевантности: {row['score']:.3f} "
-            score_text += f"(Jaccard: {row['jaccard_similarity']:.3f}, "
-            score_text += f"Покрытие: {row['coverage_score']:.3f})"
-            doc.add_paragraph(score_text).style = 'List Bullet 2'
-
-            doc.add_paragraph()  # Пустая строка между рекомендациями
-
-        # Добавляем статистику
-        doc.add_heading('Статистика рекомендаций', level=2)
-        stats_para = doc.add_paragraph()
-        stats_para.add_run(f"Всего рекомендовано статей: {len(recommendations)}\n")
-        stats_para.add_run(f"Средняя оценка релевантности: {recommendations['score'].mean():.3f}\n")
-        stats_para.add_run(f"Диапазон годов публикации: {recommendations['year'].min()}-{recommendations['year'].max()}\n")
-
-        # Источники рекомендаций
-        source_counts = recommendations['source'].value_counts()
-        sources_text = "Источники: "
-        sources_text += ", ".join([f"{source} ({count})" for source, count in source_counts.items()])
-        doc.add_paragraph(sources_text)
-
-        output_buffer = io.BytesIO()
-        doc.save(output_buffer)
-        output_buffer.seek(0)
-        return output_buffer
 
 class ProgressManager:
     """Менеджер прогресса обработки"""
@@ -2700,15 +2217,11 @@ class ReferenceProcessor:
         self.doi_processor = DOIProcessor()
         self.progress_manager = ProgressManager()
         self.validator = StyleValidator()
-
-    def process_references(self, references: List[str], style_config: Dict,
-                         progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict, Optional[pd.DataFrame]]:
-        """
-        Обработка списка ссылок с отображением прогресса и поиском рекомендаций.
-        Возвращает: formatted_refs, formatted_txt_buffer, original_txt_buffer, 
-                    doi_found_count, doi_not_found_count, duplicates_info, recommendations
-        """
-        # Валидация количества ссылок
+    
+    def process_references(self, references: List[str], style_config: Dict, 
+                         progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict]:
+        """Обработка списка ссылок с отображением прогресса"""
+        # Валидация
         is_valid, validation_messages = self.validator.validate_references_count(references)
         for msg in validation_messages:
             if "error" in msg.lower():
@@ -2717,7 +2230,7 @@ class ReferenceProcessor:
                 st.warning(msg)
         
         if not is_valid:
-            return [], io.BytesIO(), io.BytesIO(), 0, 0, {}, None
+            return [], io.BytesIO(), io.BytesIO(), 0, 0, {}
         
         doi_list = []
         formatted_refs = []
@@ -2767,71 +2280,15 @@ class ReferenceProcessor:
         formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
         original_txt_buffer = self._create_txt_file(doi_list)
         
-        # ПОИСК РЕКОМЕНДАЦИЙ (только если есть хотя бы 10 ссылок)
-        recommendations = None
-        if len(references) >= 10:
-            try:
-                if progress_container:
-                    progress_container.info("🔍 Анализируем список литературы для поиска рекомендаций...")
-                
-                # Создаем рекомендатель
-                recommender = LiteratureGapRecommender(email="citation-constructor@example.com")
-                
-                # Функция для обновления прогресса
-                def update_recommendation_progress(value, stage):
-                    if progress_container:
-                        # Создаем новый прогресс-бар для рекомендаций
-                        if not hasattr(self, 'rec_progress_bar'):
-                            self.rec_progress_bar = progress_container.progress(0)
-                        self.rec_progress_bar.progress(value / 100)
-                        progress_container.text(f"{stage}...")
-                
-                # Получаем рекомендации
-                recommendations = recommender.find_recommendations(
-                    formatted_refs,
-                    max_recommendations=20,
-                    progress_callback=update_recommendation_progress
-                )
-                
-                if recommendations is not None:
-                    print(f"\n✅ Найдено {len(recommendations)} рекомендаций")
-                    
-                    # Генерируем дополнительный DOCX с рекомендациями
-                    try:
-                        recommendations_doc = recommender.generate_recommendation_document(recommendations)
-                        # Можно сохранить в session_state для дальнейшего использования
-                        if hasattr(self, 'recommendations_doc_buffer'):
-                            self.recommendations_doc_buffer = recommendations_doc
-                    except Exception as e:
-                        print(f"⚠️ Не удалось сгенерировать документ с рекомендациями: {e}")
-                
-                # Очищаем прогресс1
-                if hasattr(self, 'rec_progress_bar'):
-                    self.rec_progress_bar.progress(100)
-                    time.sleep(0.5)
-                    
-            except ImportError as e:
-                print(f"⚠️ Не удалось инициализировать рекомендатель: {e}")
-                print("Убедитесь, что установлены все необходимые библиотеки:")
-                print("pip install pandas numpy nltk spacy sentence-transformers scikit-learn gensim")
-                recommendations = None
-                
-            except Exception as e:
-                print(f"⚠️ Ошибка при поиске рекомендаций: {e}")
-                import traceback
-                traceback.print_exc()
-                recommendations = None
-        
-        return formatted_refs, formatted_txt_buffer, original_txt_buffer, \
-               doi_found_count, doi_not_found_count, duplicates_info, recommendations
-
+        return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
+    
     def _process_doi_batch(self, valid_dois, reference_doi_map, references, 
                           formatted_refs, formatted_texts, doi_list, style_config,
                           progress_container, status_container):
         """Пакетная обработка DOI"""
-        status_container.info("Пакетная обработка DOI...")
+        status_container.info(get_text('batch_processing'))
         
-        # Начало обработки
+        # Начало обработки - УСТАНАВЛИВАЕМ ОБЩЕЕ КОЛИЧЕСТВО
         total_to_process = len(valid_dois)
         self.progress_manager.start_processing(total_to_process)
         
@@ -2840,14 +2297,12 @@ class ReferenceProcessor:
         status_display = status_container.empty()
         
         # Шаг 1: Извлечение метаданных для ВСЕХ DOI сразу
-        status_display.text("Извлечение метаданных...")
         metadata_results = self._extract_metadata_batch(valid_dois, progress_bar, status_display)
         
         # Создаем маппинг DOI -> метаданные
         doi_to_metadata = dict(zip(valid_dois, metadata_results))
         
         # Шаг 2: Форматирование найденных метаданных
-        status_display.text("Форматирование ссылок...")
         processed_count = 0
         found_count = 0
         error_count = 0
@@ -2888,14 +2343,13 @@ class ReferenceProcessor:
                 progress_bar.progress(progress_ratio)
                 
                 # Обновляем статус
-                status_text = f"Обработано: {processed_count}/{total_to_process} | Найдено: {found_count} | Ошибки: {error_count}"
+                status_text = f"Processed: {processed_count}/{total_to_process} | Found: {found_count} | Errors: {error_count}"
                 status_display.text(status_text)
         
         # Финальное обновление
         self.progress_manager.update_progress(total_to_process, found_count, error_count, 'complete')
         progress_bar.progress(1.0)
-        status_display.text(f"Обработка завершена! Найдено: {found_count}, Ошибки: {error_count}")
-    
+
     def _extract_metadata_batch(self, doi_list, progress_bar, status_display) -> List:
         """Пакетное извлечение метаданных с повторной попыткой"""
         results = [None] * len(doi_list)
@@ -2921,14 +2375,14 @@ class ReferenceProcessor:
                 completed += 1
                 progress_ratio = completed / total if total > 0 else 0
                 progress_bar.progress(progress_ratio)
-                status_display.text(f"Получение метаданных: {completed}/{total}")
+                status_display.text(f"Fetching metadata: {completed}/{total}")
         
         # ПРОВЕРКА НА НЕУДАЧНЫЕ ЗАПРОСЫ
         failed_indices = [i for i, result in enumerate(results) if result is None]
         
         if failed_indices:
             logger.info(f"Retrying {len(failed_indices)} failed requests...")
-            status_display.text(f"Повторная попытка для {len(failed_indices)} DOI...")
+            status_display.text(f"Retrying {len(failed_indices)} failed requests...")
             
             # ПОВТОРНАЯ ОБРАБОТКА
             self._retry_failed_requests(failed_indices, doi_list, results, progress_bar, status_display)
@@ -2974,10 +2428,10 @@ class ReferenceProcessor:
             </style>
         """, unsafe_allow_html=True)
         
-        status_text = f"Обработано: {completed}/{total} | Ошибки: {errors}"
+        status_text = f"Processed: {completed}/{total} | Errors: {errors}"
         if progress_info['time_remaining']:
             mins_remaining = int(progress_info['time_remaining'] / 60)
-            status_text += f" | Примерное время: {mins_remaining} мин"
+            status_text += f" | ETA: {mins_remaining} min"
         
         status_display.text(status_text)
     
@@ -3074,16 +2528,16 @@ class ReferenceProcessor:
     def _create_formatted_txt_file(self, formatted_texts: List[str]) -> io.BytesIO:
         """Создание TXT файла с отформатированными ссылками"""
         output_txt_buffer = io.StringIO()
-        for i, text in enumerate(formatted_texts):
-            output_txt_buffer.write(f"{i+1}. {text}\n\n")
+        for text in formatted_texts:
+            output_txt_buffer.write(f"{text}\n\n")
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
     
     def _create_txt_file(self, doi_list: List[str]) -> io.BytesIO:
         """Создание TXT файла со списком DOI (для обратной совместимости)"""
         output_txt_buffer = io.StringIO()
-        for i, doi in enumerate(doi_list):
-            output_txt_buffer.write(f"{i+1}. {doi}\n")
+        for doi in doi_list:
+            output_txt_buffer.write(f"{doi}\n")
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
 
@@ -4974,12 +4428,12 @@ class InputOutputPage:
     
     @staticmethod
     def _process_data():
-        """Обработка данных с поиском рекомендаций"""
+        """Обработка данных"""
         # Проверка наличия конфигурации стиля
         if not hasattr(st.session_state, 'style_config') or not st.session_state.style_config:
             st.error(get_text('validation_error_no_elements'))
             return
-    
+        
         # Проверка ввода данных
         if st.session_state.input_method == 'DOCX':
             if not st.session_state.uploaded_file:
@@ -4992,39 +4446,26 @@ class InputOutputPage:
                 return
             references = [ref.strip() for ref in st.session_state.text_input.split('\n') if ref.strip()]
         
-        # Логирование для отладки
-        logger.info(f"Processing {len(references)} references")
-    
         # Обработка ссылок
         processor = ReferenceProcessor()
         progress_container = st.empty()
         status_container = st.empty()
-    
+        
         with st.spinner(get_text('processing')):
-            # Теперь функция возвращает 7 значений вместо 6
-            formatted_refs, formatted_txt_buffer, original_txt_buffer, \
-            doi_found_count, doi_not_found_count, duplicates_info, recommendations = processor.process_references(
+            formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info = processor.process_references(
                 references, st.session_state.style_config, progress_container, status_container
             )
-    
-            logger.info(f"Processing complete. Found {doi_found_count} DOIs, {doi_not_found_count} not found")
-            logger.info(f"Formatted references: {len(formatted_refs)}")
             
-            if recommendations is not None:
-                logger.info(f"Recommendations found: {len(recommendations)}")
-            else:
-                logger.info("No recommendations found or recommender not available")
-    
             statistics = generate_statistics(formatted_refs)
             docx_buffer = DocumentGenerator.generate_document(
                 formatted_refs, statistics, st.session_state.style_config, duplicates_info
             )
-    
+            
             # Сохранение результатов
             st.session_state.formatted_refs = formatted_refs
-            st.session_state.txt_buffer = formatted_txt_buffer
-            st.session_state.formatted_txt_buffer = formatted_txt_buffer
-            st.session_state.original_txt_buffer = original_txt_buffer
+            st.session_state.txt_buffer = formatted_txt_buffer  # Используем отформатированный TXT
+            st.session_state.formatted_txt_buffer = formatted_txt_buffer  # Сохраняем отдельно
+            st.session_state.original_txt_buffer = original_txt_buffer  # Сохраняем оригинальный для совместимости
             st.session_state.docx_buffer = docx_buffer
             st.session_state.doi_found_count = doi_found_count
             st.session_state.doi_not_found_count = doi_not_found_count
@@ -5032,35 +4473,6 @@ class InputOutputPage:
             st.session_state.processing_complete = True
             st.session_state.processing_start_time = time.time()
             
-            # Сохраняем рекомендации если есть
-            if recommendations is not None and len(recommendations) > 0:
-                st.session_state.recommendations = recommendations
-                st.session_state.has_recommendations = True
-                
-                # Генерируем DOCX с рекомендациями
-                try:
-                    from literature_gap_recommender import LiteratureGapRecommender
-                    recommender = LiteratureGapRecommender()
-                    recommendations_doc = recommender.generate_recommendation_document(recommendations)
-                    st.session_state.recommendations_docx_buffer = recommendations_doc
-                    logger.info(f"Generated recommendations document with {len(recommendations)} recommendations")
-                    
-                    # Показываем уведомление о рекомендациях
-                    st.success(f"🎯 Найдено {len(recommendations)} рекомендаций по дополнению списка литературы!")
-                    st.info("Рекомендации основаны на анализе вашего списка литературы и поиске схожих статей за последние 5 лет. Скачайте файл с рекомендациями ниже.")
-                    
-                except Exception as e:
-                    logger.error(f"Error generating recommendations document: {e}")
-                    st.session_state.has_recommendations = False
-            else:
-                st.session_state.recommendations = None
-                st.session_state.has_recommendations = False
-                
-                # Показываем сообщение, почему нет рекомендаций
-                valid_refs = [ref for ref in formatted_refs if not ref[1]]  # ref[1] = is_error
-                if len(valid_refs) < 10:
-                    st.info("ℹ️ Для получения рекомендаций по дополнению списка литературы необходимо обработать как минимум 10 успешных ссылок.")
-    
             # Переход к результатам
             StageManager.navigate_to('results')
     
@@ -5072,7 +4484,7 @@ class InputOutputPage:
 
 class ResultsPage:
     """Страница Results"""
-
+    
     @staticmethod
     def render():
         """Рендер страницы Results"""
@@ -5104,34 +4516,6 @@ class ResultsPage:
             st.markdown(f"<div class='stat-card'><div class='stat-value'>{duplicates_count}</div><div class='stat-label'>{get_text('duplicates_found')}</div></div>", unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
-        
-        # Кнопки скачивания рекомендаций (если есть)
-        if hasattr(st.session_state, 'has_recommendations') and st.session_state.has_recommendations:
-            st.markdown(f"<div class='card'><div class='card-title'>📚 Рекомендации по дополнению списка литературы</div>", unsafe_allow_html=True)
-            
-            col_rec1, col_rec2 = st.columns(2)
-            
-            with col_rec1:
-                if hasattr(st.session_state, 'recommendations'):
-                    st.metric("Количество рекомендаций", len(st.session_state.recommendations))
-                    if hasattr(st.session_state.recommendations, 'iloc'):
-                        # Это DataFrame
-                        recent_recommendations = st.session_state.recommendations[st.session_state.recommendations['year'] >= (datetime.now().year - 3)]
-                        st.metric("Рекомендации за последние 3 года", len(recent_recommendations))
-            
-            with col_rec2:
-                if hasattr(st.session_state, 'recommendations_docx_buffer'):
-                    st.download_button(
-                        label="📥 Скачать рекомендации (DOCX)",
-                        data=st.session_state.recommendations_docx_buffer.getvalue(),
-                        file_name='literature_recommendations.docx',
-                        mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                        use_container_width=True,
-                        key="download_recommendations",
-                        help="Скачайте рекомендации по дополнению списка литературы"
-                    )
-            
-            st.markdown("</div>", unsafe_allow_html=True)
         
         # Превью результатов с прокруткой
         st.markdown(f"<div class='card'><div class='card-title'>Preview of Results ({len(st.session_state.formatted_refs)} references)</div>", unsafe_allow_html=True)
@@ -5614,17 +4998,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
