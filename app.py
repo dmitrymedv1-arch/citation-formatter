@@ -34,6 +34,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import word_tokenize
 import spacy
 from typing import Optional
+import traceback
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -1892,6 +1893,9 @@ class OpenAlexArticleFinder:
 
     def _parse_work_data(self, data: Dict) -> Dict:
         """Парсинг данных статьи из OpenAlex с улучшенным извлечением темы"""
+        if not data:
+            return None  # Возвращаем None если data пустой
+        
         # Извлекаем primary_topic
         primary_topic = data.get('primary_topic')
         
@@ -2196,7 +2200,9 @@ class TopicBasedRecommender:
                     works.extend(works_extended)
                 
                 # Парсим и добавляем рекомендации
-                for work in works:
+                 for work in works:
+                    if not work:  # Проверяем, что work не None
+                        continue
                     parsed_work = self.openalex_finder._parse_work_data(work)
                     if parsed_work and parsed_work.get('doi'):
                         doi = parsed_work['doi']
@@ -2215,6 +2221,8 @@ class TopicBasedRecommender:
                     works = self.get_topic_works(topic_id, years_back=5, max_citations=20, limit=15)
                     
                     for work in works:
+                        if not work:  # Проверяем, что work не None
+                            continue
                         parsed_work = self.openalex_finder._parse_work_data(work)
                         if parsed_work and parsed_work.get('doi'):
                             doi = parsed_work['doi']
@@ -5776,5 +5784,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
