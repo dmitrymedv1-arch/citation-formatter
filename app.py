@@ -1860,10 +1860,23 @@ class CitationFormatterFactory:
 class EnhancedTextProcessor:
     def __init__(self):
         self.lemmatizer = WordNetLemmatizer()
+        self.nlp = None  # Don't use spaCy to avoid heavy dependencies
+        # Simple fallback without spaCy
+        
+        self.scientific_stopwords = set([
+            'study', 'research', 'paper', 'article', 'work', 'result', 'method', 
+            'approach', 'analysis', 'experiment', 'investigation', 'show', 'demonstrate',
+            'propose', 'present', 'discuss', 'examine', 'evaluate', 'assess'
+        ])
+        
         try:
-            self.nlp = spacy.load("en_core_web_sm", disable=['parser', 'ner'])
+            base_stopwords = set(stopwords.words('english'))
+            self.all_stopwords = base_stopwords.union(self.scientific_stopwords)
         except:
-            self.nlp = None
+            # Fallback stopwords if NLTK fails
+            self.all_stopwords = self.scientific_stopwords
+        
+        self.synonym_cache = {}
         
         self.scientific_stopwords = set([
             'study', 'research', 'paper', 'article', 'work', 'result', 'method', 
@@ -1895,17 +1908,28 @@ class EnhancedTextProcessor:
         text_clean = re.sub(r'[^\w\s.,;:-]', ' ', text.lower())
         text_clean = re.sub(r'\b\d+\b', '', text_clean)
         
-        if self.nlp:
-            doc = self.nlp(text_clean)
-            lemmas = [token.lemma_ for token in doc 
-                     if token.is_alpha and token.lemma_ not in self.all_stopwords 
-                     and len(token.lemma_) > 2]
-        else:
-            tokens = word_tokenize(text_clean)
-            lemmas = []
-            for token in tokens:
-                if token.isalpha() and token not in self.all_stopwords and len(token) > 2:
-                    lemmas.append(self.lemmatizer.lemmatize(token, self.get_wordnet_pos(token)))
+        try:
+            if self.nlp:
+                doc = self.nlp(text_clean)
+                lemmas = [token.lemma_ for token in doc 
+                         if token.is_alpha and token.lemma_ not in self.all_stopwords 
+                         and len(token.lemma_) > 2]
+            else:
+                # Use simple tokenization as fallback if NLTK fails
+                tokens = re.findall(r'\b[a-zA-Z]{3,}\b', text_clean)  # Simple regex tokenization
+                lemmas = []
+                for token in tokens:
+                    if token.lower() not in self.all_stopwords:
+                        try:
+                            lemmatized = self.lemmatizer.lemmatize(token, self.get_wordnet_pos(token))
+                            lemmas.append(lemmatized)
+                        except:
+                            lemmas.append(token.lower())
+        except Exception as e:
+            print(f"Error processing document: {e}")
+            # Fallback to simple word extraction
+            tokens = re.findall(r'\b[a-zA-Z]{3,}\b', text_clean)
+            lemmas = [t.lower() for t in tokens if t.lower() not in self.all_stopwords]
         
         term_freq = Counter(lemmas)
         
@@ -1980,10 +2004,7 @@ class EnhancedTextProcessor:
 class EnhancedComparator:
     def __init__(self, processor: EnhancedTextProcessor):
         self.processor = processor
-        try:
-            self.sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-        except:
-            self.sentence_model = None
+        self.sentence_model = None  # Don't use sentence-transformers to avoid heavy dependencies
     
     def compare_articles(self, article1: Dict, article2: Dict) -> Dict[str, float]:
         """Compare two articles"""
@@ -2005,17 +2026,23 @@ class EnhancedComparator:
         
         total_weight = sum(proc1['weighted_terms'].values())
         coverage = weighted_coverage / total_weight if total_weight > 0 else 0
-        
+
         semantic_sim = 0.0
-        if self.sentence_model and text1 and text2:
+        # Simple semantic similarity using Jaccard similarity on bigrams
+        if text1 and text2:
             try:
-                text_for_semantic1 = f"{article1['title']}. {article1.get('abstract', '')[:200]}"
-                text_for_semantic2 = f"{article2['title']}. {article2.get('abstract', '')[:200]}"
+                # Extract words from texts
+                words1 = re.findall(r'\b[a-zA-Z]{3,}\b', text1.lower())
+                words2 = re.findall(r'\b[a-zA-Z]{3,}\b', text2.lower())
                 
-                if text_for_semantic1 and text_for_semantic2:
-                    emb1 = self.sentence_model.encode(text_for_semantic1, convert_to_tensor=True)
-                    emb2 = self.sentence_model.encode(text_for_semantic2, convert_to_tensor=True)
-                    semantic_sim = util.pytorch_cos_sim(emb1, emb2).item()
+                # Create bigrams
+                bigrams1 = set([f"{words1[i]} {words1[i+1]}" for i in range(len(words1)-1)])
+                bigrams2 = set([f"{words2[i]} {words2[i+1]}" for i in range(len(words2)-1)])
+                
+                if bigrams1 and bigrams2:
+                    intersection = bigrams1.intersection(bigrams2)
+                    union = bigrams1.union(bigrams2)
+                    semantic_sim = len(intersection) / len(union) if union else 0
             except:
                 semantic_sim = 0.0
         
@@ -5696,4 +5723,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
