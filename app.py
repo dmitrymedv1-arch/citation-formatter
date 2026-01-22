@@ -4991,6 +4991,9 @@ class InputOutputPage:
                 st.error(get_text('enter_references_error'))
                 return
             references = [ref.strip() for ref in st.session_state.text_input.split('\n') if ref.strip()]
+        
+        # Логирование для отладки
+        logger.info(f"Processing {len(references)} references")
     
         # Обработка ссылок
         processor = ReferenceProcessor()
@@ -5003,6 +5006,14 @@ class InputOutputPage:
             doi_found_count, doi_not_found_count, duplicates_info, recommendations = processor.process_references(
                 references, st.session_state.style_config, progress_container, status_container
             )
+    
+            logger.info(f"Processing complete. Found {doi_found_count} DOIs, {doi_not_found_count} not found")
+            logger.info(f"Formatted references: {len(formatted_refs)}")
+            
+            if recommendations is not None:
+                logger.info(f"Recommendations found: {len(recommendations)}")
+            else:
+                logger.info("No recommendations found or recommender not available")
     
             statistics = generate_statistics(formatted_refs)
             docx_buffer = DocumentGenerator.generate_document(
@@ -5027,12 +5038,28 @@ class InputOutputPage:
                 st.session_state.has_recommendations = True
                 
                 # Генерируем DOCX с рекомендациями
-                recommender = LiteratureGapRecommender()
-                recommendations_doc = recommender.generate_recommendation_document(recommendations)
-                st.session_state.recommendations_docx_buffer = recommendations_doc
+                try:
+                    from literature_gap_recommender import LiteratureGapRecommender
+                    recommender = LiteratureGapRecommender()
+                    recommendations_doc = recommender.generate_recommendation_document(recommendations)
+                    st.session_state.recommendations_docx_buffer = recommendations_doc
+                    logger.info(f"Generated recommendations document with {len(recommendations)} recommendations")
+                    
+                    # Показываем уведомление о рекомендациях
+                    st.success(f"🎯 Найдено {len(recommendations)} рекомендаций по дополнению списка литературы!")
+                    st.info("Рекомендации основаны на анализе вашего списка литературы и поиске схожих статей за последние 5 лет. Скачайте файл с рекомендациями ниже.")
+                    
+                except Exception as e:
+                    logger.error(f"Error generating recommendations document: {e}")
+                    st.session_state.has_recommendations = False
             else:
                 st.session_state.recommendations = None
                 st.session_state.has_recommendations = False
+                
+                # Показываем сообщение, почему нет рекомендаций
+                valid_refs = [ref for ref in formatted_refs if not ref[1]]  # ref[1] = is_error
+                if len(valid_refs) < 10:
+                    st.info("ℹ️ Для получения рекомендаций по дополнению списка литературы необходимо обработать как минимум 10 успешных ссылок.")
     
             # Переход к результатам
             StageManager.navigate_to('results')
@@ -5045,7 +5072,7 @@ class InputOutputPage:
 
 class ResultsPage:
     """Страница Results"""
-    
+
     @staticmethod
     def render():
         """Рендер страницы Results"""
@@ -5077,6 +5104,34 @@ class ResultsPage:
             st.markdown(f"<div class='stat-card'><div class='stat-value'>{duplicates_count}</div><div class='stat-label'>{get_text('duplicates_found')}</div></div>", unsafe_allow_html=True)
         
         st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Кнопки скачивания рекомендаций (если есть)
+        if hasattr(st.session_state, 'has_recommendations') and st.session_state.has_recommendations:
+            st.markdown(f"<div class='card'><div class='card-title'>📚 Рекомендации по дополнению списка литературы</div>", unsafe_allow_html=True)
+            
+            col_rec1, col_rec2 = st.columns(2)
+            
+            with col_rec1:
+                if hasattr(st.session_state, 'recommendations'):
+                    st.metric("Количество рекомендаций", len(st.session_state.recommendations))
+                    if hasattr(st.session_state.recommendations, 'iloc'):
+                        # Это DataFrame
+                        recent_recommendations = st.session_state.recommendations[st.session_state.recommendations['year'] >= (datetime.now().year - 3)]
+                        st.metric("Рекомендации за последние 3 года", len(recent_recommendations))
+            
+            with col_rec2:
+                if hasattr(st.session_state, 'recommendations_docx_buffer'):
+                    st.download_button(
+                        label="📥 Скачать рекомендации (DOCX)",
+                        data=st.session_state.recommendations_docx_buffer.getvalue(),
+                        file_name='literature_recommendations.docx',
+                        mime='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                        use_container_width=True,
+                        key="download_recommendations",
+                        help="Скачайте рекомендации по дополнению списка литературы"
+                    )
+            
+            st.markdown("</div>", unsafe_allow_html=True)
         
         # Превью результатов с прокруткой
         st.markdown(f"<div class='card'><div class='card-title'>Preview of Results ({len(st.session_state.formatted_refs)} references)</div>", unsafe_allow_html=True)
@@ -5559,6 +5614,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
