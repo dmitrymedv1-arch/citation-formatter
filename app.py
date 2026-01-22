@@ -5738,7 +5738,7 @@ class ResultsPage:
                     st.markdown(f"<div class='recommendation-title'>{row['title']}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='recommendation-meta'>{get_text('recommendation_year')} {row['year']} | {get_text('recommendation_journal')} {row['journal']}</div>", unsafe_allow_html=True)
                     st.markdown(f"<div class='recommendation-meta'>Authors: {row['authors']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>DOI: {row['doi']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='recommendation-meta'>DOI: <a href='https://doi.org/{row['doi']}' target='_blank' style='color: var(--primary); text-decoration: none; border-bottom: 1px dotted var(--primary);'>{row['doi']}</a></div>", unsafe_allow_html=True)
                     
                     if row['abstract']:
                         # Используем чекбокс для отображения/скрытия аннотации
@@ -6120,6 +6120,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
