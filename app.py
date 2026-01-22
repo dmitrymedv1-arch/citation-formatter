@@ -36,6 +36,7 @@ import spacy
 from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
+from typing import Optional
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -2692,9 +2693,474 @@ class EnhancedArticleFinder:
         
         return scored_candidates
 
+# Обновленный класс для работы с OpenAlex
+class OpenAlexArticleFinder:
+    """Оптимизированный поиск статей через OpenAlex API"""
+    
+    def __init__(self, email: str = Config.RECOMMENDATION_EMAIL):
+        self.base_url = "https://api.openalex.org"
+        self.headers = {
+            'User-Agent': f'CitationStyleConstructor/1.0 ({email})',
+            'Accept': 'application/json'
+        }
+        self.session = requests.Session()
+        self.session.timeout = 30
+    
+    def get_work_by_doi(self, doi: str) -> Optional[Dict]:
+        """Получить статью по DOI из OpenAlex"""
+        clean_doi = re.sub(r'^(https?://doi\.org/|doi:|DOI:?\s*)', '', doi.strip(), flags=re.IGNORECASE)
+        
+        # Пробуем разные форматы DOI
+        for fmt in [clean_doi, f"doi:{clean_doi}", f"https://doi.org/{clean_doi}"]:
+            try:
+                response = self.session.get(
+                    f"{self.base_url}/works/{fmt}", 
+                    headers=self.headers, 
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    return self._parse_work_data(data)
+                    
+            except Exception as e:
+                logger.debug(f"OpenAlex error for format {fmt}: {e}")
+                continue
+        
+        return None
+    
+    def _parse_work_data(self, data: Dict) -> Dict:
+        """Парсинг данных статьи из OpenAlex"""
+        concepts = data.get('concepts', [])
+        
+        return {
+            'id': data.get('id'),
+            'title': data.get('title', '').strip(),
+            'abstract': data.get('abstract', ''),
+            'abstract_inverted_index': data.get('abstract_inverted_index', {}),
+            'publication_year': data.get('publication_year'),
+            'doi': data.get('doi', ''),
+            'cited_by_count': data.get('cited_by_count', 0),
+            'concepts': [c['display_name'] for c in concepts],
+            'concept_ids': [c['id'] for c in concepts],
+            'authors': [a.get('author', {}).get('display_name', '') for a in data.get('authorships', [])],
+            'journal': data.get('primary_location', {}).get('source', {}).get('display_name', ''),
+            'is_oa': data.get('open_access', {}).get('is_oa', False),
+            'url': data.get('doi', ''),
+        }
+    
+    def _reconstruct_abstract(self, inverted_index: Dict) -> str:
+        """Восстановить аннотацию из инвертированного индекса"""
+        if not inverted_index:
+            return ""
+        
+        try:
+            pos_word = {}
+            for word, positions in inverted_index.items():
+                for pos in (positions or []):
+                    pos_word[pos] = word
+            
+            # Сортируем позиции и собираем текст
+            sorted_positions = sorted(pos_word.keys())
+            words = [pos_word.get(pos, '') for pos in sorted_positions]
+            return ' '.join(words)
+        except Exception:
+            return ""
+    
+    def _extract_key_terms(self, work: Dict) -> List[str]:
+        """Извлечение ключевых терминов из статьи"""
+        terms = []
+        
+        # Из заголовка
+        if work.get('title'):
+            # Извлекаем слова длиной от 4 символов
+            title_terms = re.findall(r'\b\w{4,}\b', work['title'].lower())
+            terms.extend(title_terms)
+        
+        # Из аннотации
+        abstract_text = work.get('abstract') or self._reconstruct_abstract(work.get('abstract_inverted_index', {}))
+        if abstract_text:
+            abstract_terms = re.findall(r'\b\w{5,}\b', abstract_text.lower())
+            terms.extend(abstract_terms)
+        
+        # Из концептов
+        terms.extend([c.lower() for c in work.get('concepts', [])])
+        
+        # Убираем стоп-слова
+        stop_words = {
+            'with', 'from', 'that', 'this', 'have', 'which', 'their', 'there',
+            'what', 'when', 'were', 'them', 'they', 'your', 'will', 'would'
+        }
+        terms = [t for t in terms if t not in stop_words]
+        
+        return list(set(terms))[:20]  # Уникальные термины, максимум 20
+    
+    def search_similar_articles(self, work: Dict, max_results: int = 30) -> List[Dict]:
+        """Поиск похожих статей с использованием нескольких стратегий"""
+        if not work:
+            return []
+        
+        current_year = datetime.now().year
+        from_year = current_year - 5
+        all_results = []
+        
+        # Стратегия 1: Поиск по концептам (самая точная стратегия)
+        concept_results = self._search_by_concepts(work, from_year, max_results // 2)
+        all_results.extend(concept_results)
+        
+        # Стратегия 2: Поиск по ключевым словам из заголовка
+        if len(all_results) < max_results and work.get('title'):
+            keyword_results = self._search_by_title_keywords(work, from_year, max_results // 2)
+            all_results.extend(keyword_results)
+        
+        # Стратегия 3: Общий поиск по терминам
+        if len(all_results) < max_results:
+            term_results = self._search_by_terms(work, from_year, max_results)
+            all_results.extend(term_results)
+        
+        # Убираем дубликаты
+        seen_ids = set()
+        unique_results = []
+        
+        for result in all_results:
+            result_id = result.get('id')
+            if result_id and result_id not in seen_ids and result_id != work.get('id'):
+                seen_ids.add(result_id)
+                unique_results.append(result)
+        
+        # Вычисляем релевантность
+        scored_results = self._score_results(unique_results, work)
+        
+        return scored_results[:max_results]
+    
+    def _search_by_concepts(self, work: Dict, from_year: int, limit: int) -> List[Dict]:
+        """Поиск по концептам"""
+        results = []
+        concept_ids = work.get('concept_ids', [])[:3]  # Берем топ-3 концепта
+        
+        for concept_id in concept_ids:
+            try:
+                params = {
+                    'filter': f'concepts.id:{concept_id},publication_year:>{from_year-1}',
+                    'per-page': min(10, limit),
+                    'sort': 'relevance_score:desc',
+                }
+                
+                response = self.session.get(
+                    f"{self.base_url}/works",
+                    params=params,
+                    headers=self.headers,
+                    timeout=10
+                )
+                
+                if response.status_code == 200:
+                    data = response.json().get('results', [])
+                    for item in data:
+                        parsed_item = self._parse_work_data(item)
+                        if parsed_item.get('id') != work.get('id'):
+                            results.append(parsed_item)
+                
+            except Exception as e:
+                logger.debug(f"Concept search error: {e}")
+                continue
+        
+        return results
+    
+    def _search_by_title_keywords(self, work: Dict, from_year: int, limit: int) -> List[Dict]:
+        """Поиск по ключевым словам из заголовка"""
+        try:
+            # Извлекаем значимые слова из заголовка
+            title_words = re.findall(r'\b[A-Z][a-z]{4,}\b|\b\w{6,}\b', work['title'])
+            if not title_words:
+                return []
+            
+            query = ' '.join(title_words[:3])  # Берем первые 3 слова
+            
+            params = {
+                'search': query,
+                'filter': f'publication_year:>{from_year-1}',
+                'sort': 'relevance_score:desc',
+                'per-page': limit,
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/works",
+                params=params,
+                headers=self.headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json().get('results', [])
+                return [self._parse_work_data(item) for item in data if item.get('id') != work.get('id')]
+            
+        except Exception as e:
+            logger.debug(f"Title keyword search error: {e}")
+        
+        return []
+    
+    def _search_by_terms(self, work: Dict, from_year: int, limit: int) -> List[Dict]:
+        """Поиск по всем терминам"""
+        try:
+            terms = self._extract_key_terms(work)
+            if not terms:
+                return []
+            
+            query = ' '.join(terms[:8])  # Берем первые 8 терминов
+            
+            params = {
+                'search': query,
+                'filter': f'publication_year:>{from_year-1}',
+                'sort': 'relevance_score:desc',
+                'per-page': limit,
+            }
+            
+            response = self.session.get(
+                f"{self.base_url}/works",
+                params=params,
+                headers=self.headers,
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json().get('results', [])
+                return [self._parse_work_data(item) for item in data if item.get('id') != work.get('id')]
+            
+        except Exception as e:
+            logger.debug(f"Term search error: {e}")
+        
+        return []
+    
+    def _score_results(self, results: List[Dict], original_work: Dict) -> List[Dict]:
+        """Оценка релевантности результатов"""
+        for result in results:
+            score = 0
+            
+            # 1. Сходство концептов (самый важный фактор)
+            orig_concepts = set(c.lower() for c in original_work.get('concepts', []))
+            result_concepts = set(c.lower() for c in result.get('concepts', []))
+            common_concepts = len(orig_concepts & result_concepts)
+            score += common_concepts * 20
+            
+            # 2. Свежесть статьи
+            current_year = datetime.now().year
+            pub_year = result.get('publication_year', 0)
+            
+            if pub_year >= current_year - 1:
+                score += 15  # Очень свежие (1-2 года)
+            elif pub_year >= current_year - 3:
+                score += 10  # Свежие (3-5 лет)
+            elif pub_year >= current_year - 5:
+                score += 5   # Не очень свежие (5+ лет)
+            
+            # 3. Число цитирований (показатель важности)
+            citations = result.get('cited_by_count', 0)
+            if citations >= 100:
+                score += 20
+            elif citations >= 50:
+                score += 15
+            elif citations >= 20:
+                score += 10
+            elif citations >= 10:
+                score += 5
+            elif citations >= 5:
+                score += 2
+            
+            # 4. Open Access (бесплатный доступ)
+            if result.get('is_oa', False):
+                score += 5
+            
+            # Нормализуем оценку к диапазону 0-100
+            result['relevance_score'] = min(100, score) / 100.0
+            result['citation_count'] = citations
+        
+        # Сортируем по релевантности
+        results.sort(key=lambda x: x.get('relevance_score', 0), reverse=True)
+        return results
+
+# Обновленный класс для рекомендаций с прогресс-баром
+class OptimizedArticleRecommender:
+    """Оптимизированная система рекомендаций с OpenAlex"""
+    
+    def __init__(self):
+        self.openalex_finder = OpenAlexArticleFinder()
+        self.crossref_works = Works()
+        self.processor = EnhancedTextProcessor()
+    
+    def generate_recommendations_with_progress(self, formatted_refs: List[Tuple[Any, bool, Any]], 
+                                              progress_callback = None) -> Optional[pd.DataFrame]:
+        """Генерация рекомендаций с отображением прогресса"""
+        if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+            return None
+        
+        if progress_callback:
+            progress_callback(5, "Анализ исходных статей...")
+        
+        # Извлекаем DOI из форматированных ссылок
+        valid_dois = []
+        for _, is_error, metadata in formatted_refs:
+            if not is_error and metadata and metadata.get('doi'):
+                valid_dois.append(metadata['doi'])
+        
+        if not valid_dois:
+            return None
+        
+        if progress_callback:
+            progress_callback(15, f"Найдено {len(valid_dois)} DOI для анализа...")
+        
+        # Получаем статьи из OpenAlex
+        openalex_works = []
+        for i, doi in enumerate(valid_dois[:5]):  # Ограничиваем 5 DOI для скорости
+            if progress_callback:
+                progress_callback(15 + (i * 10), f"Получение данных для DOI {i+1}/{min(5, len(valid_dois))}...")
+            
+            work = self.openalex_finder.get_work_by_doi(doi)
+            if work:
+                openalex_works.append(work)
+        
+        if not openalex_works:
+            if progress_callback:
+                progress_callback(50, "Статьи не найдены в OpenAlex, используем Crossref...")
+            return self._fallback_to_crossref(valid_dois, progress_callback)
+        
+        if progress_callback:
+            progress_callback(60, f"Найдено {len(openalex_works)} статей в OpenAlex, поиск похожих...")
+        
+        # Ищем похожие статьи для каждой найденной работы
+        all_recommendations = []
+        
+        for i, work in enumerate(openalex_works):
+            if progress_callback:
+                progress_callback(60 + (i * 5), f"Поиск похожих для статьи {i+1}/{len(openalex_works)}...")
+            
+            similar_articles = self.openalex_finder.search_similar_articles(work, max_results=10)
+            all_recommendations.extend(similar_articles)
+        
+        if not all_recommendations:
+            if progress_callback:
+                progress_callback(85, "Похожие статьи не найдены, используем резервный метод...")
+            return self._fallback_to_crossref(valid_dois, progress_callback)
+        
+        if progress_callback:
+            progress_callback(90, "Обработка и сортировка результатов...")
+        
+        # Убираем дубликаты и преобразуем в DataFrame
+        unique_recommendations = self._deduplicate_recommendations(all_recommendations)
+        
+        if progress_callback:
+            progress_callback(95, "Формирование итогового списка...")
+        
+        return self._create_recommendations_df(unique_recommendations)
+    
+    def _fallback_to_crossref(self, dois: List[str], progress_callback = None) -> Optional[pd.DataFrame]:
+        """Резервный поиск через Crossref"""
+        if progress_callback:
+            progress_callback(50, "Использование Crossref для поиска...")
+        
+        try:
+            combined_text = " ".join(dois[:10])
+            key_terms = self.processor.extract_key_terms(combined_text, top_k=15)
+            
+            if progress_callback:
+                progress_callback(60, f"Поиск по ключевым словам: {', '.join(key_terms[:5])}...")
+            
+            # Простой поиск в Crossref
+            all_articles = []
+            for term in key_terms[:3]:
+                try:
+                    works = self.crossref_works.query(query_title=term).filter(from_pub_date='2019').sort('relevance').order('desc')
+                    
+                    for i, work in enumerate(works[:5]):
+                        if 'DOI' in work and 'title' in work:
+                            article = {
+                                'doi': work['DOI'],
+                                'title': work.get('title', [''])[0],
+                                'year': work.get('created', {}).get('date-parts', [[0]])[0][0],
+                                'journal': work.get('container-title', [''])[0],
+                                'authors': [],
+                                'citation_count': work.get('is-referenced-by-count', 0),
+                                'relevance_score': 0.3 + (i * 0.1),  # Базовый рейтинг
+                                'source': 'crossref'
+                            }
+                            
+                            # Авторы
+                            for author in work.get('author', [])[:3]:
+                                given = author.get('given', '')
+                                family = author.get('family', '')
+                                if family:
+                                    article['authors'].append(f"{family}, {given[:1]}.")
+                            
+                            all_articles.append(article)
+                            
+                except Exception as e:
+                    continue
+            
+            if all_articles:
+                # Сортируем по релевантности
+                all_articles.sort(key=lambda x: x['relevance_score'], reverse=True)
+                
+                if progress_callback:
+                    progress_callback(95, f"Найдено {len(all_articles)} статей в Crossref")
+                
+                return pd.DataFrame(all_articles[:Config.MAX_RECOMMENDATIONS])
+            
+        except Exception as e:
+            logger.error(f"Crossref fallback error: {e}")
+        
+        return None
+    
+    def _deduplicate_recommendations(self, recommendations: List[Dict]) -> List[Dict]:
+        """Удаление дубликатов из рекомендаций"""
+        seen_dois = set()
+        unique_recommendations = []
+        
+        for rec in recommendations:
+            doi = rec.get('doi')
+            if doi and doi not in seen_dois:
+                seen_dois.add(doi)
+                unique_recommendations.append(rec)
+        
+        return unique_recommendations[:Config.MAX_RECOMMENDATIONS]
+    
+    def _create_recommendations_df(self, recommendations: List[Dict]) -> pd.DataFrame:
+        """Создание DataFrame с рекомендациями"""
+        formatted_recommendations = []
+        
+        for rec in recommendations:
+            # Форматируем авторов
+            authors = rec.get('authors', [])
+            if isinstance(authors, list):
+                authors_str = ', '.join(authors[:3])
+            else:
+                authors_str = str(authors)[:100]
+            
+            # Получаем аннотацию
+            abstract = rec.get('abstract', '')
+            if not abstract and rec.get('abstract_inverted_index'):
+                abstract = self.openalex_finder._reconstruct_abstract(rec['abstract_inverted_index'])
+            
+            formatted_recommendations.append({
+                'doi': rec.get('doi', ''),
+                'title': rec.get('title', ''),
+                'year': rec.get('publication_year', ''),
+                'journal': rec.get('journal', ''),
+                'authors': authors_str,
+                'abstract': abstract[:500] + '...' if len(abstract) > 500 else abstract,
+                'score': rec.get('relevance_score', 0),
+                'citation_count': rec.get('citation_count', rec.get('cited_by_count', 0)),
+                'source': 'openalex',
+                'title_sim': 0.0,  # Заглушки для совместимости
+                'content_sim': 0.0,
+                'semantic_sim': 0.0,
+                'common_terms': ', '.join(rec.get('concepts', [])[:5]),
+                'has_abstract': bool(abstract),
+            })
+        
+        return pd.DataFrame(formatted_recommendations)
+
 # Article Recommendation System
 class ArticleRecommender:
-    """Article recommendation system"""
+    """Article recommendation system (legacy compatibility)"""
     
     @staticmethod
     def generate_recommendations(formatted_refs: List[Tuple[Any, bool, Any]]):
@@ -2702,28 +3168,9 @@ class ArticleRecommender:
         if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
             return None
         
-        valid_metadata = []
-        for _, is_error, metadata in formatted_refs:
-            if not is_error and metadata:
-                valid_metadata.append(metadata)
-        
-        if not valid_metadata:
-            return None
-        
-        # Используем улучшенный поиск
-        finder = EnhancedArticleFinder()
-        
-        # Настройка параметров поиска
-        max_results = min(Config.MAX_RECOMMENDATIONS, len(valid_metadata) * 3)
-        
-        recommendations = finder.find_similar_by_references(
-            valid_metadata,
-            max_results=max_results,
-            use_synonyms=True,
-            min_similarity=Config.MIN_SIMILARITY_SCORE
-        )
-        
-        return recommendations
+        # Используем новый оптимизированный рекомендатель
+        recommender = OptimizedArticleRecommender()
+        return recommender.generate_recommendations_with_progress(formatted_refs)
     
     @staticmethod
     def create_recommendations_txt(recommendations_df) -> io.BytesIO:
@@ -2739,15 +3186,16 @@ class ArticleRecommender:
         output_txt_buffer.write(f"Showing top {len(recommendations_df)} recommendations from the last {Config.RECOMMENDATION_YEARS_BACK} years\n\n")
         
         for idx, row in recommendations_df.iterrows():
-            output_txt_buffer.write(f"{idx+1:2d}. [{row['score']:.3f}] {row['title']}\n")
+            output_txt_buffer.write(f"{idx+1:2d}. [Score: {row['score']:.3f}] {row['title']}\n")
             output_txt_buffer.write(f"    Authors: {row['authors']}\n")
             output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
             output_txt_buffer.write(f"    DOI: {row['doi']}\n")
-            if row['abstract']:
+            output_txt_buffer.write(f"    Citations: {row.get('citation_count', 'N/A')}\n")
+            if row.get('abstract'):
                 output_txt_buffer.write(f"    Abstract: {row['abstract']}\n")
-            output_txt_buffer.write(f"    Similarity: title={row['title_sim']:.3f}, content={row['content_sim']:.3f}, semantic={row['semantic_sim']:.3f}\n")
-            output_txt_buffer.write(f"    Common terms: {row['common_terms']}\n")
             output_txt_buffer.write(f"    Source: {row['source']}\n")
+            if 'common_terms' in row:
+                output_txt_buffer.write(f"    Common terms: {row['common_terms']}\n")
             output_txt_buffer.write("\n")
         
         output_txt_buffer.seek(0)
@@ -2759,8 +3207,15 @@ class ArticleRecommender:
         if recommendations_df is None or recommendations_df.empty:
             return None
         
+        # Сохраняем все колонки
+        columns_to_export = ['title', 'authors', 'journal', 'year', 'doi', 'score', 
+                           'citation_count', 'source', 'common_terms', 'abstract']
+        
+        # Фильтруем существующие колонки
+        existing_columns = [col for col in columns_to_export if col in recommendations_df.columns]
+        
         output_csv_buffer = io.StringIO()
-        recommendations_df.to_csv(output_csv_buffer, index=False)
+        recommendations_df[existing_columns].to_csv(output_csv_buffer, index=False)
         output_csv_buffer.seek(0)
         return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
 
@@ -2983,10 +3438,13 @@ class DocumentGenerator:
             row_cells[0].text = author_stat['author']
             row_cells[1].text = str(author_stat['count'])
             row_cells[2].text = str(author_stat['percentage'])
-    
+
     @staticmethod
     def _add_recommendations_section(doc: Document, recommendations_df):
-        """Add recommendations section to document"""
+        """Add recommendations section to document with citation counts"""
+        if recommendations_df is None or recommendations_df.empty:
+            return
+        
         doc.add_page_break()
         doc.add_heading('Article Recommendations', level=1)
         
@@ -3009,32 +3467,33 @@ class DocumentGenerator:
             authors_para.add_run("Authors: ").bold = True
             authors_para.add_run(row['authors'])
             
+            # Добавляем информацию о цитированиях
             info_para = doc.add_paragraph()
             info_para.add_run("Journal: ").bold = True
             info_para.add_run(f"{row['journal']}, ")
             info_para.add_run("Year: ").bold = True
             info_para.add_run(f"{row['year']}, ")
+            info_para.add_run("Citations: ").bold = True
+            info_para.add_run(f"{row.get('citation_count', 'N/A')}, ")
             info_para.add_run("Source: ").bold = True
-            info_para.add_run(row['source'])
+            info_para.add_run(row.get('source', 'unknown'))
             
-            doi_para = doc.add_paragraph()
-            doi_para.add_run("DOI: ").bold = True
-            DocumentGenerator.add_hyperlink(doi_para, row['doi'], f"https://doi.org/{row['doi']}")
+            # DOI с гиперссылкой
+            if row['doi']:
+                doi_para = doc.add_paragraph()
+                doi_para.add_run("DOI: ").bold = True
+                DocumentGenerator.add_hyperlink(doi_para, row['doi'], f"https://doi.org/{row['doi']}")
             
-            if row['abstract']:
+            if row.get('abstract'):
                 abstract_para = doc.add_paragraph()
                 abstract_para.add_run("Abstract: ").bold = True
                 abstract_para.add_run(row['abstract'])
             
-            similarity_para = doc.add_paragraph()
-            similarity_para.add_run("Similarity metrics: ").bold = True
-            similarity_para.add_run(f"Title similarity: {row['title_sim']:.3f}, ")
-            similarity_para.add_run(f"Content coverage: {row['content_sim']:.3f}, ")
-            similarity_para.add_run(f"Semantic similarity: {row['semantic_sim']:.3f}")
-            
-            terms_para = doc.add_paragraph()
-            terms_para.add_run("Common terms: ").bold = True
-            terms_para.add_run(row['common_terms'])
+            # Общие термины
+            if 'common_terms' in row and row['common_terms']:
+                terms_para = doc.add_paragraph()
+                terms_para.add_run("Common terms: ").bold = True
+                terms_para.add_run(row['common_terms'])
             
             doc.add_paragraph()
 
@@ -5664,7 +6123,7 @@ class ResultsPage:
 
     @staticmethod
     def _render_recommendations_section():
-        """Render recommendations section"""
+        """Render recommendations section with progress bar"""
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendations_title')}</div>", unsafe_allow_html=True)
         
         current_year = datetime.now().year
@@ -5672,8 +6131,8 @@ class ResultsPage:
         
         st.markdown(f"<p>{get_text('recommendations_description').format(Config.RECOMMENDATION_YEARS_BACK)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
         
-        # Устанавливаем ключ для кнопки
-        generate_key = "generate_recommendations_btn"
+        # Устанавливаем уникальный ключ для кнопки
+        generate_key = f"generate_recommendations_{hash(str(st.session_state.formatted_refs))}"
         
         if not st.session_state.recommendations_generated:
             col_rec1, col_rec2 = st.columns([3, 1])
@@ -5682,24 +6141,41 @@ class ResultsPage:
                 st.info(f"Found {len(st.session_state.formatted_refs)} references. Click the button to generate recommendations.")
             
             with col_rec2:
-                # Используем уникальный ключ для кнопки
                 if st.button(get_text('recommend_similar_articles'), 
                             use_container_width=True, 
-                            key=generate_key):
+                            key=generate_key,
+                            type="primary"):
                     st.session_state.recommendations_loading = True
-                    # НЕ вызываем st.rerun() здесь
+                    st.rerun()
         
         # Генерируем рекомендации если установлен флаг loading
         if st.session_state.get('recommendations_loading', False):
-            with st.spinner(get_text('recommendations_loading')):
-                recommendations_df = ArticleRecommender.generate_recommendations(st.session_state.formatted_refs)
+            # Создаем контейнеры для прогресса
+            progress_container = st.empty()
+            status_container = st.empty()
+            progress_bar = progress_container.progress(0)
+            
+            def update_progress(progress_value: int, message: str):
+                """Обновление прогресс-бара"""
+                progress_bar.progress(progress_value)
+                status_container.text(f"{message} ({progress_value}%)")
+            
+            try:
+                # Используем оптимизированный рекомендатель
+                recommender = OptimizedArticleRecommender()
+                
+                # Генерируем рекомендации с отслеживанием прогресса
+                recommendations_df = recommender.generate_recommendations_with_progress(
+                    st.session_state.formatted_refs,
+                    progress_callback=update_progress
+                )
                 
                 if recommendations_df is not None and not recommendations_df.empty:
+                    # Сохраняем результаты
                     st.session_state.recommendations = recommendations_df
                     st.session_state.recommendations_generated = True
-                    st.session_state.recommendations_loading = False
                     
-                    # Создаем буферы для скачивания
+                    # Создаем файлы для скачивания
                     recommendations_txt = ArticleRecommender.create_recommendations_txt(recommendations_df)
                     recommendations_csv = ArticleRecommender.create_recommendations_csv(recommendations_df)
                     
@@ -5718,37 +6194,81 @@ class ResultsPage:
                     )
                     st.session_state.docx_buffer = docx_buffer_with_recs
                     
+                    # Обновляем прогресс
+                    update_progress(100, "Готово!")
+                    time.sleep(0.5)
+                    
                     st.success(get_text('recommendations_count').format(len(recommendations_df)))
+                    st.rerun()
+                    
                 else:
+                    update_progress(100, "Не найдено рекомендаций")
                     st.warning(get_text('recommendations_no_results'))
-                    st.session_state.recommendations_loading = False
+                    
+            except Exception as e:
+                update_progress(100, f"Ошибка: {str(e)[:100]}")
+                logger.error(f"Recommendation generation error: {e}")
+                st.error(f"{get_text('recommendations_error')}: {str(e)[:200]}")
+            
+            finally:
+                st.session_state.recommendations_loading = False
         
         # Отображаем сгенерированные рекомендации
         if st.session_state.recommendations_generated and st.session_state.recommendations is not None:
             recommendations_df = st.session_state.recommendations
             
-            st.markdown(f"<h3>{get_text('recommendations_count').format(len(recommendations_df))}</h3>", unsafe_allow_html=True)
+            # Показываем статистику
+            st.markdown(f"""
+            <div class='stat-card' style='margin: 20px 0;'>
+                <div class='stat-value'>{len(recommendations_df)}</div>
+                <div class='stat-label'>Recommendations found</div>
+                <div style='font-size: 0.8rem; margin-top: 5px;'>
+                    Source: {recommendations_df['source'].iloc[0] if not recommendations_df.empty else 'unknown'} | 
+                    Avg citations: {recommendations_df['citation_count'].mean():.1f if not recommendations_df.empty else 0}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
             
+            # Отображаем рекомендации
             for idx, row in recommendations_df.iterrows():
-                # Используем расширяемый контейнер для каждого элемента
-                with st.expander(f"Recommendation {idx+1}: {row['title'][:80]}... (Score: {row['score']:.3f})"):
+                with st.expander(f"#{idx+1}: {row['title'][:80]}... (Score: {row['score']:.3f})"):
                     st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
                     
-                    st.markdown(f"<div class='recommendation-score'>{get_text('recommendation_score')} {row['score']:.3f}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-title'>{row['title']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>{get_text('recommendation_year')} {row['year']} | {get_text('recommendation_journal')} {row['journal']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>Authors: {row['authors']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>DOI: <a href='https://doi.org/{row['doi']}' target='_blank' style='color: var(--primary); text-decoration: none; border-bottom: 1px dotted var(--primary);'>{row['doi']}</a></div>", unsafe_allow_html=True)
+                    # Заголовок и оценка
+                    col_score, col_year = st.columns([1, 1])
+                    with col_score:
+                        st.markdown(f"**{get_text('recommendation_score')} {row['score']:.3f}**")
+                    with col_year:
+                        st.markdown(f"**{get_text('recommendation_year')} {row['year']}**")
                     
-                    if row['abstract']:
-                        # Используем чекбокс для отображения/скрытия аннотации
-                        show_abstract_key = f"show_abstract_{idx}"
-                        if st.checkbox(f"Show abstract", key=show_abstract_key):
-                            st.markdown(f"<div class='recommendation-abstract'>{row['abstract']}</div>", unsafe_allow_html=True)
+                    # Название
+                    st.markdown(f"**{row['title']}**")
                     
-                    st.markdown(f"<div class='recommendation-meta'>Similarity: Title={row['title_sim']:.3f}, Content={row['content_sim']:.3f}, Semantic={row['semantic_sim']:.3f}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>Common terms: {row['common_terms']}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='recommendation-meta'>Source: {row['source']}</div>", unsafe_allow_html=True)
+                    # Мета-информация
+                    col_meta1, col_meta2 = st.columns([2, 1])
+                    with col_meta1:
+                        st.markdown(f"**{get_text('recommendation_journal')}** {row['journal']}")
+                        st.markdown(f"**Authors:** {row['authors']}")
+                    
+                    with col_meta2:
+                        citation_count = row.get('citation_count', 0)
+                        st.markdown(f"**Citations:** {citation_count}")
+                        st.markdown(f"**Source:** {row['source']}")
+                    
+                    # DOI ссылка
+                    doi_url = f"https://doi.org/{row['doi']}"
+                    st.markdown(f"**DOI:** [{row['doi']}]({doi_url})")
+                    
+                    # Сходство и общие термины
+                    st.markdown(f"**Common terms:** {row['common_terms']}")
+                    
+                    # Аннотация (если есть)
+                    if row.get('abstract'):
+                        if st.checkbox(f"Show abstract", key=f"show_abstract_{idx}"):
+                            st.markdown(f"**Abstract:**")
+                            st.markdown(f"<div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px; font-size: 0.9em;'>", unsafe_allow_html=True)
+                            st.markdown(row['abstract'])
+                            st.markdown("</div>", unsafe_allow_html=True)
                     
                     st.markdown("</div>", unsafe_allow_html=True)
             
@@ -6120,3 +6640,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
