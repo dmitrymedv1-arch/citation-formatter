@@ -37,14 +37,23 @@ from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 
-# Download NLTK data
+# Download NLTK data - do it immediately and not quietly to see errors
+import nltk
 try:
-    nltk.download('punkt', quiet=True)
-    nltk.download('stopwords', quiet=True)
-    nltk.download('wordnet', quiet=True)
-    nltk.download('averaged_perceptron_tagger', quiet=True)
-except:
-    pass
+    nltk.download('punkt')
+    nltk.download('stopwords')
+    nltk.download('wordnet')
+    nltk.download('averaged_perceptron_tagger')
+    nltk.download('punkt_tab')  # Add this for sentence tokenization
+    print("NLTK data downloaded successfully")
+except Exception as e:
+    print(f"Error downloading NLTK data: {e}")
+    # Try to download punkt resources specifically
+    try:
+        nltk.download('punkt_tab')
+        print("punkt_tab downloaded")
+    except:
+        pass
 
 # Configure logging
 logging.basicConfig(
@@ -5687,3 +5696,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
