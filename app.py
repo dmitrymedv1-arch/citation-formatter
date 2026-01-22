@@ -25,6 +25,7 @@ from pathlib import Path
 import sqlite3
 from contextlib import contextmanager
 import requests
+import pandas as pd
 
 logging.basicConfig(
     level=logging.INFO,
@@ -5558,6 +5559,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
