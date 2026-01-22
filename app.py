@@ -3086,28 +3086,54 @@ class ArticleRecommender:
         output_txt_buffer.write(f"Showing top {len(recommendations_df)} recommendations from the last {Config.RECOMMENDATION_YEARS_BACK} years\n\n")
         
         for idx, row in recommendations_df.iterrows():
-            output_txt_buffer.write(f"{idx+1:2d}. [{row['score']:.3f}] {row['title']}\n")
-            output_txt_buffer.write(f"    Authors: {row['authors']}\n")
-            output_txt_buffer.write(f"    Journal: {row['journal']}, Year: {row['year']}\n")
-            output_txt_buffer.write(f"    DOI: {row['doi']}\n")
-            if row['abstract']:
-                output_txt_buffer.write(f"    Abstract: {row['abstract']}\n")
-            output_txt_buffer.write(f"    Similarity: title={row['title_sim']:.3f}, content={row['content_sim']:.3f}, semantic={row['semantic_sim']:.3f}\n")
-            output_txt_buffer.write(f"    Common terms: {row['common_terms']}\n")
-            output_txt_buffer.write(f"    Source: {row['source']}\n")
+            output_txt_buffer.write(f"{idx+1:2d}. [{row.get('combined_score', row.get('score', 0)):.3f}] {row['title']}\n")
+            output_txt_buffer.write(f"    Authors: {row.get('authors', '')}\n")
+            output_txt_buffer.write(f"    Journal: {row.get('journal', '')}, Year: {row.get('year', '')}\n")
+            output_txt_buffer.write(f"    DOI: {row.get('doi', '')}\n")
+            if row.get('abstract'):
+                output_txt_buffer.write(f"    Abstract: {row.get('abstract', '')}\n")
+            
+            # Используем новые названия с fallback на старые
+            title_score = row.get('text_score', row.get('title_sim', 0))
+            content_score = row.get('citation_score', row.get('content_sim', 0))
+            semantic_score = row.get('bert_score', row.get('semantic_sim', 0))
+            
+            output_txt_buffer.write(f"    Similarity: text={title_score:.3f}, citations={content_score:.3f}, semantic={semantic_score:.3f}\n")
+            
+            # Добавляем combined_score если есть
+            if 'combined_score' in row:
+                output_txt_buffer.write(f"    Combined score: {row['combined_score']:.3f}\n")
+            
+            output_txt_buffer.write(f"    Common terms: {row.get('common_terms', '')}\n")
+            output_txt_buffer.write(f"    Source: {row.get('source', 'unknown')}\n")
             output_txt_buffer.write("\n")
         
         output_txt_buffer.seek(0)
         return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
-    
+
     @staticmethod
     def create_recommendations_csv(recommendations_df) -> io.BytesIO:
         """Create CSV file with recommendations"""
         if recommendations_df is None or recommendations_df.empty:
             return None
         
+        # Создаем копию с обратной совместимостью для CSV
+        df_for_csv = recommendations_df.copy()
+        
+        # Переименовываем новые колонки в старые названия для совместимости
+        column_mapping = {
+            'text_score': 'title_sim',
+            'citation_score': 'content_sim',
+            'bert_score': 'semantic_sim',
+            'combined_score': 'score'
+        }
+        
+        for new_col, old_col in column_mapping.items():
+            if new_col in df_for_csv.columns and old_col not in df_for_csv.columns:
+                df_for_csv[old_col] = df_for_csv[new_col]
+        
         output_csv_buffer = io.StringIO()
-        recommendations_df.to_csv(output_csv_buffer, index=False)
+        df_for_csv.to_csv(output_csv_buffer, index=False)
         output_csv_buffer.seek(0)
         return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
 
@@ -3374,10 +3400,16 @@ class DocumentGenerator:
                 abstract_para.add_run(row['abstract'])
             
             similarity_para = doc.add_paragraph()
-            similarity_para.add_run("Similarity metrics: ").bold = True
-            similarity_para.add_run(f"Title similarity: {row['title_sim']:.3f}, ")
-            similarity_para.add_run(f"Content coverage: {row['content_sim']:.3f}, ")
-            similarity_para.add_run(f"Semantic similarity: {row['semantic_sim']:.3f}")
+            similarity_para.add_run(f"Similarity metrics: ").bold = True
+            
+            # Используем новые названия с fallback на старые
+            title_score = row.get('text_score', row.get('title_sim', 0))
+            content_score = row.get('citation_score', row.get('content_sim', 0))
+            semantic_score = row.get('bert_score', row.get('semantic_sim', 0))
+            
+            similarity_para.add_run(f"Text similarity: {title_score:.3f}, ")
+            similarity_para.add_run(f"Citation analysis: {content_score:.3f}, ")
+            similarity_para.add_run(f"Semantic similarity: {semantic_score:.3f}")
             
             terms_para = doc.add_paragraph()
             terms_para.add_run("Common terms: ").bold = True
@@ -6468,6 +6500,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
