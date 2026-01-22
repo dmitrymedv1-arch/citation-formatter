@@ -2120,6 +2120,75 @@ class EnhancedArticleFinder:
         self.max_workers = 4
         self.request_timeout = 30
         self.rate_limit_delay = 0.5
+
+    def _analyze_references(self, references_metadata: List[Dict]) -> str:
+        """Анализ списка литературы"""
+        combined_text = ""
+        for metadata in references_metadata:
+            if metadata:
+                text = f"{metadata.get('title', '')} {metadata.get('abstract', '')}"
+                combined_text += text + " "
+        
+        # Извлекаем ключевые слова из заголовков и аннотаций
+        titles = [m.get('title', '') for m in references_metadata if m]
+        titles_text = " ".join(titles)
+        
+        return titles_text + " " + combined_text
+    
+    def _extract_key_terms(self, text: str, top_k: int = 20) -> List[str]:
+        """Извлечение ключевых терминов с улучшенной логикой"""
+        processed = self.processor.process_document(text)
+        
+        # Веса для разных типов терминов
+        weighted_terms = {}
+        for term, freq in processed['weighted_terms'].items():
+            # Увеличиваем вес для длинных терминов и составных слов
+            weight = freq * 1.0
+            
+            if len(term) > 8:  # Длинные термины обычно более специфичны
+                weight *= 2.0
+            elif '-' in term or '_' in term:  # Составные термины
+                weight *= 1.5
+            
+            # Снижаем вес для очень общих терминов
+            general_terms = {'analysis', 'method', 'study', 'research', 'result'}
+            if term in general_terms:
+                weight *= 0.5
+            
+            weighted_terms[term] = weight
+        
+        # Сортируем по весу
+        sorted_terms = sorted(weighted_terms.items(), key=lambda x: x[1], reverse=True)
+        
+        return [term for term, weight in sorted_terms[:top_k]]
+    
+    def _generate_search_queries(self, key_terms: List[str], use_synonyms: bool = True) -> List[str]:
+        """Генерация разнообразных поисковых запросов"""
+        search_queries = []
+        
+        # Стратегия 1: Комбинация топ-3 терминов
+        if len(key_terms) >= 3:
+            search_queries.append(" ".join(key_terms[:3]))
+        
+        # Стратегия 2: Биграммы для топ-5 терминов
+        for i in range(min(5, len(key_terms) - 1)):
+            for j in range(i + 1, min(6, len(key_terms))):
+                search_queries.append(f"{key_terms[i]} {key_terms[j]}")
+        
+        # Стратегия 3: Термины с самым высоким весом по отдельности
+        for term in key_terms[:5]:
+            if len(term.split()) == 1:  # Только однословные термины
+                search_queries.append(term)
+        
+        # Стратегия 4: Добавляем синонимы если нужно
+        if use_synonyms and len(key_terms) >= 3:
+            synonyms = self.processor.get_contextual_synonyms(key_terms[:3])
+            for synonym in list(synonyms)[:3]:
+                search_queries.append(synonym)
+        
+        # Убираем дубликаты и ограничиваем количество
+        unique_queries = list(dict.fromkeys(search_queries))
+        return unique_queries[:8]  # Максимум 8 запросов
     
     def find_similar_by_references(self, references_metadata: List[Dict], 
                                   max_results: int = Config.MAX_RECOMMENDATIONS,
@@ -2669,12 +2738,280 @@ class EnhancedArticleFinder:
         else:
             return 1.0
 
+    def _search_multiple_strategies(self, source: str, queries: List[str], 
+                                   limit_per_query: int, min_year: int) -> List[Dict]:
+        """Поиск с использованием нескольких стратегий для одного источника"""
+        all_results = []
+        
+        for i, query in enumerate(queries):
+            try:
+                if source == 'crossref':
+                    results = self._enhanced_crossref_search(query, limit_per_query, min_year)
+                elif source == 'openalex':
+                    results = self._enhanced_openalex_search(query, limit_per_query, min_year)
+                else:
+                    continue
+                
+                all_results.extend(results)
+                
+                # Задержка для избежания rate limiting
+                if i < len(queries) - 1:
+                    time.sleep(self.rate_limit_delay)
+                    
+            except Exception as e:
+                print(f"Ошибка при поиске '{query}' в {source}: {e}")
+                continue
+        
+        return all_results
+    
+    def _enhanced_crossref_search(self, query: str, limit: int = 20, min_year: int = None) -> List[Dict]:
+        """Улучшенный поиск в Crossref (старая версия для совместимости)"""
+        try:
+            current_year = datetime.now().year
+            
+            # Разные стратегии поиска для Crossref
+            search_params_list = [
+                # Стратегия 1: Поиск по заголовку и аннотации
+                {
+                    'query.title': query,
+                    'rows': limit,
+                    'sort': 'relevance',
+                    'order': 'desc',
+                    'select': 'DOI,title,abstract,author,issued,container-title,volume,issue,page,cited-by-count'
+                },
+                # Стратегия 2: Общий поиск
+                {
+                    'query': query,
+                    'rows': limit,
+                    'sort': 'relevance',
+                    'order': 'desc',
+                    'select': 'DOI,title,abstract,author,issued,container-title,cited-by-count'
+                }
+            ]
+            
+            if min_year:
+                for params in search_params_list:
+                    params['filter'] = f'from-pub-date:{min_year},until-pub-date:{current_year}'
+            
+            all_articles = []
+            
+            for params in search_params_list:
+                try:
+                    response = requests.get(
+                        "https://api.crossref.org/works",
+                        params=params,
+                        headers=self.headers,
+                        timeout=self.request_timeout
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json().get('message', {}).get('items', [])
+                        
+                        for item in data:
+                            doi = item.get('DOI')
+                            title = item.get('title', [''])[0]
+                            
+                            if not doi or not title:
+                                continue
+                            
+                            # Обработка аннотации
+                            abstract = item.get('abstract', '')
+                            if isinstance(abstract, str):
+                                abstract = re.sub(r'<[^>]+>', ' ', abstract)
+                                abstract = abstract[:500]
+                            else:
+                                abstract = ''
+                            
+                            # Извлечение года
+                            year = self._extract_year_from_item(item)
+                            if min_year and year and year < min_year:
+                                continue
+                            
+                            # Извлечение авторов
+                            authors = []
+                            for author in item.get('author', [])[:5]:
+                                family = author.get('family', '')
+                                given = author.get('given', '')
+                                if family or given:
+                                    authors.append(f"{family}, {given}".strip(', '))
+                            
+                            # Число цитирований
+                            cited_by_count = item.get('cited-by-count', 0)
+                            
+                            article_data = {
+                                'doi': doi,
+                                'title': title,
+                                'abstract': abstract,
+                                'year': year or current_year,
+                                'journal': item.get('container-title', [''])[0],
+                                'authors': authors[:3],
+                                'source': 'crossref',
+                                'has_abstract': bool(abstract.strip()),
+                                'cited_by_count': cited_by_count,
+                                'relevance_score': 1.0
+                            }
+                            
+                            # Увеличиваем рейтинг для статей с аннотацией
+                            if article_data['has_abstract']:
+                                article_data['relevance_score'] *= 1.2
+                            
+                            if cited_by_count > 10:
+                                article_data['relevance_score'] *= 1.2
+                            
+                            all_articles.append(article_data)
+                            
+                except Exception as e:
+                    print(f"Ошибка в стратегии Crossref: {e}")
+                    continue
+            
+            # Убираем дубликаты по DOI
+            seen_dois = set()
+            unique_articles = []
+            for article in all_articles:
+                if article['doi'] not in seen_dois:
+                    seen_dois.add(article['doi'])
+                    unique_articles.append(article)
+            
+            return unique_articles[:limit]
+            
+        except Exception as e:
+            print(f"Общая ошибка Crossref: {e}")
+            return []
+    
+    def _enhanced_openalex_search(self, query: str, limit: int = 20, min_year: int = None) -> List[Dict]:
+        """Улучшенный поиск в OpenAlex (старая версия для совместимости)"""
+        try:
+            current_year = datetime.now().year
+            
+            # OpenAlex поддерживает более сложные запросы
+            search_params = {
+                'search': query,
+                'per-page': min(limit, 50),
+                'sort': 'relevance_score:desc',
+                'select': 'id,doi,title,abstract,publication_year,primary_location,authorships,cited_by_count'
+            }
+            
+            if min_year:
+                search_params['filter'] = f'publication_year:{min_year}-{current_year}'
+            
+            all_articles = []
+            
+            # Получаем несколько страниц результатов
+            page = 1
+            max_pages = 2
+            
+            while page <= max_pages and len(all_articles) < limit:
+                try:
+                    search_params['page'] = page
+                    
+                    response = requests.get(
+                        "https://api.openalex.org/works",
+                        params=search_params,
+                        timeout=self.request_timeout
+                    )
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        works = data.get('results', [])
+                        
+                        if not works:
+                            break
+                        
+                        for item in works:
+                            # Проверяем наличие DOI
+                            doi_url = item.get('doi', '')
+                            if not doi_url:
+                                continue
+                            
+                            # Извлекаем чистый DOI
+                            if doi_url.startswith('https://doi.org/'):
+                                doi = doi_url.replace('https://doi.org/', '')
+                            else:
+                                doi = doi_url
+                            
+                            title = item.get('title', '')
+                            if not title:
+                                continue
+                            
+                            # Аннотация из OpenAlex
+                            abstract = ''
+                            if item.get('abstract_inverted_index'):
+                                abstract = self._reconstruct_abstract(item['abstract_inverted_index'])
+                            elif item.get('abstract'):
+                                abstract = str(item['abstract'])
+                            
+                            abstract = abstract[:500]
+                            
+                            year = item.get('publication_year', current_year)
+                            if min_year and year and year < min_year:
+                                continue
+                            
+                            # Извлечение авторов
+                            authors = []
+                            for authorship in item.get('authorships', [])[:3]:
+                                author = authorship.get('author', {})
+                                display_name = author.get('display_name', '')
+                                if display_name:
+                                    authors.append(display_name)
+                            
+                            # Журнал/источник
+                            journal = ''
+                            primary_location = item.get('primary_location', {})
+                            if primary_location:
+                                source = primary_location.get('source', {})
+                                journal = source.get('display_name', '')
+                            
+                            # Количество цитирований как показатель важности
+                            cited_by_count = item.get('cited_by_count', 0)
+                            
+                            article_data = {
+                                'doi': doi,
+                                'title': title,
+                                'abstract': abstract,
+                                'year': year,
+                                'journal': journal,
+                                'authors': authors,
+                                'source': 'openalex',
+                                'has_abstract': bool(abstract.strip()),
+                                'cited_by_count': cited_by_count,
+                                'relevance_score': 1.0
+                            }
+                            
+                            # Повышаем рейтинг на основе дополнительных факторов
+                            if article_data['has_abstract']:
+                                article_data['relevance_score'] *= 1.3
+                            
+                            if cited_by_count > 10:
+                                article_data['relevance_score'] *= 1.2
+                            
+                            all_articles.append(article_data)
+                            
+                            if len(all_articles) >= limit:
+                                break
+                        
+                        page += 1
+                        time.sleep(0.3)
+                        
+                    else:
+                        print(f"OpenAlex вернул статус {response.status_code}")
+                        break
+                        
+                except Exception as e:
+                    print(f"Ошибка страницы {page} OpenAlex: {e}")
+                    break
+            
+            return all_articles[:limit]
+            
+        except Exception as e:
+            print(f"Общая ошибка OpenAlex: {e}")
+            return []
+
 # Article Recommendation System
 class ArticleRecommender:
     """Article recommendation system"""
     
     @staticmethod
-    def generate_recommendations(formatted_refs: List[Tuple[Any, bool, Any]], progress_container=None):
+    def generate_recommendations(formatted_refs: List[Tuple[Any, bool, Any]]):
         """Generate article recommendations based on formatted references"""
         if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
             return None
@@ -5673,10 +6010,9 @@ class ResultsPage:
                 # Создаем прогресс-бар
                 progress_bar = progress_container.progress(0)
                 status_container.text("🚀 Starting recommendation engine...")
-                
+
                 recommendations_df = ArticleRecommender.generate_recommendations(
-                    st.session_state.formatted_refs, 
-                    progress_container
+                    st.session_state.formatted_refs
                 )
                 
                 if recommendations_df is not None and not recommendations_df.empty:
@@ -6127,4 +6463,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
