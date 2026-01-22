@@ -5280,7 +5280,7 @@ class ResultsPage:
         with col_nav3:
             if st.button(get_text('new_session'), use_container_width=True, key="new_session_results"):
                 StageManager.clear_all()
-    
+
     @staticmethod
     def _render_recommendations_section():
         """Render recommendations section"""
@@ -5291,31 +5291,43 @@ class ResultsPage:
         
         st.markdown(f"<p>{get_text('recommendations_description').format(Config.RECOMMENDATION_YEARS_BACK)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
         
+        # Устанавливаем ключ для кнопки
+        generate_key = "generate_recommendations_btn"
+        
         if not st.session_state.recommendations_generated:
             col_rec1, col_rec2 = st.columns([3, 1])
             
             with col_rec1:
-                st.info(get_text('recommendations_not_enough').format(Config.MIN_REFERENCES_FOR_RECOMMENDATIONS))
+                st.info(f"Found {len(st.session_state.formatted_refs)} references. Click the button to generate recommendations.")
             
             with col_rec2:
-                if st.button(get_text('recommend_similar_articles'), use_container_width=True, key="generate_recommendations"):
+                # Используем уникальный ключ для кнопки
+                if st.button(get_text('recommend_similar_articles'), 
+                            use_container_width=True, 
+                            key=generate_key):
                     st.session_state.recommendations_loading = True
-                    st.rerun()
+                    # НЕ вызываем st.rerun() здесь
         
-        if st.session_state.recommendations_loading:
+        # Генерируем рекомендации если установлен флаг loading
+        if st.session_state.get('recommendations_loading', False):
             with st.spinner(get_text('recommendations_loading')):
                 recommendations_df = ArticleRecommender.generate_recommendations(st.session_state.formatted_refs)
                 
                 if recommendations_df is not None and not recommendations_df.empty:
                     st.session_state.recommendations = recommendations_df
                     st.session_state.recommendations_generated = True
+                    st.session_state.recommendations_loading = False
                     
+                    # Создаем буферы для скачивания
                     recommendations_txt = ArticleRecommender.create_recommendations_txt(recommendations_df)
                     recommendations_csv = ArticleRecommender.create_recommendations_csv(recommendations_df)
                     
-                    st.session_state.recommendations_txt_buffer = recommendations_txt
-                    st.session_state.recommendations_csv_buffer = recommendations_csv
+                    if recommendations_txt:
+                        st.session_state.recommendations_txt_buffer = recommendations_txt
+                    if recommendations_csv:
+                        st.session_state.recommendations_csv_buffer = recommendations_csv
                     
+                    # Обновляем DOCX с рекомендациями
                     docx_buffer_with_recs = DocumentGenerator.generate_document(
                         st.session_state.formatted_refs,
                         generate_statistics(st.session_state.formatted_refs),
@@ -5326,17 +5338,18 @@ class ResultsPage:
                     st.session_state.docx_buffer = docx_buffer_with_recs
                     
                     st.success(get_text('recommendations_count').format(len(recommendations_df)))
-                    st.rerun()
                 else:
                     st.warning(get_text('recommendations_no_results'))
                     st.session_state.recommendations_loading = False
         
+        # Отображаем сгенерированные рекомендации
         if st.session_state.recommendations_generated and st.session_state.recommendations is not None:
             recommendations_df = st.session_state.recommendations
             
             st.markdown(f"<h3>{get_text('recommendations_count').format(len(recommendations_df))}</h3>", unsafe_allow_html=True)
             
             for idx, row in recommendations_df.iterrows():
+                # Используем расширяемый контейнер для каждого элемента
                 with st.expander(f"Recommendation {idx+1}: {row['title'][:80]}... (Score: {row['score']:.3f})"):
                     st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
                     
@@ -5347,7 +5360,9 @@ class ResultsPage:
                     st.markdown(f"<div class='recommendation-meta'>DOI: {row['doi']}</div>", unsafe_allow_html=True)
                     
                     if row['abstract']:
-                        if st.checkbox(f"Show abstract for recommendation {idx+1}", key=f"show_abstract_{idx}"):
+                        # Используем чекбокс для отображения/скрытия аннотации
+                        show_abstract_key = f"show_abstract_{idx}"
+                        if st.checkbox(f"Show abstract", key=show_abstract_key):
                             st.markdown(f"<div class='recommendation-abstract'>{row['abstract']}</div>", unsafe_allow_html=True)
                     
                     st.markdown(f"<div class='recommendation-meta'>Similarity: Title={row['title_sim']:.3f}, Content={row['content_sim']:.3f}, Semantic={row['semantic_sim']:.3f}</div>", unsafe_allow_html=True)
@@ -5356,12 +5371,13 @@ class ResultsPage:
                     
                     st.markdown("</div>", unsafe_allow_html=True)
             
-            st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
+            # Кнопки скачивания рекомендаций
+            st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
             
             col_rec_download1, col_rec_download2 = st.columns(2)
             
             with col_rec_download1:
-                if st.session_state.recommendations_txt_buffer:
+                if hasattr(st.session_state, 'recommendations_txt_buffer') and st.session_state.recommendations_txt_buffer:
                     st.download_button(
                         label=get_text('recommendation_download_txt'),
                         data=st.session_state.recommendations_txt_buffer.getvalue(),
@@ -5372,7 +5388,7 @@ class ResultsPage:
                     )
             
             with col_rec_download2:
-                if st.session_state.recommendations_csv_buffer:
+                if hasattr(st.session_state, 'recommendations_csv_buffer') and st.session_state.recommendations_csv_buffer:
                     st.download_button(
                         label=get_text('recommendation_download_csv'),
                         data=st.session_state.recommendations_csv_buffer.getvalue(),
@@ -5723,5 +5739,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
