@@ -2730,8 +2730,61 @@ class OpenAlexArticleFinder:
         return None
     
     def _parse_work_data(self, data: Dict) -> Dict:
-        """Парсинг данных статьи из OpenAlex"""
+        """Парсинг данных статьи из OpenAlex с извлечением тематической информации и источника"""
+        # Извлекаем тематическую информацию с весами
+        primary_topic = data.get('primary_topic')
+        topics = data.get('topics', [])
         concepts = data.get('concepts', [])
+        
+        # Формируем структурированный список тем с их весами (scores)
+        structured_topics = []
+        if primary_topic:
+            # Основная тема получает вес 0.5
+            structured_topics.append({
+                'id': primary_topic.get('id'),
+                'display_name': primary_topic.get('display_name', ''),
+                'score': 0.5,  # 50% вес согласно вашему запросу
+                'type': 'primary_topic'
+            })
+        
+        # Дополнительные темы (topics) получают вес 0.3
+        for topic in topics[:5]:  # Берем топ-5 тем
+            structured_topics.append({
+                'id': topic.get('id'),
+                'display_name': topic.get('display_name', ''),
+                'score': 0.3 * (topic.get('score', 0) / 100),  # Нормализуем и применяем вес 30%
+                'type': 'topic'
+            })
+        
+        # Концепты (concepts) получают вес 0.2
+        for concept in concepts[:10]:  # Берем топ-10 концептов
+            structured_topics.append({
+                'id': concept.get('id'),
+                'display_name': concept.get('display_name', ''),
+                'score': 0.2 * (concept.get('score', 0) / 100),  # Нормализуем и применяем вес 20%
+                'type': 'concept'
+            })
+        
+        # Извлекаем информацию об источнике
+        source_info = 'openalex'
+        primary_location = data.get('primary_location', {})
+        if primary_location:
+            source = primary_location.get('source', {})
+            source_display_name = source.get('display_name', '')
+            if source_display_name:
+                # Нормализуем название источника для лучшей идентификации
+                if 'crossref' in source_display_name.lower():
+                    source_info = 'crossref'
+                elif 'springer' in source_display_name.lower():
+                    source_info = 'springer'
+                elif 'wiley' in source_display_name.lower():
+                    source_info = 'wiley'
+                elif 'elsevier' in source_display_name.lower():
+                    source_info = 'elsevier'
+                elif 'ieee' in source_display_name.lower():
+                    source_info = 'ieee'
+                elif 'mdpi' in source_display_name.lower():
+                    source_info = 'mdpi'
         
         return {
             'id': data.get('id'),
@@ -2741,12 +2794,18 @@ class OpenAlexArticleFinder:
             'publication_year': data.get('publication_year'),
             'doi': data.get('doi', ''),
             'cited_by_count': data.get('cited_by_count', 0),
-            'concepts': [c['display_name'] for c in concepts],
-            'concept_ids': [c['id'] for c in concepts],
+            'topics': structured_topics,  # Объединенные темы с весами
+            'topics_raw': {
+                'primary_topic': primary_topic,
+                'topics_list': topics,
+                'concepts_list': concepts
+            },
             'authors': [a.get('author', {}).get('display_name', '') for a in data.get('authorships', [])],
             'journal': data.get('primary_location', {}).get('source', {}).get('display_name', ''),
             'is_oa': data.get('open_access', {}).get('is_oa', False),
             'url': data.get('doi', ''),
+            'source': source_info,  # Сохраняем определенный источник
+            'openalex_raw_source': primary_location.get('source', {})
         }
     
     def _reconstruct_abstract(self, inverted_index: Dict) -> str:
@@ -3041,18 +3100,23 @@ class OptimizedArticleRecommender:
         return self._create_recommendations_df(ranked_results)
     
     def _build_semantic_profile(self, formatted_refs: List[Tuple[Any, bool, Any]]) -> Dict:
-        """Строит семантический профиль на основе списка литературы"""
+        """Строит семантический профиль на основе списка литературы с учетом тем из OpenAlex"""
         profile = {
             'titles': [],
             'abstracts': [],
             'journals': [],
             'key_terms': set(),
             'years': [],
-            'keywords': []
+            'keywords': [],
+            'weighted_topics': {}  # Словарь для хранения взвешенных тем
         }
         
         # Собираем текст из всех статей
         all_text = []
+        
+        # Для извлечения тем нам нужны DOI исходных статей
+        # Мы предполагаем, что у вас есть доступ к OpenAlexArticleFinder
+        openalex_finder = OpenAlexArticleFinder()
         
         for _, is_error, metadata in formatted_refs:
             if is_error or not metadata:
@@ -3075,14 +3139,47 @@ class OptimizedArticleRecommender:
             # Год
             if metadata.get('year'):
                 profile['years'].append(metadata['year'])
+            
+            # Пытаемся получить тематическую информацию из OpenAlex по DOI
+            if metadata.get('doi'):
+                try:
+                    # Получаем данные статьи из OpenAlex
+                    work_data = openalex_finder.get_work_by_doi(metadata['doi'])
+                    if work_data and work_data.get('topics'):
+                        # Обрабатываем взвешенные темы из статьи
+                        for topic in work_data['topics']:
+                            topic_name = topic.get('display_name', '').lower()
+                            topic_score = topic.get('score', 0)
+                            topic_type = topic.get('type', 'concept')
+                            
+                            if topic_name and topic_score > 0:
+                                # Увеличиваем вес темы в профиле
+                                if topic_name in profile['weighted_topics']:
+                                    profile['weighted_topics'][topic_name] += topic_score
+                                else:
+                                    profile['weighted_topics'][topic_name] = topic_score
+                                
+                                # Также добавляем в ключевые термины для обратной совместимости
+                                profile['key_terms'].add(topic_name)
+                except Exception as e:
+                    logger.debug(f"Ошибка получения тем из OpenAlex для DOI {metadata['doi']}: {e}")
+                    # Продолжаем обработку даже если не удалось получить темы
         
-        # Извлекаем ключевые термины
+        # Извлекаем ключевые термины из текста (для обратной совместимости)
         if all_text:
             combined_text = ' '.join(all_text)
-            profile['key_terms'] = self._extract_key_terms(combined_text)
+            profile['key_terms'].update(self._extract_key_terms(combined_text))
         
         # Извлекаем ключевые слова из заголовков
         profile['keywords'] = self._extract_keywords_from_titles(profile['titles'])
+        
+        # Сортируем темы по весу для дальнейшего использования
+        sorted_topics = sorted(
+            profile['weighted_topics'].items(), 
+            key=lambda x: x[1], 
+            reverse=True
+        )
+        profile['sorted_topics'] = sorted_topics[:20]  # Топ-20 тем
         
         return profile
     
@@ -3294,31 +3391,87 @@ class OptimizedArticleRecommender:
         except Exception as e:
             logger.debug(f"Error parsing Crossref work: {e}")
             return None
-    
+        
     def _calculate_semantic_similarity(self, article: Dict, semantic_profile: Dict) -> float:
-        """Вычисление семантической близости статьи к профилю"""
+        """Вычисление семантической близости статьи к профилю на основе взвешенных тем"""
         similarity_score = 0.0
         
-        # 1. Сходство по ключевым терминам
+        # 1. Сходство по взвешенным темам (самый важный фактор - 60% веса)
+        article_topics = set()
+        article_weighted_topics = {}
+        
+        # Извлекаем темы из статьи (если они есть в данных)
+        if 'topics' in article:
+            for topic in article.get('topics', []):
+                topic_name = topic.get('display_name', '').lower()
+                topic_weight = topic.get('score', 0)
+                if topic_name and topic_weight > 0:
+                    article_topics.add(topic_name)
+                    article_weighted_topics[topic_name] = topic_weight
+        
+        # Если тем нет в данных статьи, пытаемся получить их из OpenAlex
+        elif article.get('doi'):
+            try:
+                openalex_finder = OpenAlexArticleFinder()
+                work_data = openalex_finder.get_work_by_doi(article['doi'])
+                if work_data and work_data.get('topics'):
+                    for topic in work_data['topics']:
+                        topic_name = topic.get('display_name', '').lower()
+                        topic_weight = topic.get('score', 0)
+                        if topic_name and topic_weight > 0:
+                            article_topics.add(topic_name)
+                            article_weighted_topics[topic_name] = topic_weight
+            except Exception as e:
+                logger.debug(f"Ошибка получения тем для статьи {article.get('doi')}: {e}")
+        
+        # Вычисляем сходство по темам
+        profile_topics = semantic_profile.get('weighted_topics', {})
+        if profile_topics and article_weighted_topics:
+            # Находим пересечение тем
+            common_topics = set(profile_topics.keys()).intersection(set(article_weighted_topics.keys()))
+            
+            if common_topics:
+                # Вычисляем взвешенную сумму совпадений
+                total_weight = 0.0
+                matched_weight = 0.0
+                
+                for topic in profile_topics.keys():
+                    total_weight += profile_topics[topic]
+                    if topic in article_weighted_topics:
+                        # Учитываем вес из обоих источников
+                        matched_weight += (profile_topics[topic] + article_weighted_topics[topic]) / 2
+                
+                if total_weight > 0:
+                    topic_similarity = matched_weight / total_weight
+                    similarity_score += topic_similarity * 0.6  # 60% веса
+        
+        # 2. Сходство по ключевым терминам (20% веса)
         article_text = f"{article.get('title', '').lower()} {article.get('abstract', '').lower()}"
         article_terms = self._extract_key_terms(article_text)
         
         profile_terms = semantic_profile.get('key_terms', set())
         if profile_terms:
             common_terms = len(article_terms.intersection(profile_terms))
-            similarity_score += (common_terms / len(profile_terms)) * 0.6
+            term_similarity = common_terms / len(profile_terms) if len(profile_terms) > 0 else 0
+            similarity_score += term_similarity * 0.2  # 20% веса
         
-        # 2. Сходство журнала
+        # 3. Сходство журнала (10% веса)
         article_journal = article.get('journal', '').lower()
         profile_journals = [j.lower() for j in semantic_profile.get('journals', [])]
         
         if article_journal and profile_journals:
+            journal_match = False
             for profile_journal in profile_journals:
-                if profile_journal in article_journal or article_journal in profile_journal:
-                    similarity_score += 0.2
+                if (profile_journal in article_journal or 
+                    article_journal in profile_journal or
+                    self._journal_name_similarity(profile_journal, article_journal) > 0.7):
+                    journal_match = True
                     break
+            
+            if journal_match:
+                similarity_score += 0.1  # 10% веса
         
-        # 3. Свежесть (меньший вес, так как важнее содержание)
+        # 4. Свежесть статьи (10% веса)
         current_year = datetime.now().year
         article_year = article.get('publication_year', 0)
         
@@ -3327,14 +3480,29 @@ class OptimizedArticleRecommender:
         elif article_year >= current_year - 3:
             similarity_score += 0.05  # Свежие
         
-        # 4. Число цитирований (минимальный вес - важнее содержание)
-        citations = article.get('cited_by_count', 0) or article.get('citation_count', 0)
-        if citations >= 50:
-            similarity_score += 0.05
-        elif citations >= 20:
-            similarity_score += 0.02
-        
         return min(1.0, similarity_score)
+    
+    def _journal_name_similarity(self, journal1: str, journal2: str) -> float:
+        """Вычисляет сходство названий журналов"""
+        if not journal1 or not journal2:
+            return 0.0
+        
+        # Нормализация названий
+        j1 = journal1.lower().replace('journal of', 'j').replace('proceedings of', 'proc')
+        j2 = journal2.lower().replace('journal of', 'j').replace('proceedings of', 'proc')
+        
+        # Разбиваем на слова
+        words1 = set(j1.split())
+        words2 = set(j2.split())
+        
+        if not words1 or not words2:
+            return 0.0
+        
+        # Вычисляем коэффициент Жаккара
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+        
+        return len(intersection) / len(union) if union else 0.0
     
     def _rank_by_semantic_similarity(self, articles: List[Dict], semantic_profile: Dict) -> List[Dict]:
         """Ранжирование статей по семантической близости"""
@@ -3353,9 +3521,9 @@ class OptimizedArticleRecommender:
                 unique_articles.append(article)
         
         return unique_articles[:Config.MAX_RECOMMENDATIONS]
-    
+
     def _create_recommendations_df(self, articles: List[Dict]) -> pd.DataFrame:
-        """Создание DataFrame с рекомендациями"""
+        """Создание DataFrame с рекомендациями с сохранением источника"""
         formatted_recommendations = []
         
         for i, article in enumerate(articles):
@@ -3371,18 +3539,39 @@ class OptimizedArticleRecommender:
             if not abstract and article.get('abstract_inverted_index'):
                 abstract = self.openalex_finder._reconstruct_abstract(article['abstract_inverted_index'])
             
-            # Ключевые термины (концепты)
-            concepts = article.get('concepts', [])
-            if concepts:
-                common_terms = ', '.join(concepts[:5])
-            else:
-                # Извлекаем из заголовка
-                title_terms = self._extract_key_terms(article.get('title', ''))
-                common_terms = ', '.join(list(title_terms)[:5])
+            # Ключевые термины (темы)
+            common_topics = []
+            if 'topics' in article:
+                for topic in article['topics'][:5]:  # Берем топ-5 тем
+                    topic_name = topic.get('display_name', '')
+                    if topic_name:
+                        common_topics.append(topic_name)
+            
+            common_terms_str = ', '.join(common_topics) if common_topics else ''
             
             # Цитирования
             citation_count = article.get('citation_count', 
                                        article.get('cited_by_count', 0)) or 0
+            
+            # Источник - КРИТИЧЕСКИ ВАЖНО: сохраняем исходное значение
+            article_source = article.get('source', 'unknown')
+            # Если источник не определен, пытаемся определить по журналу
+            if article_source == 'unknown' and article.get('journal'):
+                journal_lower = article['journal'].lower()
+                if any(pub in journal_lower for pub in ['springer', 'nature']):
+                    article_source = 'springer'
+                elif 'wiley' in journal_lower:
+                    article_source = 'wiley'
+                elif 'elsevier' in journal_lower:
+                    article_source = 'elsevier'
+                elif 'ieee' in journal_lower:
+                    article_source = 'ieee'
+                elif 'mdpi' in journal_lower:
+                    article_source = 'mdpi'
+                elif 'acs' in journal_lower:
+                    article_source = 'acs'
+                elif 'rsc' in journal_lower:
+                    article_source = 'rsc'
             
             formatted_recommendations.append({
                 'doi': article.get('doi', ''),
@@ -3391,14 +3580,15 @@ class OptimizedArticleRecommender:
                 'journal': article.get('journal', ''),
                 'authors': authors_str,
                 'abstract': abstract[:500] + '...' if len(abstract) > 500 else abstract,
-                'score': article.get('semantic_similarity', 0),  # Используем семантическую близость как score
+                'score': article.get('semantic_similarity', 0),
                 'citation_count': citation_count,
-                'source': article.get('source', 'unknown'),
-                'title_sim': 0.0,  # Заглушки для совместимости
-                'content_sim': article.get('semantic_similarity', 0),  # Здесь реальное значение
+                'source': article_source,  # Сохраняем исправленный источник
+                'title_sim': 0.0,
+                'content_sim': article.get('semantic_similarity', 0),
                 'semantic_sim': article.get('semantic_similarity', 0),
-                'common_terms': common_terms,
+                'common_terms': common_terms_str,
                 'has_abstract': bool(abstract),
+                'primary_topics': common_terms_str  # Добавляем отдельное поле для тем
             })
         
         return pd.DataFrame(formatted_recommendations)
@@ -6891,4 +7081,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
