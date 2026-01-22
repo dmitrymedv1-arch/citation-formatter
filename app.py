@@ -2408,56 +2408,56 @@ class SimpleArticleRecommender:
         return [term for term, _ in term_counter.most_common(30)]
 
     def _extract_primary_topics_from_references(self, formatted_refs: List[Tuple[Any, bool, Any]]) -> List[Dict]:
-    """Извлечение primary_topic из исходных статей через OpenAlex"""
-    primary_topics = []
-    
-    for _, is_error, metadata in formatted_refs:
-        if is_error or not metadata:
-            continue
+        """Извлечение primary_topic из исходных статей через OpenAlex"""
+        primary_topics = []
         
-        # Получаем DOI статьи
-        doi = metadata.get('doi', '')
-        if not doi:
-            continue
+        for _, is_error, metadata in formatted_refs:
+            if is_error or not metadata:
+                continue
+            
+            # Получаем DOI статьи
+            doi = metadata.get('doi', '')
+            if not doi:
+                continue
+            
+            try:
+                # Получаем данные статьи из OpenAlex
+                work_data = self.openalex_finder.get_work_by_doi(doi)
+                if work_data and 'primary_topic' in work_data:
+                    primary_topic = work_data['primary_topic']
+                    if primary_topic and 'id' in primary_topic:
+                        topic_id = primary_topic.get('id')
+                        topic_name = primary_topic.get('display_name', '')
+                        score = primary_topic.get('score', 0)
+                        
+                        if topic_id and topic_name:
+                            # Проверяем, есть ли уже такой topic
+                            existing_topic = next((t for t in primary_topics if t['id'] == topic_id), None)
+                            if existing_topic:
+                                existing_topic['count'] += 1
+                                existing_topic['total_score'] += score
+                            else:
+                                primary_topics.append({
+                                    'id': topic_id,
+                                    'name': topic_name,
+                                    'count': 1,
+                                    'total_score': score,
+                                    'score': score
+                                })
+            except Exception as e:
+                logger.debug(f"Error getting primary_topic for DOI {doi}: {e}")
+                continue
         
-        try:
-            # Получаем данные статьи из OpenAlex
-            work_data = self.openalex_finder.get_work_by_doi(doi)
-            if work_data and 'primary_topic' in work_data:
-                primary_topic = work_data['primary_topic']
-                if primary_topic and 'id' in primary_topic:
-                    topic_id = primary_topic.get('id')
-                    topic_name = primary_topic.get('display_name', '')
-                    score = primary_topic.get('score', 0)
-                    
-                    if topic_id and topic_name:
-                        # Проверяем, есть ли уже такой topic
-                        existing_topic = next((t for t in primary_topics if t['id'] == topic_id), None)
-                        if existing_topic:
-                            existing_topic['count'] += 1
-                            existing_topic['total_score'] += score
-                        else:
-                            primary_topics.append({
-                                'id': topic_id,
-                                'name': topic_name,
-                                'count': 1,
-                                'total_score': score,
-                                'score': score
-                            })
-        except Exception as e:
-            logger.debug(f"Error getting primary_topic for DOI {doi}: {e}")
-            continue
-    
-    # Сортируем по частоте встречаемости
-    primary_topics.sort(key=lambda x: x['count'], reverse=True)
-    
-    # Нормализуем score
-    if primary_topics:
-        max_count = primary_topics[0]['count']
-        for topic in primary_topics:
-            topic['normalized_score'] = topic['count'] / max_count
-    
-    return primary_topics[:5]  # Возвращаем топ-5 тем
+        # Сортируем по частоте встречаемости
+        primary_topics.sort(key=lambda x: x['count'], reverse=True)
+        
+        # Нормализуем score
+        if primary_topics:
+            max_count = primary_topics[0]['count']
+            for topic in primary_topics:
+                topic['normalized_score'] = topic['count'] / max_count
+        
+        return primary_topics[:5]  # Возвращаем топ-5 тем
     
     def _generate_search_queries(self, key_terms: List[str]) -> List[str]:
         """Генерация поисковых запросов на основе ключевых терминов"""
@@ -6269,6 +6269,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
