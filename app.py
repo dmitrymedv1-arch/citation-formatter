@@ -29,7 +29,8 @@ import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 import nltk
-from nltk.corpus import stopwords, wordnetimport os
+from nltk.corpus import stopwords, wordnet
+import os
 import csv
 import streamlit as st
 import re
@@ -6922,3 +6923,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
