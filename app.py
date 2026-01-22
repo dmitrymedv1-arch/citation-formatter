@@ -5588,7 +5588,7 @@ class ResultsPage:
             
             try:
                 # Используем оптимизированный рекомендатель
-                recommender = OptimizedArticleRecommender()
+                recommender = SimpleArticleRecommender()
                 
                 # Генерируем рекомендации с отслеживанием прогресса
                 recommendations_df = recommender.generate_recommendations_with_progress(
@@ -6071,6 +6071,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
