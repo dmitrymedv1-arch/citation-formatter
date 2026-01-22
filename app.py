@@ -2047,10 +2047,11 @@ class TopicBasedRecommender:
             try:
                 # Получаем данные статьи из OpenAlex
                 work_data = self.openalex_finder.get_work_by_doi(metadata['doi'])
-                if work_data and work_data.get('primary_topic'):
-                    primary_topic = work_data['primary_topic']
-                    topic_id = primary_topic.get('id', '')
-                    topic_name = primary_topic.get('display_name', '')
+                if work_data:
+                    primary_topic = work_data.get('primary_topic')
+                    if primary_topic:
+                        topic_id = primary_topic.get('id', '')
+                        topic_name = primary_topic.get('display_name', '')
                     
                     if topic_id and topic_name:
                         # Используем ID как ключ, чтобы избежать дублирования названий
@@ -5775,4 +5776,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
