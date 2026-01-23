@@ -5840,7 +5840,7 @@ class ResultsPage:
                         st.markdown(f"*Found {len(topic_works)} low-citation articles*")
                         
                         # Отображаем работы для этой темы
-                        for idx, row in topic_works.head(20).iterrows():  # Показываем топ-20 для каждой темы
+                        for idx, row in topic_works.head(30).iterrows():
                             with st.expander(f"#{idx+1}: {row['title'][:80]}...", expanded=False):
                                 col1, col2 = st.columns([3, 1])
                                 
@@ -6239,10 +6239,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
