@@ -2722,54 +2722,111 @@ class TopicSelectorUI:
                         st.markdown(tab_contents[i], unsafe_allow_html=True)
         
         return tab_labels
-    
+
     @staticmethod
     def _create_work_card(work, index):
-        """Создает HTML карточку для работы"""
+        """Создает HTML карточку для работы с учетом темы"""
+        # Получаем текущую тему
+        current_theme = st.session_state.current_theme
+        theme_config = Config.THEMES.get(current_theme, Config.THEMES['light'])
+        
         citation_color = "🔴" if work['cited_by_count'] == 0 else "🟡"
         citation_text = f"0 цит" if work['cited_by_count'] == 0 else f"{work['cited_by_count']} цит"
         
         authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
         
+        # Определяем цвета в зависимости от количества цитирований
+        citation_bg = theme_config['secondary'] if work['cited_by_count'] == 0 else theme_config['accent']
+        
         html = f"""
-        <div style="border-left: 4px solid #4ECDC4; padding: 10px 15px; margin: 10px 0; 
-                    background: linear-gradient(to right, rgba(78, 205, 196, 0.05), white);
-                    border-radius: 0 8px 8px 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: bold; color: #1f77b4;">#{index}. {work['title'][:120]}...</span>
-                <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
-                           color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8em;">
-                    {citation_color} {citation_text}
-                </span>
-            </div>
+        <div style="border-left: 4px solid {theme_config['primary']}; 
+                    padding: 12px 16px; 
+                    margin: 10px 0; 
+                    background: linear-gradient(to right, {theme_config['cardBackground']} 0%, {theme_config['secondaryBackground']} 100%);
+                    border-radius: 8px;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+                    transition: all 0.3s ease;
+                    border: 1px solid {theme_config['border']};">
             
-            <div style="margin-top: 8px; font-size: 0.9em;">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="flex: 1; margin-right: 15px;">
+                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
+                        <span style="background-color: {theme_config['primary']}; 
+                                    color: white; 
+                                    padding: 2px 8px; 
+                                    border-radius: 4px; 
+                                    font-size: 0.8em;
+                                    font-weight: bold;
+                                    margin-right: 8px;">
+                            #{index}
+                        </span>
+                        <span style="font-weight: bold; 
+                                    color: {theme_config['primary']}; 
+                                    font-size: 1em;
+                                    line-height: 1.3;">
+                            {work['title'][:150]}...
+                        </span>
+                    </div>
+                    
+                    <div style="margin-top: 8px; font-size: 0.9em; color: {theme_config['text']};">
         """
         
         if authors:
-            html += f"<div>👤 <strong>Authors:</strong> {authors}</div>"
+            html += f'<div style="margin-bottom: 4px;">👤 <strong style="color: {theme_config["text"]};">Authors:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{authors}</span></div>'
         
         if work.get('journal'):
             year_text = f" ({work['publication_year']})" if work.get('publication_year') else ""
-            html += f"<div>📰 <strong>Journal:</strong> {work['journal']}{year_text}</div>"
+            html += f'<div style="margin-bottom: 4px;">📰 <strong style="color: {theme_config["text"]};">Journal:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{work["journal"]}{year_text}</span></div>'
         
         if work.get('matched_keywords'):
             keywords = ', '.join(work['matched_keywords'][:3])
-            html += f"<div>🔑 <strong>Keywords:</strong> {keywords}</div>"
+            html += f'<div style="margin-bottom: 8px;">🔑 <strong style="color: {theme_config["text"]};">Keywords:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{keywords}</span></div>'
+        
+        # Добавляем индикатор цитирований
+        html += f"""
+                    </div>
+                </div>
+                
+                <div style="text-align: center; min-width: 80px;">
+                    <div style="background-color: {citation_bg}; 
+                               color: white; 
+                               padding: 6px 10px; 
+                               border-radius: 12px; 
+                               font-size: 0.85em;
+                               font-weight: bold;
+                               margin-bottom: 8px;">
+                        {citation_color} {citation_text}
+                    </div>
+                    <div style="font-size: 0.8em; color: {theme_config['text']}; opacity: 0.8;">
+                        Relevance: {work.get('relevance_score', 0)}/10
+                    </div>
+                </div>
+            </div>
+        """
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
             html += f"""
-            <div style="margin-top: 10px;">
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid {theme_config['border']};">
                 <a href="{doi_url}" target="_blank" 
-                   style="background-color: #4ECDC4; color: white; padding: 5px 12px; 
-                          text-decoration: none; border-radius: 4px; font-size: 0.9em;">
+                   style="background-color: {theme_config['primary']}; 
+                          color: white; 
+                          padding: 6px 14px; 
+                          text-decoration: none; 
+                          border-radius: 6px; 
+                          font-size: 0.9em;
+                          display: inline-block;
+                          transition: all 0.2s ease;">
                    🔗 Open Article
                 </a>
+                <span style="margin-left: 10px; font-size: 0.85em; color: {theme_config['text']}; opacity: 0.8;">
+                    DOI: {work['doi'][:30]}...
+                </span>
             </div>
             """
         
-        html += "</div></div>"
+        html += "</div>"
+        
         return html
     
     @staticmethod
@@ -6239,3 +6296,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
