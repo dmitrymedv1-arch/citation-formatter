@@ -5901,46 +5901,70 @@ class ResultsPage:
                         topic_name = topic_names[i]
                         topic_works = recommendations_df[recommendations_df['topic'] == topic_name]
                         
-                        st.markdown(f"#### 📚 {topic_name}")
+                        st.markdown(f"### 📚 {topic_name}")
                         st.markdown(f"*Найдено {len(topic_works)} низкоцитируемых статей*")
                         
-                        # Отображаем работы для этой темы
+                        # Отображаем работы для этой темы с использованием expander
                         for idx, row in topic_works.head(30).iterrows():
-                            # Используем card-стиль из темы вместо expander
-                            with st.container():
-                                st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
+                            # Создаем заголовок для expander с краткой информацией
+                            expander_title = f"#{idx+1}: {row['title'][:80]}... (📊 {row['cited_by_count']} цит.)"
+                            
+                            # Используем expander с кастомным стилем
+                            with st.expander(expander_title, expanded=False):
+                                # Создаем карточку внутри expander с применением стилей темы
+                                st.markdown(
+                                    f"""
+                                    <div class='recommendation-item' style='border: 1px solid var(--border); 
+                                         background-color: var(--cardBackground); padding: 15px; border-radius: 8px;'>
+                                    """,
+                                    unsafe_allow_html=True
+                                )
                                 
                                 col1, col2 = st.columns([3, 1])
                                 
                                 with col1:
-                                    st.markdown(f"**#{idx+1}. {row['title']}**")
+                                    # Полное название
+                                    st.markdown(f"**📝 Полное название:**")
+                                    st.markdown(f"{row['title']}")
                                     
+                                    # Авторы
                                     if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
-                                        st.markdown(f"**👤 Authors:** {row['authors_formatted']}")
+                                        st.markdown(f"**👤 Авторы:**")
+                                        st.markdown(f"{row['authors_formatted']}")
                                     
+                                    # Журнал и год
                                     if pd.notna(row.get('journal')):
-                                        journal_text = f"**📰 Journal:** {row['journal']}"
+                                        journal_text = f"**📰 Журнал:** {row['journal']}"
                                         if pd.notna(row.get('publication_year')):
-                                            journal_text += f", **Year:** {row['publication_year']}"
+                                            journal_text += f", **Год:** {row['publication_year']}"
                                         st.markdown(journal_text)
+                                    
+                                    # Ключевые слова
+                                    if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
+                                        st.markdown(f"**🔑 Ключевые слова:**")
+                                        st.markdown(f"{row['keywords_formatted']}")
                                 
                                 with col2:
+                                    # Статистика цитирований
                                     citation_color = "🔴" if row['cited_by_count'] == 0 else "🟡"
-                                    citation_text = "0 citations" if row['cited_by_count'] == 0 else f"{row['cited_by_count']} citations"
-                                    st.markdown(f"{citation_color} **{citation_text}**")
-                                    st.markdown(f"**Relevance:** {row['relevance_score']}/10")
+                                    citation_status = "0 цитирований" if row['cited_by_count'] == 0 else f"{row['cited_by_count']} цитирований"
+                                    st.markdown(f"**📊 Цитирования:**")
+                                    st.markdown(f"{citation_color} {citation_status}")
+                                    
+                                    # Релевантность
+                                    st.markdown(f"**🎯 Релевантность:**")
+                                    st.markdown(f"{row['relevance_score']}/10 баллов")
+                                    
+                                    # Тема
+                                    st.markdown(f"**🏷️ Тема:**")
+                                    st.markdown(f"{row['topic']}")
                                 
-                                # DOI ссылка
+                                # DOI ссылка (в отдельной строке)
                                 if pd.notna(row.get('doi')) and row['doi']:
                                     doi_url = f"https://doi.org/{row['doi']}"
-                                    st.markdown(f"[🔗 Open Article: {row['doi']}]({doi_url})", unsafe_allow_html=True)
-                                
-                                # Ключевые слова
-                                if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
-                                    st.markdown(f"**🔑 Keywords:** {row['keywords_formatted']}")
+                                    st.markdown(f"**🔗 DOI:** [{row['doi']}]({doi_url})")
                                 
                                 st.markdown("</div>", unsafe_allow_html=True)
-                                st.divider()
             
             # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
@@ -6310,4 +6334,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
