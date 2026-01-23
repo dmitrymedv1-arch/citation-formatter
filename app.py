@@ -4104,7 +4104,7 @@ class ThemeManager:
                 line-height: 1.4;
             }}
 
-            .recommendation-item {
+            .recommendation-item {{
                 background-color: var(--cardBackground);
                 padding: 15px;
                 margin-bottom: 15px;
@@ -4112,35 +4112,35 @@ class ThemeManager:
                 border-left: 4px solid var(--accent);
                 box-shadow: var(--shadow);
                 transition: all 0.3s ease;
-            }
+            }}
             
-            .recommendation-item:hover {
+            .recommendation-item:hover {{
                 transform: translateY(-2px);
                 box-shadow: 0 6px 15px rgba(0,0,0,0.1);
-            }
+            }}
             
-            .recommendation-score {
+            .recommendation-score {{
                 font-weight: bold;
                 color: var(--primary);
                 font-size: 0.9rem;
                 margin-bottom: 5px;
-            }
+            }}
             
-            .recommendation-title {
+            .recommendation-title {{
                 font-weight: bold;
                 color: var(--text);
                 font-size: 1.05rem;
                 margin: 8px 0;
                 line-height: 1.4;
-            }
+            }}
             
-            .recommendation-meta {
+            .recommendation-meta {{
                 color: var(--text);
                 opacity: 0.8;
                 font-size: 0.9rem;
                 margin-bottom: 8px;
                 line-height: 1.5;
-            }
+            }}
             
             .recommendation-progress {{
                 margin: 10px 0;
@@ -6322,5 +6322,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
