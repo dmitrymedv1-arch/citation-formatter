@@ -2273,6 +2273,284 @@ class ArticleRecommender:
         output_csv_buffer.seek(0)
         return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
 
+# Document Generator with Recommendations
+class DocumentGenerator:
+    """Class for generating DOCX documents"""
+    
+    @staticmethod
+    def add_hyperlink(paragraph, text, url):
+        """Add hyperlink to paragraph"""
+        part = paragraph.part
+        r_id = part.relate_to(url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True)
+        
+        hyperlink = OxmlElement('w:hyperlink')
+        hyperlink.set(qn('r:id'), r_id)
+        
+        new_run = OxmlElement('w:r')
+        rPr = OxmlElement('w:rPr')
+        
+        color = OxmlElement('w:color')
+        color.set(qn('w:val'), '0000FF')
+        rPr.append(color)
+        
+        underline = OxmlElement('w:u')
+        underline.set(qn('w:val'), 'single')
+        rPr.append(underline)
+        
+        new_run.append(rPr)
+        new_text = OxmlElement('w:t')
+        new_text.text = text
+        new_run.append(new_text)
+        
+        hyperlink.append(new_run)
+        paragraph._p.append(hyperlink)
+        
+        return hyperlink
+    
+    @staticmethod
+    def apply_yellow_background(run):
+        """Apply yellow background to run"""
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), 'FFFF00')
+        run._element.get_or_add_rPr().append(shd)
+    
+    @staticmethod
+    def apply_blue_background(run):
+        """Apply blue background to run"""
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), 'E6F3FF')
+        run._element.get_or_add_rPr().append(shd)
+    
+    @staticmethod
+    def apply_red_color(run):
+        """Apply red color to run"""
+        color = OxmlElement('w:color')
+        color.set(qn('w:val'), 'FF0000')
+        run._element.get_or_add_rPr().append(color)
+    
+    @staticmethod
+    def generate_document(formatted_refs: List[Tuple[Any, bool, Any]], 
+                         statistics: Dict[str, Any],
+                         style_config: Dict[str, Any],
+                         duplicates_info: Dict[int, int] = None,
+                         recommendations_df = None) -> io.BytesIO:
+        """Generate DOCX document with references, statistics, and recommendations"""
+        output_doc = Document()
+        output_doc.add_paragraph('Citation Style Construction / © IHTE, https://ihte.ru/ © CTA, https://chimicatechnoacta.ru / developed by daM©')
+        output_doc.add_paragraph('See short stats after the References section')
+        output_doc.add_heading('References', level=1)
+        
+        DocumentGenerator._add_formatted_references(output_doc, formatted_refs, style_config, duplicates_info)
+        DocumentGenerator._add_statistics_section(output_doc, statistics)
+        
+        if recommendations_df is not None and not recommendations_df.empty:
+            DocumentGenerator._add_recommendations_section(output_doc, recommendations_df)
+        
+        output_doc_buffer = io.BytesIO()
+        output_doc.save(output_doc_buffer)
+        output_doc_buffer.seek(0)
+        return output_doc_buffer
+    
+    @staticmethod
+    def _add_formatted_references(doc: Document, 
+                                formatted_refs: List[Tuple[Any, bool, Any]], 
+                                style_config: Dict[str, Any],
+                                duplicates_info: Dict[int, int] = None):
+        """Add formatted references to document"""
+        for i, (elements, is_error, metadata) in enumerate(formatted_refs):
+            numbering = style_config['numbering_style']
+            
+            if numbering == "No numbering":
+                prefix = ""
+            elif numbering == "1":
+                prefix = f"{i + 1} "
+            elif numbering == "1.":
+                prefix = f"{i + 1}. "
+            elif numbering == "1)":
+                prefix = f"{i + 1}) "
+            elif numbering == "(1)":
+                prefix = f"({i + 1}) "
+            elif numbering == "[1]":
+                prefix = f"[{i + 1}] "
+            else:
+                prefix = f"{i + 1}. "
+            
+            para = doc.add_paragraph(prefix)
+            
+            if is_error:
+                run = para.add_run(str(elements))
+                DocumentGenerator.apply_yellow_background(run)
+            elif duplicates_info and i in duplicates_info:
+                original_index = duplicates_info[i] + 1
+                duplicate_note = get_text('duplicate_reference').format(original_index)
+                
+                if isinstance(elements, str):
+                    run = para.add_run(elements)
+                    DocumentGenerator.apply_blue_background(run)
+                    para.add_run(f" - {duplicate_note}").italic = True
+                else:
+                    for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+                        if is_doi_hyperlink and doi_value:
+                            DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
+                        else:
+                            run = para.add_run(value)
+                            if italic:
+                                run.font.italic = True
+                            if bold:
+                                run.font.bold = True
+                            DocumentGenerator.apply_blue_background(run)
+                        
+                        if separator and j < len(elements) - 1:
+                            para.add_run(separator)
+                    
+                    para.add_run(f" - {duplicate_note}").italic = True
+            else:
+                if metadata is None:
+                    run = para.add_run(str(elements))
+                    run.font.italic = True
+                else:
+                    for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+                        if is_doi_hyperlink and doi_value:
+                            DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
+                        else:
+                            run = para.add_run(value)
+                            if italic:
+                                run.font.italic = True
+                            if bold:
+                                run.font.bold = True
+                        
+                        if separator and j < len(elements) - 1:
+                            para.add_run(separator)
+                    
+                    if style_config['final_punctuation'] and not is_error:
+                        para.add_run(".")
+    
+    @staticmethod
+    def _add_statistics_section(doc: Document, statistics: Dict[str, Any]):
+        """Add statistics section to document"""
+        doc.add_heading('Stats', level=1)
+        
+        doc.add_heading('Journal Frequency', level=2)
+        journal_table = doc.add_table(rows=1, cols=3)
+        journal_table.style = 'Table Grid'
+        
+        hdr_cells = journal_table.rows[0].cells
+        hdr_cells[0].text = 'Journal Name'
+        hdr_cells[1].text = 'Count'
+        hdr_cells[2].text = 'Percentage (%)'
+        
+        for journal_stat in statistics['journal_stats']:
+            row_cells = journal_table.add_row().cells
+            row_cells[0].text = journal_stat['journal']
+            row_cells[1].text = str(journal_stat['count'])
+            row_cells[2].text = str(journal_stat['percentage'])
+        
+        doc.add_paragraph()
+        
+        doc.add_heading('Year Distribution', level=2)
+        
+        if statistics['needs_more_recent_references']:
+            warning_para = doc.add_paragraph()
+            warning_run = warning_para.add_run("To improve the relevance and significance of the research, consider including more recent references published within the last 3-4 years")
+            DocumentGenerator.apply_red_color(warning_run)
+            doc.add_paragraph()
+        
+        year_table = doc.add_table(rows=1, cols=3)
+        year_table.style = 'Table Grid'
+        
+        hdr_cells = year_table.rows[0].cells
+        hdr_cells[0].text = 'Year'
+        hdr_cells[1].text = 'Count'
+        hdr_cells[2].text = 'Percentage (%)'
+        
+        for year_stat in statistics['year_stats']:
+            row_cells = year_table.add_row().cells
+            row_cells[0].text = str(year_stat['year'])
+            row_cells[1].text = str(year_stat['count'])
+            row_cells[2].text = str(year_stat['percentage'])
+        
+        doc.add_paragraph()
+        
+        doc.add_heading('Author Distribution', level=2)
+        
+        if statistics['has_frequent_author']:
+            warning_para = doc.add_paragraph()
+            warning_run = warning_para.add_run("The author(s) are referenced frequently. Either reduce the number of references to the author(s), or expand the reference list to include more sources")
+            DocumentGenerator.apply_red_color(warning_run)
+            doc.add_paragraph()
+        
+        author_table = doc.add_table(rows=1, cols=3)
+        author_table.style = 'Table Grid'
+        
+        hdr_cells = author_table.rows[0].cells
+        hdr_cells[0].text = 'Author'
+        hdr_cells[1].text = 'Count'
+        hdr_cells[2].text = 'Percentage (%)'
+        
+        for author_stat in statistics['author_stats']:
+            row_cells = author_table.add_row().cells
+            row_cells[0].text = author_stat['author']
+            row_cells[1].text = str(author_stat['count'])
+            row_cells[2].text = str(author_stat['percentage'])
+
+    @staticmethod
+    def _add_recommendations_section(doc: Document, recommendations_df):
+        """Add recommendations section to document with citation counts"""
+        if recommendations_df is None or recommendations_df.empty:
+            return
+        
+        doc.add_page_break()
+        doc.add_heading('Article Recommendations', level=1)
+        
+        current_year = datetime.now().year
+        min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
+        
+        intro_para = doc.add_paragraph()
+        intro_para.add_run(f"Based on analysis of your reference list, here are {len(recommendations_df)} similar articles from the last {Config.RECOMMENDATION_YEARS_BACK} years (from {min_year} to {current_year}):").bold = True
+        
+        doc.add_paragraph()
+        
+        for idx, row in recommendations_df.iterrows():
+            doc.add_heading(f"Recommendation {idx+1}: Score {row['score']:.3f}", level=2)
+            
+            title_para = doc.add_paragraph()
+            title_para.add_run("Title: ").bold = True
+            title_para.add_run(row['title'])
+            
+            authors_para = doc.add_paragraph()
+            authors_para.add_run("Authors: ").bold = True
+            authors_para.add_run(row['authors'])
+            
+            # Добавляем информацию о цитированиях
+            info_para = doc.add_paragraph()
+            info_para.add_run("Journal: ").bold = True
+            info_para.add_run(f"{row['journal']}, ")
+            info_para.add_run("Year: ").bold = True
+            info_para.add_run(f"{row['year']}, ")
+            info_para.add_run("Citations: ").bold = True
+            info_para.add_run(f"{row.get('citation_count', 'N/A')}, ")
+            info_para.add_run("Source: ").bold = True
+            info_para.add_run(row.get('source', 'unknown'))
+            
+            # DOI с гиперссылкой
+            if row['doi']:
+                doi_para = doc.add_paragraph()
+                doi_para.add_run("DOI: ").bold = True
+                DocumentGenerator.add_hyperlink(doi_para, row['doi'], f"https://doi.org/{row['doi']}")
+            
+            if row.get('abstract'):
+                abstract_para = doc.add_paragraph()
+                abstract_para.add_run("Abstract: ").bold = True
+                abstract_para.add_run(row['abstract'])
+            
+            # Общие термины
+            if 'common_terms' in row and row['common_terms']:
+                terms_para = doc.add_paragraph()
+                terms_para.add_run("Common terms: ").bold = True
+                terms_para.add_run(row['common_terms'])
+            
+            doc.add_paragraph()
+
 class TopicSelectorUI:
     """UI компонент для выбора тем"""
     
@@ -5518,5 +5796,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
