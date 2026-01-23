@@ -5884,15 +5884,38 @@ class ResultsPage:
                             if len(title_display) > 200:
                                 title_display = title_display[:197] + "..."
                             
-                            # HTML разметка с классами темы
-                            recommendation_html = f"""
-                            <div class="recommendation-item">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                                    <div style="flex: 1;">
-                                        <div class="recommendation-score">#{idx+1} | Relevance: {row['relevance_score']}/10</div>
-                                        <div class="recommendation-title">{title_display}</div>
-                                        <div class="recommendation-meta">
-                            """
+                            # Собираем HTML в одну строку
+                            recommendation_html = f'<div class="recommendation-item"><div style="display: flex; justify-content: space-between; align-items: flex-start;"><div style="flex: 1;"><div class="recommendation-score">#{idx+1} | Relevance: {row["relevance_score"]}/10</div><div class="recommendation-title">{title_display}</div><div class="recommendation-meta">'
+                            
+                            # Добавляем авторов
+                            if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
+                                recommendation_html += f'👤 {row["authors_formatted"]}<br>'
+                            
+                            # Добавляем журнал и год
+                            if pd.notna(row.get('journal')):
+                                journal_text = f'📰 {row["journal"]}'
+                                if pd.notna(row.get('publication_year')):
+                                    journal_text += f', {row["publication_year"]}'
+                                recommendation_html += journal_text + '<br>'
+                            
+                            # Добавляем цитирования
+                            citation_color = "🔴" if row['cited_by_count'] == 0 else "🟡"
+                            recommendation_html += f'</div></div><div style="margin-left: 15px; text-align: center; min-width: 120px;"><div style="background-color: {"#FF6B6B" if row["cited_by_count"] == 0 else "#FFD166"}; color: white; padding: 8px 12px; border-radius: 12px; font-size: 1rem; font-weight: bold;">{citation_color} {row["cited_by_count"]} citations</div><div style="margin-top: 5px; font-size: 0.9rem; color: var(--text); opacity: 0.8;">Citation score</div></div></div>'
+                            
+                            # Добавляем DOI ссылку
+                            if pd.notna(row.get('doi')) and row['doi']:
+                                doi_url = f"https://doi.org/{row['doi']}"
+                                recommendation_html += f'<div style="margin-top: 10px; font-size: 0.9rem;">🔗 <a href="{doi_url}" target="_blank" style="color: var(--primary); text-decoration: none; border-bottom: 1px solid var(--primary);">DOI: {row["doi"]}</a></div>'
+                            
+                            # Добавляем ключевые слова
+                            if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
+                                recommendation_html += f'<div style="margin-top: 10px;"><div style="font-size: 0.85rem; color: var(--text); opacity: 0.8; margin-bottom: 5px;">🏷️ Keywords:</div><div style="background-color: var(--background); padding: 5px 10px; border-radius: 5px; font-size: 0.85rem;">{row["keywords_formatted"]}</div></div>'
+                            
+                            # Закрываем div и добавляем разделитель
+                            recommendation_html += '</div><hr style="margin: 15px 0; border: none; border-top: 1px solid var(--border);">'
+                            
+                            # Отображаем весь HTML одной командой
+                            st.markdown(recommendation_html, unsafe_allow_html=True)
                             
                             # Добавляем авторов
                             if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
@@ -6321,6 +6344,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
