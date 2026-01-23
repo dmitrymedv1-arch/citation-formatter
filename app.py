@@ -5309,7 +5309,7 @@ class ResultsPage:
                 StageManager.clear_all()
 
     @staticmethod
-    def _render_recommendations_section(self):
+    def _render_recommendations_section():
         """Render recommendations section with topic-based analysis"""
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendations_title')}</div>", unsafe_allow_html=True)
         
@@ -5795,4 +5795,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
