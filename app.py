@@ -91,6 +91,15 @@ class Config:
     # Retry failed DOI
     MAX_RETRY_ATTEMPTS = 2
     RETRY_DELAY_SECONDS = 1
+
+    # OpenAlex API settings
+    OPENALEX_MAX_WORKERS = 10
+    OPENALEX_PER_PAGE = 200  # Увеличили с 100
+    OPENALEX_MAX_PAGES = 5   # Увеличили с 3
+    OPENALEX_REQUEST_TIMEOUT = 25
+    OPENALEX_MAX_WORKS_PER_TOPIC = 500  # Увеличили с 200
+    OPENALEX_MAX_TOTAL_WORKS = 1000
+    OPENALEX_CACHE_TTL_MINUTES = 60  # Кэширование тем
     
     # Styles
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
@@ -2082,74 +2091,243 @@ class SimpleTopicAnalyzer:
         except Exception as e:
             logger.error(f"Error in analyze_dois: {e}")
             return None
-
-
+    
+    def analyze_dois_parallel(self, dois, progress_callback=None):
+        """Параллельный анализ списка DOI"""
+        if not dois:
+            return None
+        
+        try:
+            works_data = []
+            all_titles = []
+            topic_counter = Counter()
+            
+            total = len(dois)
+            
+            # ПАРАЛЛЕЛЬНАЯ загрузка данных
+            with concurrent.futures.ThreadPoolExecutor(max_workers=Config.OPENALEX_MAX_WORKERS) as executor:
+                futures = {executor.submit(self.fetch_work_data, doi): doi for doi in dois}
+                
+                for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                    result = future.result()
+                    
+                    if result['success']:
+                        data = result['data']
+                        primary_topic = result['primary_topic']
+                        
+                        if primary_topic:
+                            topic_name = primary_topic.get('display_name', 'Unknown')
+                            topic_counter[topic_name] += 1
+                            
+                            topic_id_full = primary_topic.get('id', '')
+                            topic_id = topic_id_full.split('/')[-1] if topic_id_full else ''
+                            
+                            works_data.append({
+                                'doi': result['doi'],
+                                'title': data.get('title', ''),
+                                'primary_topic': topic_name,
+                                'topic_id': topic_id,
+                                'topic_id_full': topic_id_full,
+                                'cited_by_count': data.get('cited_by_count', 0),
+                                'publication_date': data.get('publication_date', ''),
+                                'publication_year': data.get('publication_year', '')
+                            })
+                            
+                            title = data.get('title')
+                            if title:
+                                all_titles.append(title)
+                    
+                    # Обновляем прогресс
+                    if progress_callback:
+                        progress_val = int((i / total) * 50)
+                        progress_callback(progress_val, f"Обработано {i}/{total} DOI")
+            
+            if not works_data:
+                return None
+            
+            # ПАРАЛЛЕЛЬНЫЙ анализ ключевых слов
+            if progress_callback:
+                progress_callback(50, "Параллельный анализ ключевых слов...")
+            
+            keyword_counter = Counter()
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=Config.OPENALEX_MAX_WORKERS) as executor:
+                futures = {executor.submit(self.extract_keywords_from_title, title): title for title in all_titles}
+                
+                for future in concurrent.futures.as_completed(futures):
+                    keywords = future.result()
+                    if keywords:
+                        keyword_counter.update(keywords)
+            
+            # Сортируем темы по частоте
+            sorted_topics = topic_counter.most_common()
+            
+            # Быстрый подсчет низкоцитируемых работ
+            low_citation_count = sum(1 for w in works_data if w.get('cited_by_count', 0) < 11)
+            
+            result = {
+                'works_data': works_data,
+                'topics': sorted_topics,
+                'keywords': keyword_counter.most_common(15),  # 15 вместо 20
+                'total_works': len(works_data),
+                'low_citation_count': low_citation_count,
+                'stats': {
+                    'successful_doi': len(works_data),
+                    'total_topics': len(sorted_topics),
+                    'unique_titles': len(all_titles),
+                    'avg_citations': sum(w.get('cited_by_count', 0) for w in works_data) / len(works_data) if works_data else 0
+                }
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_dois_parallel: {e}")
+            return None
+    
 class LowCitationFinder:
-    """Поиск низкоцитируемых статей по теме"""
+    """Оптимизированный поиск низкоцитируемых статей по теме"""
     
     def __init__(self):
         self.session = requests.Session()
-        self.session.timeout = 30
+        self.session.timeout = Config.OPENALEX_REQUEST_TIMEOUT
         self.headers = {'User-Agent': 'CitationStyleConstructor/1.0'}
-    
-    def fetch_works_by_topic(self, topic_id, max_results=200):
-        """Получает работы по теме"""
+        self.topic_cache = {}  # Кэш для данных тем
+        self.works_cache = {}  # Кэш для работ по темам
+        
+    def _make_request(self, url):
+        """Оптимизированный HTTP запрос с кэшированием"""
+        cache_key = hashlib.md5(url.encode()).hexdigest()
+        
+        # Проверяем кэш
+        if cache_key in self.topic_cache:
+            cached_data, timestamp = self.topic_cache[cache_key]
+            if time.time() - timestamp < Config.OPENALEX_CACHE_TTL_MINUTES * 60:
+                return cached_data
+        
         try:
-            all_works = []
-            page = 1
-            per_page = 100
+            response = self.session.get(url, headers=self.headers, timeout=Config.OPENALEX_REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                # Сохраняем в кэш
+                self.topic_cache[cache_key] = (data, time.time())
+                return data
+        except Exception as e:
+            logger.error(f"Request error for {url}: {e}")
+        
+        return None
+    
+    def fetch_works_by_topic_parallel(self, topic_id, max_results=Config.OPENALEX_MAX_WORKS_PER_TOPIC):
+        """Параллельная загрузка работ по теме с оптимизированными параметрами"""
+        if not topic_id:
+            return []
+        
+        # Проверяем кэш
+        cache_key = f"works_{topic_id}_{max_results}"
+        if cache_key in self.works_cache:
+            cached_data, timestamp = self.works_cache[cache_key]
+            if time.time() - timestamp < Config.OPENALEX_CACHE_TTL_MINUTES * 60:
+                return cached_data
+        
+        print(f"  📥 Загружаю работы по теме ID: {topic_id}")
+        
+        all_works = []
+        
+        try:
+            # Создаем URL для первого запроса с СОРТИРОВКОЙ по дате (КРИТИЧНО!)
+            base_url = f"https://api.openalex.org/works?filter=topics.id:{topic_id}"
+            base_url += f"&per-page={Config.OPENALEX_PER_PAGE}"
+            base_url += "&sort=publication_date:desc"  # ДОБАВЛЕНО: сортировка по дате!
             
-            while len(all_works) < max_results:
-                try:
-                    url = f"https://api.openalex.org/works?filter=topics.id:{topic_id}"
-                    url += f"&per-page={per_page}&page={page}&sort=publication_date:desc"
+            # Параллельно загружаем несколько страниц сразу
+            with concurrent.futures.ThreadPoolExecutor(max_workers=Config.OPENALEX_MAX_WORKERS) as executor:
+                futures = []
+                
+                for page in range(1, Config.OPENALEX_MAX_PAGES + 1):
+                    url = f"{base_url}&page={page}"
+                    future = executor.submit(self._make_request, url)
+                    futures.append((future, page))
+                
+                for future, page in futures:
+                    try:
+                        data = future.result(timeout=Config.OPENALEX_REQUEST_TIMEOUT)
+                        if data and 'results' in data:
+                            works = data['results']
+                            all_works.extend(works)
+                            print(f"    📄 Страница {page}: получено {len(works)} работ")
+                            
+                            # Если получили меньше работ, чем ожидали, выходим
+                            if len(works) < Config.OPENALEX_PER_PAGE:
+                                break
+                        else:
+                            break
+                            
+                    except Exception as e:
+                        print(f"    ⚠️ Ошибка на странице {page}: {e}")
+                        continue
                     
-                    response = self.session.get(url, timeout=20)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        works = data.get('results', [])
-                        
-                        if not works:
-                            break
-                        
-                        all_works.extend(works)
-                        
-                        if len(works) < per_page:
-                            break
-                        
-                        page += 1
-                        if page > 3:  # Максимум 3 страницы (300 работ)
-                            break
-                    else:
+                    # Если достигли лимита, выходим
+                    if len(all_works) >= max_results:
                         break
-                        
-                except Exception as e:
-                    logger.debug(f"Error fetching page {page}: {e}")
-                    break
+            
+            print(f"  ✅ Всего загружено {len(all_works)} работ по теме")
+            
+            # Сохраняем в кэш
+            self.works_cache[cache_key] = (all_works, time.time())
             
             return all_works
             
         except Exception as e:
-            logger.error(f"Error in fetch_works_by_topic: {e}")
+            logger.error(f"Error in fetch_works_by_topic_parallel for topic {topic_id}: {e}")
             return []
     
-    def find_low_citation_works(self, topic_id, keywords, max_citations=10, max_works=200):
-        """Находит низкоцитируемые работы по теме"""
+    def get_topic_info(self, topic_id):
+        """Получает информацию о теме с кэшированием"""
+        if not topic_id:
+            return None
+        
+        cache_key = f"topic_info_{topic_id}"
+        if cache_key in self.topic_cache:
+            cached_data, timestamp = self.topic_cache[cache_key]
+            if time.time() - timestamp < Config.OPENALEX_CACHE_TTL_MINUTES * 60:
+                return cached_data
+        
+        try:
+            url = f"https://api.openalex.org/topics/{topic_id}"
+            data = self._make_request(url)
+            
+            if data:
+                # Сохраняем в кэш
+                self.topic_cache[cache_key] = (data, time.time())
+            
+            return data
+        except Exception as e:
+            logger.error(f"Error getting topic info for {topic_id}: {e}")
+            return None
+    
+    def find_low_citation_works(self, topic_id, keywords, max_citations=10, max_works=Config.OPENALEX_MAX_TOTAL_WORKS):
+        """Оптимизированный поиск низкоцитируемых работ по теме"""
         try:
             if not topic_id or not isinstance(topic_id, str):
                 return []
             
-            # Получаем работы по теме
-            works = self.fetch_works_by_topic(topic_id, max_results=max_works)
+            print(f"  🎯 Поиск низкоцитируемых работ для темы {topic_id}")
+            
+            # Получаем работы по теме ПАРАЛЛЕЛЬНО
+            works = self.fetch_works_by_topic_parallel(topic_id, max_results=max_works)
             
             if not works:
+                print(f"  ⚠️ Не найдено работ по теме {topic_id}")
                 return []
             
-            low_citation_works = []
+            print(f"  🔍 Анализ {len(works)} работ на соответствие ключевым словам...")
             
+            low_citation_works = []
+            keywords_lower = [kw.lower() for kw in keywords] if keywords else []
+            
+            # Используем comprehension для ускорения фильтрации
             for work in works:
-                # Проверяем цитирования
+                # Быстрая проверка цитирований
                 cited_by_count = work.get('cited_by_count', 0)
                 
                 if cited_by_count <= max_citations:
@@ -2159,24 +2337,24 @@ class LowCitationFinder:
                     
                     title_lower = title.lower()
                     
-                    # Проверяем соответствие ключевым словам
+                    # Проверяем соответствие ключевым словам (если они есть)
                     score = 0
                     matched_keywords = []
                     
-                    if keywords:
-                        for keyword in keywords:
-                            if keyword and isinstance(keyword, str) and keyword in title_lower:
+                    if keywords_lower:
+                        for keyword in keywords_lower:
+                            if keyword and keyword in title_lower:
                                 score += 1
                                 matched_keywords.append(keyword)
                     
-                    # Если есть ключевые слова - проверяем соответствие
-                    # Если ключевых слов нет - берем все низкоцитируемые работы
-                    if not keywords or score > 0:
-                        # Получаем авторов
+                    # Если есть ключевые слова - нужен хотя бы 1 match
+                    # Если ключевых слов нет - берем все низкоцитируемые
+                    if not keywords_lower or score > 0:
+                        # Извлекаем данные
                         authors = []
                         try:
                             authorships = work.get('authorships', [])
-                            for authorship in authorships[:3]:  # Берем первых 3 авторов
+                            for authorship in authorships[:3]:  # Первые 3 автора
                                 author = authorship.get('author', {})
                                 display_name = author.get('display_name', '')
                                 if display_name:
@@ -2184,7 +2362,6 @@ class LowCitationFinder:
                         except:
                             pass
                         
-                        # Получаем журнал
                         journal = ''
                         try:
                             primary_location = work.get('primary_location', {})
@@ -2194,7 +2371,6 @@ class LowCitationFinder:
                         except:
                             pass
                         
-                        # Получаем DOI
                         doi = work.get('doi', '')
                         if doi and doi.startswith('https://doi.org/'):
                             doi = doi[16:]
@@ -2213,26 +2389,36 @@ class LowCitationFinder:
                             'is_oa': work.get('open_access', {}).get('is_oa', False)
                         })
             
-            # Сортируем по релевантности (если есть ключевые слова) или по дате публикации
-            if keywords:
+            # Оптимизированная сортировка
+            if keywords_lower:
                 low_citation_works.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
             else:
                 low_citation_works.sort(key=lambda x: (-x['cited_by_count']), reverse=True)
             
-            # Возвращаем топ-20 работ
-            return low_citation_works[:20]
+            # Статистика
+            zero_citation = sum(1 for w in low_citation_works if w['cited_by_count'] == 0)
+            few_citation = sum(1 for w in low_citation_works if 1 <= w['cited_by_count'] <= 5)
+            
+            print(f"  📊 Найдено низкоцитируемых работ: {len(low_citation_works)}")
+            print(f"     • С 0 цитирований: {zero_citation}")
+            print(f"     • С 1-5 цитирований: {few_citation}")
+            print(f"     • С 6-10 цитирований: {len(low_citation_works) - zero_citation - few_citation}")
+            
+            # Возвращаем топ-рекомендации
+            return low_citation_works[:Config.OPENALEX_MAX_WORKS_PER_TOPIC]
             
         except Exception as e:
             logger.error(f"Error in find_low_citation_works: {e}")
+            print(f"  ❌ Ошибка: {str(e)[:100]}")
             return []
 
 class ArticleRecommender:
-    """Новая система рекомендаций статей на основе низкоцитируемых работ"""
-    
+
     @staticmethod
     def generate_recommendations(formatted_refs, progress_callback=None):
-        """Генерирует рекомендации на основе списка литературы"""
+        """Оптимизированная генерация рекомендаций"""
         try:
+            # Проверяем минимальное количество ссылок
             if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
                 if progress_callback:
                     progress_callback(100, "Недостаточно ссылок для рекомендаций")
@@ -2241,11 +2427,19 @@ class ArticleRecommender:
             if progress_callback:
                 progress_callback(5, "Извлекаю DOI из ссылок...")
             
-            # Извлекаем DOI из форматированных ссылок
+            # Извлекаем DOI (оптимизированная версия)
             dois = []
             for _, is_error, metadata in formatted_refs:
                 if not is_error and metadata and metadata.get('doi'):
-                    dois.append(metadata['doi'])
+                    doi = metadata['doi']
+                    # Быстрая нормализация DOI
+                    if doi.startswith('https://doi.org/'):
+                        doi = doi[16:]
+                    elif doi.startswith('doi:'):
+                        doi = doi[4:]
+                    dois.append(doi.strip())
+            
+            dois = list(set(dois))  # Уникальные DOI
             
             if not dois:
                 if progress_callback:
@@ -2258,8 +2452,11 @@ class ArticleRecommender:
             # Создаем анализатор
             analyzer = SimpleTopicAnalyzer()
             
-            # Анализируем DOI и извлекаем темы
-            analysis_result = analyzer.analyze_dois(dois, progress_callback)
+            # ПАРАЛЛЕЛЬНЫЙ анализ DOI
+            if progress_callback:
+                progress_callback(15, "Параллельный анализ DOI через OpenAlex...")
+            
+            analysis_result = analyzer.analyze_dois_parallel(dois, progress_callback)
             
             if not analysis_result or not analysis_result.get('topics'):
                 if progress_callback:
@@ -2271,42 +2468,70 @@ class ArticleRecommender:
             if progress_callback:
                 progress_callback(60, "Анализ тем завершен, ищу низкоцитируемые работы...")
             
-            # Берем топ-5 тем
-            top_topics = topics[:5]
+            # Берем топ-3 темы (вместо 5 для ускорения)
+            top_topics = topics[:3]
             
             all_recommendations = []
             finder = LowCitationFinder()
             
-            # Для каждой темы ищем низкоцитируемые работы
-            for i, (topic_name, topic_count) in enumerate(top_topics):
-                if progress_callback:
-                    progress_val = 60 + int((i / len(top_topics)) * 35)
-                    progress_callback(progress_val, f"Search on the topic of: {topic_name}")
+            # ПАРАЛЛЕЛЬНЫЙ поиск работ для всех тем
+            if progress_callback:
+                progress_val = 60
+                progress_callback(progress_val, f"Параллельный поиск по {len(top_topics)} темам...")
+            
+            # Собираем ключевые слова один раз
+            keywords = []
+            if analysis_result.get('keywords'):
+                keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:8]]  # Топ-8 вместо 10
+            
+            # Параллельная обработка тем
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(top_topics), Config.OPENALEX_MAX_WORKERS)) as executor:
+                future_to_topic = {}
                 
-                # Находим ID темы
-                topic_id = None
-                for work in analysis_result['works_data']:
-                    if work['primary_topic'] == topic_name:
-                        topic_id = work['topic_id']
-                        break
+                for topic_name, topic_count in top_topics:
+                    # Находим ID темы
+                    topic_id = None
+                    for work in analysis_result['works_data']:
+                        if work['primary_topic'] == topic_name:
+                            topic_id = work['topic_id']
+                            break
+                    
+                    if topic_id:
+                        future = executor.submit(
+                            finder.find_low_citation_works,
+                            topic_id,
+                            keywords,
+                            10,  # max_citations
+                            Config.OPENALEX_MAX_WORKS_PER_TOPIC
+                        )
+                        future_to_topic[future] = (topic_name, topic_id, topic_count)
                 
-                if topic_id:
-                    # Получаем ключевые слова для поиска
-                    keywords = []
-                    if analysis_result.get('keywords'):
-                        keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:10]]
+                # Обрабатываем результаты
+                completed = 0
+                for future in concurrent.futures.as_completed(future_to_topic):
+                    topic_name, topic_id, topic_count = future_to_topic[future]
                     
-                    # Ищем низкоцитируемые работы
-                    works = finder.find_low_citation_works(topic_id, keywords)
-                    
-                    if works:
-                        # Добавляем информацию о теме
-                        for work in works:
-                            work['topic'] = topic_name
-                            work['topic_id'] = topic_id
-                            work['topic_doi_count'] = topic_count
+                    try:
+                        works = future.result(timeout=Config.OPENALEX_REQUEST_TIMEOUT * 2)
                         
-                        all_recommendations.extend(works)
+                        if works:
+                            # Добавляем информацию о теме
+                            for work in works:
+                                work['topic'] = topic_name
+                                work['topic_id'] = topic_id
+                                work['topic_doi_count'] = topic_count
+                            
+                            all_recommendations.extend(works)
+                            
+                            completed += 1
+                            if progress_callback:
+                                progress_val = 60 + int((completed / len(top_topics)) * 35)
+                                progress_callback(progress_val, 
+                                                f"Обработано {completed}/{len(top_topics)} тем. Найдено: {len(works)} работ")
+                    
+                    except Exception as e:
+                        logger.error(f"Error processing topic {topic_name}: {e}")
+                        completed += 1
             
             if not all_recommendations:
                 if progress_callback:
@@ -2319,13 +2544,13 @@ class ArticleRecommender:
             # Сортируем все рекомендации
             all_recommendations.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
             
-            # Ограничиваем максимум 100 рекомендаций
-            all_recommendations = all_recommendations[:100]
+            # Ограничиваем максимум рекомендаций
+            all_recommendations = all_recommendations[:50]  # Вместо 100
             
             # Создаем DataFrame
             df = pd.DataFrame(all_recommendations)
             
-            # Добавляем URL для DOI
+            # Оптимизированное создание дополнительных колонок
             def create_doi_url(doi):
                 if doi and isinstance(doi, str) and doi.strip():
                     clean_doi = re.sub(r'^(https?://doi\.org/|doi:|DOI:?\s*)', '', doi.strip(), flags=re.IGNORECASE)
@@ -2334,35 +2559,28 @@ class ArticleRecommender:
             
             df['doi_url'] = df['doi'].apply(create_doi_url)
             
-            # Форматируем авторов
             def format_authors(authors_list):
                 if isinstance(authors_list, list):
                     return ', '.join([str(a) for a in authors_list[:3] if a])
-                elif authors_list:
-                    return str(authors_list)
                 return "Unknown"
             
             df['authors_formatted'] = df['authors'].apply(format_authors)
             
-            # Форматируем дату публикации
             def format_date(pub_date):
                 if not pub_date:
                     return "Unknown"
                 try:
                     if isinstance(pub_date, str):
-                        return pub_date[:10]  # Берем только дату
+                        return pub_date[:10]
                     return str(pub_date)
                 except:
                     return "Unknown"
             
             df['publication_date_formatted'] = df['publication_date'].apply(format_date)
             
-            # Форматируем ключевые слова
             def format_keywords(keywords_list):
                 if isinstance(keywords_list, list):
-                    return ', '.join([str(kw) for kw in keywords_list[:5] if kw])
-                elif keywords_list:
-                    return str(keywords_list)
+                    return ', '.join([str(kw) for kw in keywords_list[:3] if kw])  # Только 3 ключевых слова
                 return ""
             
             df['keywords_formatted'] = df['matched_keywords'].apply(format_keywords)
@@ -6025,6 +6243,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
