@@ -37,6 +37,43 @@ from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 from typing import Optional
+import html
+
+title_clean = html.escape(str(row['title']))
+authors_clean = html.escape(str(row.get('authors_formatted', '')))
+journal_clean = html.escape(str(row.get('journal', '')))
+doi_clean = html.escape(str(row.get('doi', '')))
+keywords_clean = html.escape(str(row.get('keywords_formatted', '')))
+
+card_html = f"""
+<div style="border-left: 4px solid {theme_config['primary']}; 
+            padding: 15px; 
+            margin: 12px 0; 
+            background: linear-gradient(to right, {theme_config['cardBackground']} 0%, {theme_config['secondaryBackground']} 100%);
+            border-radius: 8px;
+            box-shadow: 0 3px 10px {theme_config['shadow']};
+            border: 1px solid {theme_config['border']};">
+    
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+        <div style="flex: 1;">
+            <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                <span style="background-color: {theme_config['primary']}; 
+                            color: white; 
+                            padding: 3px 10px; 
+                            border-radius: 4px; 
+                            font-size: 0.85em;
+                            font-weight: bold;
+                            margin-right: 10px;">
+                    #{idx+1}
+                </span>
+                <span style="font-weight: bold; 
+                            color: {theme_config['primary']}; 
+                            font-size: 1.05em;
+                            line-height: 1.3;">
+                    {title_clean[:120]}...
+                </span>
+            </div>
+"""
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -6446,5 +6483,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
