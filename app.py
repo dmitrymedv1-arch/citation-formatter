@@ -5841,7 +5841,7 @@ class ResultsPage:
                         
                         # Отображаем работы для этой темы
                         for idx, row in topic_works.head(30).iterrows():
-                            with st.expander(f"#{idx+1}: {row['title'][:80]}...", expanded=False):
+                            with st.expander(f"#{idx+1}: {row['title'][:150]}...", expanded=False):
                                 col1, col2 = st.columns([3, 1])
                                 
                                 with col1:
@@ -6239,3 +6239,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
