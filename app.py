@@ -5907,7 +5907,7 @@ class ResultsPage:
                         # Отображаем работы для этой темы с использованием expander
                         for idx, row in topic_works.head(30).iterrows():
                             # Создаем заголовок для expander с краткой информацией
-                            expander_title = f"#{idx+1}: {row['title'][:80]}... (📊 {row['cited_by_count']} цит.)"
+                            expander_title = f"#{idx+1}: {row['title'][:180]}... (📊 {row['cited_by_count']} цит.)"
                             
                             # Используем expander с кастомным стилем
                             with st.expander(expander_title, expanded=False):
@@ -6334,5 +6334,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
