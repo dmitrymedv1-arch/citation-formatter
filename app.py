@@ -176,10 +176,10 @@ class Config:
         },
         'newspaper': {
             'name': 'Newspaper',
-            'primary': '#C19A6B',
-            'secondary': '#8B7355',
+            'primary': '#1E1A4F',
+            'secondary': '3C2AA8',
             'accent': '#E5C9A8',
-            'background': '#F8F4E9',
+            'background': '#EEEDF7',
             'secondaryBackground': '#FFFFFF',
             'text': '#4A3728',
             'font': "'Playfair Display', 'Georgia', serif",
@@ -6330,6 +6330,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
