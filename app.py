@@ -5954,10 +5954,6 @@ class ResultsPage:
                                     # Релевантность
                                     st.markdown(f"**🎯 Релевантность:**")
                                     st.markdown(f"{row['relevance_score']}/10 баллов")
-                                    
-                                    # Тема
-                                    st.markdown(f"**🏷️ Тема:**")
-                                    st.markdown(f"{row['topic']}")
                                 
                                 # DOI ссылка (в отдельной строке)
                                 if pd.notna(row.get('doi')) and row['doi']:
@@ -6334,6 +6330,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
