@@ -2281,7 +2281,7 @@ class ArticleRecommender:
             for i, (topic_name, topic_count) in enumerate(top_topics):
                 if progress_callback:
                     progress_val = 60 + int((i / len(top_topics)) * 35)
-                    progress_callback(progress_val, f"Поиск работ по теме: {topic_name}")
+                    progress_callback(progress_val, f"Search on the topic of: {topic_name}")
                 
                 # Находим ID темы
                 topic_id = None
@@ -6025,6 +6025,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
