@@ -37,43 +37,6 @@ from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 from typing import Optional
-import html
-
-title_clean = html.escape(str(row['title']))
-authors_clean = html.escape(str(row.get('authors_formatted', '')))
-journal_clean = html.escape(str(row.get('journal', '')))
-doi_clean = html.escape(str(row.get('doi', '')))
-keywords_clean = html.escape(str(row.get('keywords_formatted', '')))
-
-card_html = f"""
-<div style="border-left: 4px solid {theme_config['primary']}; 
-            padding: 15px; 
-            margin: 12px 0; 
-            background: linear-gradient(to right, {theme_config['cardBackground']} 0%, {theme_config['secondaryBackground']} 100%);
-            border-radius: 8px;
-            box-shadow: 0 3px 10px {theme_config['shadow']};
-            border: 1px solid {theme_config['border']};">
-    
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-        <div style="flex: 1;">
-            <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                <span style="background-color: {theme_config['primary']}; 
-                            color: white; 
-                            padding: 3px 10px; 
-                            border-radius: 4px; 
-                            font-size: 0.85em;
-                            font-weight: bold;
-                            margin-right: 10px;">
-                    #{idx+1}
-                </span>
-                <span style="font-weight: bold; 
-                            color: {theme_config['primary']}; 
-                            font-size: 1.05em;
-                            line-height: 1.3;">
-                    {title_clean[:120]}...
-                </span>
-            </div>
-"""
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -2759,111 +2722,54 @@ class TopicSelectorUI:
                         st.markdown(tab_contents[i], unsafe_allow_html=True)
         
         return tab_labels
-
+    
     @staticmethod
     def _create_work_card(work, index):
-        """Создает HTML карточку для работы с учетом темы"""
-        # Получаем текущую тему
-        current_theme = st.session_state.current_theme
-        theme_config = Config.THEMES.get(current_theme, Config.THEMES['light'])
-        
+        """Создает HTML карточку для работы"""
         citation_color = "🔴" if work['cited_by_count'] == 0 else "🟡"
         citation_text = f"0 цит" if work['cited_by_count'] == 0 else f"{work['cited_by_count']} цит"
         
         authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
         
-        # Определяем цвета в зависимости от количества цитирований
-        citation_bg = theme_config['secondary'] if work['cited_by_count'] == 0 else theme_config['accent']
-        
         html = f"""
-        <div style="border-left: 4px solid {theme_config['primary']}; 
-                    padding: 12px 16px; 
-                    margin: 10px 0; 
-                    background: linear-gradient(to right, {theme_config['cardBackground']} 0%, {theme_config['secondaryBackground']} 100%);
-                    border-radius: 8px;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-                    transition: all 0.3s ease;
-                    border: 1px solid {theme_config['border']};">
+        <div style="border-left: 4px solid #4ECDC4; padding: 10px 15px; margin: 10px 0; 
+                    background: linear-gradient(to right, rgba(78, 205, 196, 0.05), white);
+                    border-radius: 0 8px 8px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: bold; color: #1f77b4;">#{index}. {work['title'][:120]}...</span>
+                <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
+                           color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8em;">
+                    {citation_color} {citation_text}
+                </span>
+            </div>
             
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="flex: 1; margin-right: 15px;">
-                    <div style="display: flex; align-items: center; margin-bottom: 6px;">
-                        <span style="background-color: {theme_config['primary']}; 
-                                    color: white; 
-                                    padding: 2px 8px; 
-                                    border-radius: 4px; 
-                                    font-size: 0.8em;
-                                    font-weight: bold;
-                                    margin-right: 8px;">
-                            #{index}
-                        </span>
-                        <span style="font-weight: bold; 
-                                    color: {theme_config['primary']}; 
-                                    font-size: 1em;
-                                    line-height: 1.3;">
-                            {work['title'][:150]}...
-                        </span>
-                    </div>
-                    
-                    <div style="margin-top: 8px; font-size: 0.9em; color: {theme_config['text']};">
+            <div style="margin-top: 8px; font-size: 0.9em;">
         """
         
         if authors:
-            html += f'<div style="margin-bottom: 4px;">👤 <strong style="color: {theme_config["text"]};">Authors:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{authors}</span></div>'
+            html += f"<div>👤 <strong>Authors:</strong> {authors}</div>"
         
         if work.get('journal'):
             year_text = f" ({work['publication_year']})" if work.get('publication_year') else ""
-            html += f'<div style="margin-bottom: 4px;">📰 <strong style="color: {theme_config["text"]};">Journal:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{work["journal"]}{year_text}</span></div>'
+            html += f"<div>📰 <strong>Journal:</strong> {work['journal']}{year_text}</div>"
         
         if work.get('matched_keywords'):
             keywords = ', '.join(work['matched_keywords'][:3])
-            html += f'<div style="margin-bottom: 8px;">🔑 <strong style="color: {theme_config["text"]};">Keywords:</strong> <span style="color: {theme_config["text"]}; opacity: 0.9;">{keywords}</span></div>'
-        
-        # Добавляем индикатор цитирований
-        html += f"""
-                    </div>
-                </div>
-                
-                <div style="text-align: center; min-width: 80px;">
-                    <div style="background-color: {citation_bg}; 
-                               color: white; 
-                               padding: 6px 10px; 
-                               border-radius: 12px; 
-                               font-size: 0.85em;
-                               font-weight: bold;
-                               margin-bottom: 8px;">
-                        {citation_color} {citation_text}
-                    </div>
-                    <div style="font-size: 0.8em; color: {theme_config['text']}; opacity: 0.8;">
-                        Relevance: {work.get('relevance_score', 0)}/10
-                    </div>
-                </div>
-            </div>
-        """
+            html += f"<div>🔑 <strong>Keywords:</strong> {keywords}</div>"
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
             html += f"""
-            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid {theme_config['border']};">
+            <div style="margin-top: 10px;">
                 <a href="{doi_url}" target="_blank" 
-                   style="background-color: {theme_config['primary']}; 
-                          color: white; 
-                          padding: 6px 14px; 
-                          text-decoration: none; 
-                          border-radius: 6px; 
-                          font-size: 0.9em;
-                          display: inline-block;
-                          transition: all 0.2s ease;">
+                   style="background-color: #4ECDC4; color: white; padding: 5px 12px; 
+                          text-decoration: none; border-radius: 4px; font-size: 0.9em;">
                    🔗 Open Article
                 </a>
-                <span style="margin-left: 10px; font-size: 0.85em; color: {theme_config['text']}; opacity: 0.8;">
-                    DOI: {work['doi'][:30]}...
-                </span>
             </div>
             """
         
-        html += "</div>"
-        
+        html += "</div></div>"
         return html
     
     @staticmethod
@@ -3959,61 +3865,6 @@ class ThemeManager:
                 margin-top: 8px;
                 position: relative;
                 z-index: 1;
-            }}
-
-            .recommendation-card {{
-                background-color: {theme['cardBackground']};
-                border-left: 4px solid {theme['primary']};
-                padding: 15px;
-                margin-bottom: 15px;
-                border-radius: 8px;
-                box-shadow: {theme['shadow']};
-                transition: all 0.3s ease;
-            }}
-            
-            .recommendation-card:hover {{
-                transform: translateY(-2px);
-                box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-            }}
-            
-            .recommendation-index {{
-                background-color: {theme['primary']};
-                color: white;
-                padding: 3px 10px;
-                border-radius: 4px;
-                font-size: 0.85em;
-                font-weight: bold;
-                margin-right: 10px;
-            }}
-            
-            .recommendation-title {{
-                color: {theme['primary']};
-                font-weight: bold;
-                font-size: 1.05em;
-                line-height: 1.3;
-            }}
-            
-            .recommendation-meta {{
-                color: {theme['text']};
-                font-size: 0.9em;
-                opacity: 0.9;
-            }}
-            
-            .citation-badge {{
-                background-color: {theme['secondary']};
-                color: white;
-                padding: 8px 12px;
-                border-radius: 12px;
-                font-size: 0.9em;
-                font-weight: bold;
-            }}
-            
-            .citation-badge-low {{
-                background-color: {theme['secondary']};
-            }}
-            
-            .citation-badge-medium {{
-                background-color: {theme['accent']};
             }}
             
             .global-stats-info {{
@@ -5987,133 +5838,38 @@ class ResultsPage:
                         
                         st.markdown(f"#### {topic_name}")
                         st.markdown(f"*Found {len(topic_works)} low-citation articles*")
-
+                        
                         # Отображаем работы для этой темы
-                        for idx, row in topic_works.head(20).iterrows():
-                            citation_count = row.get('cited_by_count', 0)
-                            citation_color = "🔴" if citation_count == 0 else "🟡"
-                            citation_text = f"0 citations" if citation_count == 0 else f"{citation_count} citations"
-                            
-                            # Используем цвета из текущей темы
-                            theme_config = Config.THEMES.get(st.session_state.current_theme, Config.THEMES['light'])
-                            
-                            card_html = f"""
-                            <div style="border-left: 4px solid {theme_config['primary']}; 
-                                        padding: 15px; 
-                                        margin: 12px 0; 
-                                        background: linear-gradient(to right, {theme_config['cardBackground']} 0%, {theme_config['secondaryBackground']} 100%);
-                                        border-radius: 8px;
-                                        box-shadow: 0 3px 10px {theme_config['shadow']};
-                                        border: 1px solid {theme_config['border']};
-                                        transition: all 0.3s ease;">
+                        for idx, row in topic_works.head(30).iterrows():
+                            with st.expander(f"#{idx+1}: {row['title'][:197]}...", expanded=False):
+                                col1, col2 = st.columns([3, 1])
                                 
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-                                    <div style="flex: 1;">
-                                        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                                            <span style="background-color: {theme_config['primary']}; 
-                                                        color: white; 
-                                                        padding: 3px 10px; 
-                                                        border-radius: 4px; 
-                                                        font-size: 0.85em;
-                                                        font-weight: bold;
-                                                        margin-right: 10px;">
-                                                #{idx+1}
-                                            </span>
-                                            <span style="font-weight: bold; 
-                                                        color: {theme_config['primary']}; 
-                                                        font-size: 1.05em;
-                                                        line-height: 1.3;">
-                                                {row['title'][:120]}...
-                                            </span>
-                                        </div>
-                            """
-                            
-                            # Авторы
-                            if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
-                                card_html += f"""
-                                <div style="margin-bottom: 6px; font-size: 0.9em;">
-                                    <span style="color: {theme_config['text']}; font-weight: bold;">👤 Authors:</span> 
-                                    <span style="color: {theme_config['text']}; opacity: 0.9;">{row['authors_formatted']}</span>
-                                </div>
-                                """
-                            
-                            # Журнал и год
-                            if pd.notna(row.get('journal')):
-                                journal_text = f"{row['journal']}"
-                                if pd.notna(row.get('publication_year')):
-                                    journal_text += f", {row['publication_year']}"
-                                card_html += f"""
-                                <div style="margin-bottom: 6px; font-size: 0.9em;">
-                                    <span style="color: {theme_config['text']}; font-weight: bold;">📰 Journal:</span> 
-                                    <span style="color: {theme_config['text']}; opacity: 0.9;">{journal_text}</span>
-                                </div>
-                                """
-                            
-                            # DOI
-                            if pd.notna(row.get('doi')) and row['doi']:
-                                doi_url = f"https://doi.org/{row['doi']}"
-                                short_doi = row['doi'][:40] + "..." if len(row['doi']) > 40 else row['doi']
-                                card_html += f"""
-                                <div style="margin-bottom: 6px; font-size: 0.9em;">
-                                    <span style="color: {theme_config['text']}; font-weight: bold;">🔗 DOI:</span> 
-                                    <a href="{doi_url}" target="_blank" style="color: {theme_config['primary']}; text-decoration: none;">
-                                        {short_doi}
-                                    </a>
-                                </div>
-                                """
-                            
-                            card_html += """
-                                    </div>
+                                with col1:
+                                    st.markdown(f"**Title:** {row['title']}")
                                     
-                                    <div style="text-align: center; min-width: 100px; margin-left: 15px;">
-                            """
-                            
-                            # Блок с цитированиями
-                            citation_bg = theme_config['secondary'] if citation_count == 0 else theme_config['accent']
-                            card_html += f"""
-                                        <div style="background-color: {citation_bg}; 
-                                                   color: white; 
-                                                   padding: 8px 12px; 
-                                                   border-radius: 12px; 
-                                                   font-size: 0.9em;
-                                                   font-weight: bold;
-                                                   margin-bottom: 8px;">
-                                            {citation_color} {citation_text}
-                                        </div>
-                                        <div style="font-size: 0.85em; color: {theme_config['text']}; font-weight: bold;">
-                                            Relevance: {row.get('relevance_score', 0)}/10
-                                        </div>
-                            """
-                            
-                            card_html += """
-                                    </div>
-                                </div>
-                            """
-                            
-                            # Ключевые слова
-                            if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
-                                card_html += f"""
-                                <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid {theme_config['border']};">
-                                    <div style="font-size: 0.85em;">
-                                        <span style="color: {theme_config['text']}; font-weight: bold;">🔑 Keywords:</span> 
-                                        <span style="color: {theme_config['text']}; opacity: 0.9;">{row['keywords_formatted']}</span>
-                                    </div>
-                                </div>
-                                """
-                            
-                            card_html += """
-                            </div>
-                            """
-                            
-                            # Показать полное название по клику
-                            with st.expander(f"📄 View full article #{idx+1}", expanded=False):
-                                st.markdown(f"**📖 Full Title:** {row['title']}")
+                                    if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
+                                        st.markdown(f"**Authors:** {row['authors_formatted']}")
+                                    
+                                    if pd.notna(row.get('journal')):
+                                        journal_text = f"**Journal:** {row['journal']}"
+                                        if pd.notna(row.get('publication_year')):
+                                            journal_text += f", **Year:** {row['publication_year']}"
+                                        st.markdown(journal_text)
+                                
+                                with col2:
+                                    citation_color = "🔴" if row['cited_by_count'] == 0 else "🟡"
+                                    citation_text = f"**{citation_color} {row['cited_by_count']} citations**"
+                                    st.markdown(citation_text)
+                                    st.markdown(f"**Relevance:** {row['relevance_score']}/10")
+                                
+                                # DOI ссылка
                                 if pd.notna(row.get('doi')) and row['doi']:
                                     doi_url = f"https://doi.org/{row['doi']}"
-                                    st.markdown(f"**🔗 DOI Link:** [{row['doi']}]({doi_url})")
-                            
-                            # Отображаем карточку
-                            st.markdown(card_html, unsafe_allow_html=True)
+                                    st.markdown(f"**DOI:** [{row['doi']}]({doi_url})")
+                                
+                                # Ключевые слова
+                                if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
+                                    st.markdown(f"**Keywords:** {row['keywords_formatted']}")
             
             # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
@@ -6483,6 +6239,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
