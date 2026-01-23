@@ -342,7 +342,7 @@ TRANSLATIONS = {
         'new_session': 'New Session',
         'recommend_similar_articles': '🔍 Recommend Similar Articles',
         'recommendations_title': 'Article Recommendations',
-        'recommendations_description': 'Based on your reference list, here are similar articles from the last {} years:',
+        'recommendations_description': 'Recommendations are generated based on new or low-citation articles published within the last 3 years',
         'recommendations_loading': '🔍 Searching for recommendations...',
         'recommendations_not_enough': 'At least {} references are required for recommendations.',
         'recommendations_no_results': 'No recommendations found. Try adjusting search parameters.',
@@ -499,7 +499,7 @@ TRANSLATIONS = {
         'new_session': 'Новая сессия',
         'recommend_similar_articles': '🔍 Рекомендовать похожие статьи',
         'recommendations_title': 'Рекомендации статей',
-        'recommendations_description': 'На основе вашего списка литературы, вот похожие статьи за последние {} лет:',
+        'recommendations_description': 'Рекомендации формируются на основе новых (или малоцитируемых) статей, опубликованных за 3 года от времени проведения анализа',
         'recommendations_loading': '🔍 Поиск рекомендаций...',
         'recommendations_not_enough': 'Для рекомендаций требуется не менее {} ссылок.',
         'recommendations_no_results': 'Рекомендации не найдены. Попробуйте изменить параметры поиска.',
@@ -5506,8 +5506,11 @@ class ResultsPage:
         
         current_year = datetime.now().year
         min_year = current_year - 5
-        
-        st.markdown(f"<p>{get_text('recommendations_description').format(5)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
+
+        st.markdown(f"<p>{get_text('recommendations_description')}</p>", unsafe_allow_html=True)
+        # Можно добавить дополнительное пояснение
+        current_year = datetime.now().year
+        st.markdown(f"<p style='font-size: 0.9em; color: #666;'>Recommendations are based on new or low-citation articles published within the last 3 years (since {current_year - 3})</p>", unsafe_allow_html=True)
         
         # Проверяем достаточно ли ссылок
         if len(st.session_state.formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
@@ -5520,7 +5523,7 @@ class ResultsPage:
             col_rec1, col_rec2 = st.columns([3, 1])
             
             with col_rec1:
-                st.info(f"📚 Found {len(st.session_state.formatted_refs)} references. Click the button to generate low-citation article recommendations.")
+                st.info(f"📚 Found {len(st.session_state.formatted_refs)} references. Click the button to generate recommendations based on new or low-citation articles published within the last 3 years.")
             
             with col_rec2:
                 if st.button(get_text('recommend_similar_articles'), 
@@ -5568,7 +5571,7 @@ class ResultsPage:
                     update_progress(100, "✅ Analysis complete!")
                     time.sleep(1)
                     
-                    st.success(f"✅ Found {len(recommendations_df)} low-citation article recommendations across {recommendations_df['topic'].nunique()} topics")
+                    st.success(f"✅ Found {len(recommendations_df)} new/low-citation article recommendations across {recommendations_df['topic'].nunique()} topics (last 3 years)")
                     st.rerun()
                     
                 else:
@@ -5595,7 +5598,7 @@ class ResultsPage:
             st.markdown(f"""
             <div class='stat-card' style='margin: 20px 0;'>
                 <div class='stat-value'>{len(recommendations_df)}</div>
-                <div class='stat-label'>Low-citation articles found</div>
+                <div class='stat-label'>New/low-citation articles</div>
                 <div style='font-size: 0.8rem; margin-top: 5px;'>
                     📚 Topics: {topics_count} | 
                     📉 Avg citations: {avg_citations:.1f} | 
@@ -6022,6 +6025,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
