@@ -1865,30 +1865,58 @@ class SimpleTopicAnalyzer:
         self.session.timeout = 30
         self.headers = {'User-Agent': 'CitationStyleConstructor/1.0'}
         
-    def normalize_word(self, word):
-        """Приводит слово к базовой форме"""
-        word_lower = word.lower()
-        if len(word_lower) < 4:
-            return ''
+        # Список стоп-слов
+        self.stopwords = {
+            'study', 'research', 'paper', 'article', 'review', 'analysis', 'investigation',
+            'effect', 'property', 'performance', 'behavior', 'behaviour', 'synthesis',
+            'development', 'method', 'approach', 'result', 'discussion', 'conclusion',
+            'introduction', 'experimental', 'measurement', 'technique', 'material',
+            'system', 'process', 'structure', 'model', 'based', 'using', 'different',
+            'various', 'novel', 'new', 'recent', 'potential', 'important', 'significant',
+            'high', 'low', 'good', 'better', 'strong', 'weak', 'large', 'small'
+        }
         
-        plural_exceptions = {
+        # Исключения для множественного числа
+        self.plural_exceptions = {
             'analyses': 'analysis', 'properties': 'property', 'materials': 'material',
             'structures': 'structure', 'composites': 'composite', 'nanoparticles': 'nanoparticle',
             'catalysts': 'catalyst', 'electrodes': 'electrode', 'polymers': 'polymer',
-            'sensors': 'sensor', 'devices': 'device', 'systems': 'system'
+            'sensors': 'sensor', 'devices': 'device', 'systems': 'system', 'cells': 'cell',
+            'membranes': 'membrane', 'electrolytes': 'electrolyte', 'cathodes': 'cathode',
+            'anodes': 'anode', 'activities': 'activity', 'efficiencies': 'efficiency',
+            'capacities': 'capacity', 'performances': 'performance', 'stabilities': 'stability'
         }
+    
+    def normalize_word(self, word):
+        """Приводит слово к базовой форме"""
+        if not word or len(word) < 4:
+            return ''
         
-        if word_lower in plural_exceptions:
-            return plural_exceptions[word_lower]
+        word_lower = word.lower()
         
-        # Простые правила
+        # Проверяем исключения
+        if word_lower in self.plural_exceptions:
+            return self.plural_exceptions[word_lower]
+        
+        # Общие правила для английского языка
         if word_lower.endswith('ies'):
             base = word_lower[:-3] + 'y'
-            return base if len(base) >= 4 else word_lower
-        elif word_lower.endswith('es') and word_lower.endswith(('ches', 'shes', 'xes', 'zes', 'sses')):
-            return word_lower[:-2]
+            if len(base) >= 4:
+                return base
+        elif word_lower.endswith('es'):
+            # Проверяем особые случаи
+            if word_lower.endswith(('ches', 'shes', 'xes', 'zes', 'sses')):
+                base = word_lower[:-2]
+                if len(base) >= 4:
+                    return base
+            elif word_lower.endswith('oes'):
+                base = word_lower[:-2]
+                if len(base) >= 4:
+                    return base
         elif word_lower.endswith('s') and not word_lower.endswith(('ss', 'us', 'is', 'ys', 'as')):
-            return word_lower[:-1]
+            base = word_lower[:-1]
+            if len(base) >= 4:
+                return base
         
         return word_lower
     
@@ -1897,63 +1925,68 @@ class SimpleTopicAnalyzer:
         if not title:
             return []
         
+        # Токенизация - ищем слова из 4+ букв
         words = re.findall(r'\b[a-zA-Z]{4,}\b', title)
         
-        stopwords = {
-            'study', 'research', 'paper', 'article', 'review', 'analysis', 'investigation',
-            'effect', 'property', 'performance', 'behavior', 'synthesis', 'development',
-            'method', 'approach', 'result', 'discussion', 'conclusion', 'introduction',
-            'experimental', 'measurement', 'technique', 'material', 'system', 'process',
-            'structure', 'model', 'based', 'using', 'different', 'various', 'novel',
-            'new', 'recent', 'potential', 'important', 'significant'
-        }
-        
-        filtered = []
+        filtered_words = []
         for word in words:
             word_lower = word.lower()
-            if word_lower in stopwords:
+            
+            # Пропускаем стоп-слова
+            if word_lower in self.stopwords:
                 continue
+            
+            # Пропускаем числа
             if re.search(r'\d', word_lower):
                 continue
             
+            # Нормализуем слово
             normalized = self.normalize_word(word_lower)
-            if normalized:
-                filtered.append(normalized)
+            
+            if normalized and len(normalized) >= 4:
+                filtered_words.append(normalized)
         
-        return filtered
+        return filtered_words
     
     def fetch_work_data(self, doi):
-        """Получает данные статьи по DOI"""
+        """Получает данные статьи по DOI из OpenAlex"""
         try:
+            # Очищаем DOI
             clean_doi = re.sub(r'^(https?://doi\.org/|doi:|DOI:?\s*)', '', doi.strip(), flags=re.IGNORECASE)
-            url = f"https://api.openalex.org/works/https://doi.org/{clean_doi}"
             
-            response = self.session.get(url, headers=self.headers, timeout=20)
+            # Пробуем разные форматы
+            for fmt in [clean_doi, f"doi:{clean_doi}", f"https://doi.org/{clean_doi}"]:
+                try:
+                    url = f"https://api.openalex.org/works/{fmt}"
+                    response = self.session.get(url, headers=self.headers, timeout=20)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        
+                        # Извлекаем основную тему
+                        primary_topic = None
+                        topics = data.get('topics', [])
+                        if topics:
+                            sorted_topics = sorted(topics, key=lambda x: x.get('score', 0), reverse=True)
+                            primary_topic = sorted_topics[0]
+                        
+                        return {
+                            'doi': doi,
+                            'success': True,
+                            'data': data,
+                            'primary_topic': primary_topic
+                        }
+                        
+                except Exception as e:
+                    continue
             
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Извлекаем основную тему
-                primary_topic = None
-                topics = data.get('topics', [])
-                if topics:
-                    sorted_topics = sorted(topics, key=lambda x: x.get('score', 0), reverse=True)
-                    primary_topic = sorted_topics[0]
-                
-                return {
-                    'doi': doi,
-                    'success': True,
-                    'data': data,
-                    'primary_topic': primary_topic
-                }
-            else:
-                return {
-                    'doi': doi,
-                    'success': False,
-                    'error': f"HTTP {response.status_code}",
-                    'data': None,
-                    'primary_topic': None
-                }
+            return {
+                'doi': doi,
+                'success': False,
+                'error': "Failed to fetch data",
+                'data': None,
+                'primary_topic': None
+            }
                 
         except Exception as e:
             return {
@@ -1969,56 +2002,86 @@ class SimpleTopicAnalyzer:
         if not dois:
             return None
         
-        works_data = []
-        all_titles = []
-        topic_counter = Counter()
-        
-        total = len(dois)
-        
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            futures = {executor.submit(self.fetch_work_data, doi): doi for doi in dois}
+        try:
+            works_data = []
+            all_titles = []
+            topic_counter = Counter()
             
-            for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
-                result = future.result()
+            total = len(dois)
+            
+            # Используем ThreadPoolExecutor для параллельной обработки
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                futures = {executor.submit(self.fetch_work_data, doi): doi for doi in dois}
                 
-                if result['success']:
-                    data = result['data']
-                    primary_topic = result['primary_topic']
+                for i, future in enumerate(concurrent.futures.as_completed(futures), 1):
+                    result = future.result()
                     
-                    if primary_topic:
-                        topic_name = primary_topic.get('display_name', 'Unknown')
-                        topic_counter[topic_name] += 1
+                    if result['success']:
+                        data = result['data']
+                        primary_topic = result['primary_topic']
                         
-                        works_data.append({
-                            'doi': result['doi'],
-                            'title': data.get('title', ''),
-                            'primary_topic': topic_name,
-                            'topic_id': primary_topic.get('id', '').split('/')[-1],
-                            'cited_by_count': data.get('cited_by_count', 0)
-                        })
-                        
-                        title = data.get('title')
-                        if title:
-                            all_titles.append(title)
-                
-                if progress_callback:
-                    progress_callback(int((i / total) * 50), f"Обработано {i}/{total} DOI")
-        
-        # Анализ ключевых слов
-        keyword_counter = Counter()
-        for title in all_titles:
-            keywords = self.extract_keywords_from_title(title)
-            keyword_counter.update(keywords)
-        
-        # Сортируем темы
-        sorted_topics = topic_counter.most_common()
-        
-        return {
-            'works_data': works_data,
-            'topics': sorted_topics,
-            'keywords': keyword_counter.most_common(20),
-            'total_works': len(works_data)
-        }
+                        if primary_topic:
+                            topic_name = primary_topic.get('display_name', 'Unknown')
+                            topic_counter[topic_name] += 1
+                            
+                            topic_id_full = primary_topic.get('id', '')
+                            topic_id = topic_id_full.split('/')[-1] if topic_id_full else ''
+                            
+                            works_data.append({
+                                'doi': result['doi'],
+                                'title': data.get('title', ''),
+                                'primary_topic': topic_name,
+                                'topic_id': topic_id,
+                                'topic_id_full': topic_id_full,
+                                'cited_by_count': data.get('cited_by_count', 0),
+                                'publication_date': data.get('publication_date', ''),
+                                'publication_year': data.get('publication_year', '')
+                            })
+                            
+                            title = data.get('title')
+                            if title:
+                                all_titles.append(title)
+                    
+                    # Обновляем прогресс
+                    if progress_callback:
+                        progress_val = int((i / total) * 50)
+                        progress_callback(progress_val, f"Обработано {i}/{total} DOI")
+            
+            if not works_data:
+                return None
+            
+            # Анализируем ключевые слова из заголовков
+            keyword_counter = Counter()
+            for title in all_titles:
+                keywords = self.extract_keywords_from_title(title)
+                if keywords:
+                    keyword_counter.update(keywords)
+            
+            # Сортируем темы по частоте
+            sorted_topics = topic_counter.most_common()
+            
+            # Считаем низкоцитируемые работы (<11 цитирований)
+            low_citation_count = sum(1 for w in works_data if w.get('cited_by_count', 0) < 11)
+            
+            result = {
+                'works_data': works_data,
+                'topics': sorted_topics,
+                'keywords': keyword_counter.most_common(20),
+                'total_works': len(works_data),
+                'low_citation_count': low_citation_count,
+                'stats': {
+                    'successful_doi': len(works_data),
+                    'total_topics': len(sorted_topics),
+                    'unique_titles': len(all_titles),
+                    'avg_citations': sum(w.get('cited_by_count', 0) for w in works_data) / len(works_data) if works_data else 0
+                }
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in analyze_dois: {e}")
+            return None
 
 
 class LowCitationFinder:
@@ -2027,250 +2090,378 @@ class LowCitationFinder:
     def __init__(self):
         self.session = requests.Session()
         self.session.timeout = 30
+        self.headers = {'User-Agent': 'CitationStyleConstructor/1.0'}
     
-    def fetch_works_by_topic(self, topic_id, max_results=100):
+    def fetch_works_by_topic(self, topic_id, max_results=200):
         """Получает работы по теме"""
-        all_works = []
-        page = 1
-        per_page = 100
-        
-        while len(all_works) < max_results:
-            try:
-                url = f"https://api.openalex.org/works?filter=topics.id:{topic_id}"
-                url += f"&per-page={per_page}&page={page}&sort=publication_date:desc"
-                
-                response = self.session.get(url, timeout=20)
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    works = data.get('results', [])
-                    
-                    if not works:
-                        break
-                    
-                    all_works.extend(works)
-                    
-                    if len(works) < per_page:
-                        break
-                    
-                    page += 1
-                    if page > 3:  # Максимум 3 страницы
-                        break
-                else:
-                    break
-                    
-            except Exception:
-                break
-        
-        return all_works
-    
-    def find_low_citation_works(self, topic_id, keywords, max_citations=10, max_works=300):
-        """Находит низкоцитируемые работы по теме"""
-        works = self.fetch_works_by_topic(topic_id, max_results=max_works)
-        
-        if not works:
-            return []
-        
-        low_citation_works = []
-        
-        for work in works:
-            cited_by_count = work.get('cited_by_count', 0)
+        try:
+            all_works = []
+            page = 1
+            per_page = 100
             
-            if cited_by_count <= max_citations:
-                title = work.get('title', '')
-                if title:
+            while len(all_works) < max_results:
+                try:
+                    url = f"https://api.openalex.org/works?filter=topics.id:{topic_id}"
+                    url += f"&per-page={per_page}&page={page}&sort=publication_date:desc"
+                    
+                    response = self.session.get(url, timeout=20)
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        works = data.get('results', [])
+                        
+                        if not works:
+                            break
+                        
+                        all_works.extend(works)
+                        
+                        if len(works) < per_page:
+                            break
+                        
+                        page += 1
+                        if page > 3:  # Максимум 3 страницы (300 работ)
+                            break
+                    else:
+                        break
+                        
+                except Exception as e:
+                    logger.debug(f"Error fetching page {page}: {e}")
+                    break
+            
+            return all_works
+            
+        except Exception as e:
+            logger.error(f"Error in fetch_works_by_topic: {e}")
+            return []
+    
+    def find_low_citation_works(self, topic_id, keywords, max_citations=10, max_works=200):
+        """Находит низкоцитируемые работы по теме"""
+        try:
+            if not topic_id or not isinstance(topic_id, str):
+                return []
+            
+            # Получаем работы по теме
+            works = self.fetch_works_by_topic(topic_id, max_results=max_works)
+            
+            if not works:
+                return []
+            
+            low_citation_works = []
+            
+            for work in works:
+                # Проверяем цитирования
+                cited_by_count = work.get('cited_by_count', 0)
+                
+                if cited_by_count <= max_citations:
+                    title = work.get('title', '')
+                    if not title:
+                        continue
+                    
                     title_lower = title.lower()
                     
-                    # Проверяем ключевые слова
+                    # Проверяем соответствие ключевым словам
                     score = 0
                     matched_keywords = []
                     
-                    for keyword in keywords:
-                        if keyword in title_lower:
-                            score += 1
-                            matched_keywords.append(keyword)
+                    if keywords:
+                        for keyword in keywords:
+                            if keyword and isinstance(keyword, str) and keyword in title_lower:
+                                score += 1
+                                matched_keywords.append(keyword)
                     
-                    if score > 0:
+                    # Если есть ключевые слова - проверяем соответствие
+                    # Если ключевых слов нет - берем все низкоцитируемые работы
+                    if not keywords or score > 0:
+                        # Получаем авторов
+                        authors = []
+                        try:
+                            authorships = work.get('authorships', [])
+                            for authorship in authorships[:3]:  # Берем первых 3 авторов
+                                author = authorship.get('author', {})
+                                display_name = author.get('display_name', '')
+                                if display_name:
+                                    authors.append(display_name)
+                        except:
+                            pass
+                        
+                        # Получаем журнал
+                        journal = ''
+                        try:
+                            primary_location = work.get('primary_location', {})
+                            if primary_location:
+                                source = primary_location.get('source', {})
+                                journal = source.get('display_name', '')
+                        except:
+                            pass
+                        
+                        # Получаем DOI
+                        doi = work.get('doi', '')
+                        if doi and doi.startswith('https://doi.org/'):
+                            doi = doi[16:]
+                        
                         low_citation_works.append({
                             'title': title,
                             'relevance_score': score,
                             'matched_keywords': matched_keywords,
                             'cited_by_count': cited_by_count,
                             'publication_date': work.get('publication_date', ''),
-                            'doi': work.get('doi', ''),
                             'publication_year': work.get('publication_year', ''),
-                            'authors': [a.get('author', {}).get('display_name', '') 
-                                      for a in work.get('authorships', [])[:3]],
-                            'journal': work.get('primary_location', {}).get('source', {}).get('display_name', '')
+                            'doi': doi,
+                            'authors': authors,
+                            'journal': journal,
+                            'openalex_id': work.get('id', ''),
+                            'is_oa': work.get('open_access', {}).get('is_oa', False)
                         })
-        
-        # Сортируем по релевантности
-        low_citation_works.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
-        
-        return low_citation_works[:20]  # Возвращаем топ-20
+            
+            # Сортируем по релевантности (если есть ключевые слова) или по дате публикации
+            if keywords:
+                low_citation_works.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
+            else:
+                low_citation_works.sort(key=lambda x: (-x['cited_by_count']), reverse=True)
+            
+            # Возвращаем топ-20 работ
+            return low_citation_works[:20]
+            
+        except Exception as e:
+            logger.error(f"Error in find_low_citation_works: {e}")
+            return []
 
 class ArticleRecommender:
-    """Новая система рекомендаций статей"""
+    """Новая система рекомендаций статей на основе низкоцитируемых работ"""
     
     @staticmethod
     def generate_recommendations(formatted_refs, progress_callback=None):
         """Генерирует рекомендации на основе списка литературы"""
-        if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
-            return None
-        
-        # Извлекаем DOI из форматированных ссылок
-        dois = []
-        for _, _, metadata in formatted_refs:
-            if metadata and metadata.get('doi'):
-                dois.append(metadata['doi'])
-        
-        if not dois:
-            return None
-        
-        if progress_callback:
-            progress_callback(0, "Начинаю анализ DOI...")
-        
-        # Анализируем DOI и извлекаем темы
-        analyzer = SimpleTopicAnalyzer()
-        analysis_result = analyzer.analyze_dois(dois, progress_callback)
-        
-        if not analysis_result or not analysis_result['topics']:
-            return None
-        
-        topics = analysis_result['topics']
-        
-        if progress_callback:
-            progress_callback(60, "Анализ тем завершен, выбираю топ-5...")
-        
-        # Берем топ-5 тем
-        top_topics = topics[:5]
-        
-        all_recommendations = []
-        
-        # Для каждой темы ищем низкоцитируемые работы
-        finder = LowCitationFinder()
-        
-        for i, (topic_name, _) in enumerate(top_topics):
+        try:
+            if len(formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+                if progress_callback:
+                    progress_callback(100, "Недостаточно ссылок для рекомендаций")
+                return None
+            
             if progress_callback:
-                progress_val = 60 + int((i / len(top_topics)) * 30)
-                progress_callback(progress_val, f"Поиск работ по теме: {topic_name}")
+                progress_callback(5, "Извлекаю DOI из ссылок...")
             
-            # Находим ID темы
-            topic_id = None
-            for work in analysis_result['works_data']:
-                if work['primary_topic'] == topic_name:
-                    topic_id = work['topic_id']
-                    break
+            # Извлекаем DOI из форматированных ссылок
+            dois = []
+            for _, is_error, metadata in formatted_refs:
+                if not is_error and metadata and metadata.get('doi'):
+                    dois.append(metadata['doi'])
             
-            if topic_id:
-                # Получаем ключевые слова для поиска
-                keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:10]]
+            if not dois:
+                if progress_callback:
+                    progress_callback(100, "Не найдено DOI в ссылках")
+                return None
+            
+            if progress_callback:
+                progress_callback(10, f"Найдено {len(dois)} уникальных DOI, начинаю анализ...")
+            
+            # Создаем анализатор
+            analyzer = SimpleTopicAnalyzer()
+            
+            # Анализируем DOI и извлекаем темы
+            analysis_result = analyzer.analyze_dois(dois, progress_callback)
+            
+            if not analysis_result or not analysis_result.get('topics'):
+                if progress_callback:
+                    progress_callback(100, "Не удалось проанализировать темы")
+                return None
+            
+            topics = analysis_result['topics']
+            
+            if progress_callback:
+                progress_callback(60, "Анализ тем завершен, ищу низкоцитируемые работы...")
+            
+            # Берем топ-5 тем
+            top_topics = topics[:5]
+            
+            all_recommendations = []
+            finder = LowCitationFinder()
+            
+            # Для каждой темы ищем низкоцитируемые работы
+            for i, (topic_name, topic_count) in enumerate(top_topics):
+                if progress_callback:
+                    progress_val = 60 + int((i / len(top_topics)) * 35)
+                    progress_callback(progress_val, f"Поиск работ по теме: {topic_name}")
                 
-                # Ищем низкоцитируемые работы
-                works = finder.find_low_citation_works(topic_id, keywords)
+                # Находим ID темы
+                topic_id = None
+                for work in analysis_result['works_data']:
+                    if work['primary_topic'] == topic_name:
+                        topic_id = work['topic_id']
+                        break
                 
-                if works:
-                    # Добавляем информацию о теме
-                    for work in works:
-                        work['topic'] = topic_name
-                        work['topic_id'] = topic_id
+                if topic_id:
+                    # Получаем ключевые слова для поиска
+                    keywords = []
+                    if analysis_result.get('keywords'):
+                        keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:10]]
                     
-                    all_recommendations.extend(works)
-        
-        if progress_callback:
-            progress_callback(95, "Формирование итогового списка...")
-        
-        # Сортируем все рекомендации
-        all_recommendations.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
-        
-        # Создаем DataFrame
-        if all_recommendations:
+                    # Ищем низкоцитируемые работы
+                    works = finder.find_low_citation_works(topic_id, keywords)
+                    
+                    if works:
+                        # Добавляем информацию о теме
+                        for work in works:
+                            work['topic'] = topic_name
+                            work['topic_id'] = topic_id
+                            work['topic_doi_count'] = topic_count
+                        
+                        all_recommendations.extend(works)
+            
+            if not all_recommendations:
+                if progress_callback:
+                    progress_callback(100, "Не найдено низкоцитируемых работ")
+                return None
+            
+            if progress_callback:
+                progress_callback(95, "Формирую итоговый список...")
+            
+            # Сортируем все рекомендации
+            all_recommendations.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
+            
+            # Ограничиваем максимум 100 рекомендаций
+            all_recommendations = all_recommendations[:100]
+            
+            # Создаем DataFrame
             df = pd.DataFrame(all_recommendations)
             
-            # Добавляем ссылку на DOI
-            def create_doi_link(doi):
-                if doi:
-                    return f"https://doi.org/{doi}"
+            # Добавляем URL для DOI
+            def create_doi_url(doi):
+                if doi and isinstance(doi, str) and doi.strip():
+                    clean_doi = re.sub(r'^(https?://doi\.org/|doi:|DOI:?\s*)', '', doi.strip(), flags=re.IGNORECASE)
+                    return f"https://doi.org/{clean_doi}"
                 return ""
             
-            df['doi_url'] = df['doi'].apply(create_doi_link)
+            df['doi_url'] = df['doi'].apply(create_doi_url)
             
             # Форматируем авторов
             def format_authors(authors_list):
                 if isinstance(authors_list, list):
-                    return ', '.join(authors_list[:3])
-                return str(authors_list)
+                    return ', '.join([str(a) for a in authors_list[:3] if a])
+                elif authors_list:
+                    return str(authors_list)
+                return "Unknown"
             
             df['authors_formatted'] = df['authors'].apply(format_authors)
             
+            # Форматируем дату публикации
+            def format_date(pub_date):
+                if not pub_date:
+                    return "Unknown"
+                try:
+                    if isinstance(pub_date, str):
+                        return pub_date[:10]  # Берем только дату
+                    return str(pub_date)
+                except:
+                    return "Unknown"
+            
+            df['publication_date_formatted'] = df['publication_date'].apply(format_date)
+            
+            # Форматируем ключевые слова
+            def format_keywords(keywords_list):
+                if isinstance(keywords_list, list):
+                    return ', '.join([str(kw) for kw in keywords_list[:5] if kw])
+                elif keywords_list:
+                    return str(keywords_list)
+                return ""
+            
+            df['keywords_formatted'] = df['matched_keywords'].apply(format_keywords)
+            
+            if progress_callback:
+                progress_callback(100, f"Готово! Найдено {len(df)} рекомендаций")
+            
             return df
-        
-        return None
+            
+        except Exception as e:
+            logger.error(f"Error in generate_recommendations: {e}")
+            if progress_callback:
+                progress_callback(100, f"Ошибка: {str(e)[:50]}")
+            return None
     
     @staticmethod
     def create_recommendations_txt(recommendations_df):
         """Создает TXT файл с рекомендациями"""
-        if recommendations_df is None or recommendations_df.empty:
-            return None
-        
-        output_txt_buffer = io.StringIO()
-        output_txt_buffer.write("ARTICLE RECOMMENDATIONS (Low-Citation Works)\n")
-        output_txt_buffer.write("=" * 80 + "\n\n")
-        output_txt_buffer.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        output_txt_buffer.write(f"Based on analysis of {len(recommendations_df)} low-citation articles\n\n")
-        
-        current_topic = None
-        
-        for idx, row in recommendations_df.iterrows():
-            if row['topic'] != current_topic:
-                current_topic = row['topic']
-                output_txt_buffer.write(f"\n{'='*60}\n")
-                output_txt_buffer.write(f"TOPIC: {current_topic}\n")
-                output_txt_buffer.write(f"{'='*60}\n\n")
+        try:
+            if recommendations_df is None or recommendations_df.empty:
+                return None
             
-            output_txt_buffer.write(f"{idx+1:2d}. [Citations: {row['cited_by_count']}] [Relevance: {row['relevance_score']}/10]\n")
-            output_txt_buffer.write(f"    Title: {row['title']}\n")
+            output_txt_buffer = io.StringIO()
+            output_txt_buffer.write("LOW-CITATION ARTICLE RECOMMENDATIONS\n")
+            output_txt_buffer.write("=" * 80 + "\n\n")
+            output_txt_buffer.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            output_txt_buffer.write(f"Based on topic analysis and keyword matching\n")
+            output_txt_buffer.write(f"Showing {len(recommendations_df)} low-citation articles (<11 citations)\n\n")
             
-            if row.get('authors_formatted'):
-                output_txt_buffer.write(f"    Authors: {row['authors_formatted']}\n")
+            current_topic = None
             
-            if row.get('journal'):
-                output_txt_buffer.write(f"    Journal: {row['journal']}")
-                if row.get('publication_year'):
-                    output_txt_buffer.write(f", Year: {row['publication_year']}")
+            for idx, row in recommendations_df.iterrows():
+                if row['topic'] != current_topic:
+                    current_topic = row['topic']
+                    output_txt_buffer.write(f"\n{'='*60}\n")
+                    output_txt_buffer.write(f"TOPIC: {current_topic}\n")
+                    output_txt_buffer.write(f"DOI in original list: {row.get('topic_doi_count', 'N/A')}\n")
+                    output_txt_buffer.write(f"{'='*60}\n\n")
+                
+                citation_status = "🔴 0 citations" if row['cited_by_count'] == 0 else f"🟡 {row['cited_by_count']} citations"
+                
+                output_txt_buffer.write(f"{idx+1:2d}. {citation_status} [Relevance: {row['relevance_score']}/10]\n")
+                output_txt_buffer.write(f"    Title: {row['title']}\n")
+                
+                if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
+                    output_txt_buffer.write(f"    Authors: {row['authors_formatted']}\n")
+                
+                if pd.notna(row.get('journal')):
+                    journal_info = f"Journal: {row['journal']}"
+                    if pd.notna(row.get('publication_year')):
+                        journal_info += f", Year: {row['publication_year']}"
+                    output_txt_buffer.write(f"    {journal_info}\n")
+                
+                if pd.notna(row.get('publication_date_formatted')) and row['publication_date_formatted'] != "Unknown":
+                    output_txt_buffer.write(f"    Publication Date: {row['publication_date_formatted']}\n")
+                
+                if pd.notna(row.get('doi')):
+                    output_txt_buffer.write(f"    DOI: {row['doi']}\n")
+                    if pd.notna(row.get('doi_url')):
+                        output_txt_buffer.write(f"    URL: {row['doi_url']}\n")
+                
+                if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
+                    output_txt_buffer.write(f"    Matched Keywords: {row['keywords_formatted']}\n")
+                
                 output_txt_buffer.write("\n")
             
-            if row['doi']:
-                output_txt_buffer.write(f"    DOI: {row['doi']}\n")
-                output_txt_buffer.write(f"    URL: https://doi.org/{row['doi']}\n")
+            output_txt_buffer.seek(0)
+            return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
             
-            if row.get('matched_keywords'):
-                keywords_str = ', '.join(row['matched_keywords'][:5])
-                output_txt_buffer.write(f"    Matched keywords: {keywords_str}\n")
-            
-            output_txt_buffer.write("\n")
-        
-        output_txt_buffer.seek(0)
-        return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
+        except Exception as e:
+            logger.error(f"Error creating recommendations TXT: {e}")
+            return None
     
     @staticmethod
     def create_recommendations_csv(recommendations_df):
         """Создает CSV файл с рекомендациями"""
-        if recommendations_df is None or recommendations_df.empty:
+        try:
+            if recommendations_df is None or recommendations_df.empty:
+                return None
+            
+            # Подготавливаем DataFrame для экспорта
+            export_df = recommendations_df.copy()
+            
+            # Выбираем нужные колонки
+            columns_to_export = ['topic', 'title', 'authors_formatted', 'journal', 
+                               'publication_year', 'cited_by_count', 'relevance_score',
+                               'doi', 'doi_url', 'keywords_formatted', 'publication_date_formatted']
+            
+            # Фильтруем существующие колонки
+            existing_columns = [col for col in columns_to_export if col in export_df.columns]
+            
+            output_csv_buffer = io.StringIO()
+            export_df[existing_columns].to_csv(output_csv_buffer, index=False, encoding='utf-8')
+            output_csv_buffer.seek(0)
+            return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
+            
+        except Exception as e:
+            logger.error(f"Error creating recommendations CSV: {e}")
             return None
-        
-        # Сохраняем нужные колонки
-        columns_to_export = ['topic', 'title', 'authors_formatted', 'journal', 
-                           'publication_year', 'cited_by_count', 'relevance_score',
-                           'doi', 'matched_keywords']
-        
-        # Фильтруем существующие колонки
-        existing_columns = [col for col in columns_to_export if col in recommendations_df.columns]
-        
-        output_csv_buffer = io.StringIO()
-        recommendations_df[existing_columns].to_csv(output_csv_buffer, index=False)
-        output_csv_buffer.seek(0)
-        return io.BytesIO(output_csv_buffer.getvalue().encode('utf-8'))
 
 class TopicSelectorUI:
     """UI компонент для выбора тем"""
@@ -5314,16 +5505,22 @@ class ResultsPage:
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendations_title')}</div>", unsafe_allow_html=True)
         
         current_year = datetime.now().year
-        min_year = current_year - 5  # За последние 5 лет
+        min_year = current_year - 5
         
         st.markdown(f"<p>{get_text('recommendations_description').format(5)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
+        
+        # Проверяем достаточно ли ссылок
+        if len(st.session_state.formatted_refs) < Config.MIN_REFERENCES_FOR_RECOMMENDATIONS:
+            st.warning(get_text('recommendations_not_enough').format(Config.MIN_REFERENCES_FOR_RECOMMENDATIONS))
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
         
         # Кнопка генерации рекомендаций
         if not st.session_state.get('recommendations_generated', False):
             col_rec1, col_rec2 = st.columns([3, 1])
             
             with col_rec1:
-                st.info(f"Found {len(st.session_state.formatted_refs)} references. Click to generate low-citation article recommendations.")
+                st.info(f"📚 Found {len(st.session_state.formatted_refs)} references. Click the button to generate low-citation article recommendations.")
             
             with col_rec2:
                 if st.button(get_text('recommend_similar_articles'), 
@@ -5340,25 +5537,14 @@ class ResultsPage:
             progress_bar = progress_container.progress(0)
             
             def update_progress(progress_value, message):
-                progress_bar.progress(progress_value)
-                status_container.text(f"{message} ({progress_value}%)")
+                """Обновление прогресс-бара"""
+                try:
+                    progress_bar.progress(progress_value / 100.0)
+                    status_container.text(f"{message}")
+                except:
+                    pass
             
             try:
-                update_progress(10, "Extracting DOI from references...")
-                
-                # Извлекаем DOI
-                dois = []
-                for _, _, metadata in st.session_state.formatted_refs:
-                    if metadata and metadata.get('doi'):
-                        dois.append(metadata['doi'])
-                
-                if not dois:
-                    st.error("No DOI found in references")
-                    st.session_state.recommendations_loading = False
-                    return
-                
-                update_progress(20, f"Found {len(dois)} unique DOI, starting analysis...")
-                
                 # Генерируем рекомендации
                 recommendations_df = ArticleRecommender.generate_recommendations(
                     st.session_state.formatted_refs,
@@ -5366,6 +5552,7 @@ class ResultsPage:
                 )
                 
                 if recommendations_df is not None and not recommendations_df.empty:
+                    # Сохраняем результаты
                     st.session_state.recommendations = recommendations_df
                     st.session_state.recommendations_generated = True
                     
@@ -5378,19 +5565,19 @@ class ResultsPage:
                     if recommendations_csv:
                         st.session_state.recommendations_csv_buffer = recommendations_csv
                     
-                    update_progress(100, "Analysis complete!")
-                    time.sleep(0.5)
+                    update_progress(100, "✅ Analysis complete!")
+                    time.sleep(1)
                     
-                    st.success(f"Found {len(recommendations_df)} low-citation article recommendations across {recommendations_df['topic'].nunique()} topics")
+                    st.success(f"✅ Found {len(recommendations_df)} low-citation article recommendations across {recommendations_df['topic'].nunique()} topics")
                     st.rerun()
                     
                 else:
-                    update_progress(100, "No recommendations found")
+                    update_progress(100, "⚠️ No recommendations found")
                     st.warning(get_text('recommendations_no_results'))
                     
             except Exception as e:
-                update_progress(100, f"Error: {str(e)[:50]}")
-                logger.error(f"Recommendation generation error: {e}")
+                update_progress(100, f"❌ Error occurred")
+                logger.error(f"Recommendation generation error: {e}", exc_info=True)
                 st.error(f"{get_text('recommendations_error')}: {str(e)[:200]}")
             
             finally:
@@ -5417,15 +5604,55 @@ class ResultsPage:
             </div>
             """, unsafe_allow_html=True)
             
-            # Отображение рекомендаций по темам (вкладки)
+            # Отображение рекомендаций по темам
             st.markdown("### 📋 Recommendations by Topic")
             
-            # Используем наш UI компонент
-            TopicSelectorUI.render_topic_selection(
-                pd.DataFrame({'topic': recommendations_df['topic'].unique()}),
-                recommendations_df,
-                container=st
-            )
+            # Создаем вкладки для каждой темы
+            topic_names = recommendations_df['topic'].unique()[:5]  # Берем топ-5 тем
+            
+            if len(topic_names) > 0:
+                tabs = st.tabs([f"📚 {topic[:25]}..." if len(topic) > 25 else f"📚 {topic}" 
+                               for topic in topic_names])
+                
+                for i, tab in enumerate(tabs):
+                    with tab:
+                        topic_name = topic_names[i]
+                        topic_works = recommendations_df[recommendations_df['topic'] == topic_name]
+                        
+                        st.markdown(f"#### {topic_name}")
+                        st.markdown(f"*Found {len(topic_works)} low-citation articles*")
+                        
+                        # Отображаем работы для этой темы
+                        for idx, row in topic_works.head(20).iterrows():  # Показываем топ-20 для каждой темы
+                            with st.expander(f"#{idx+1}: {row['title'][:80]}...", expanded=False):
+                                col1, col2 = st.columns([3, 1])
+                                
+                                with col1:
+                                    st.markdown(f"**Title:** {row['title']}")
+                                    
+                                    if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
+                                        st.markdown(f"**Authors:** {row['authors_formatted']}")
+                                    
+                                    if pd.notna(row.get('journal')):
+                                        journal_text = f"**Journal:** {row['journal']}"
+                                        if pd.notna(row.get('publication_year')):
+                                            journal_text += f", **Year:** {row['publication_year']}"
+                                        st.markdown(journal_text)
+                                
+                                with col2:
+                                    citation_color = "🔴" if row['cited_by_count'] == 0 else "🟡"
+                                    citation_text = f"**{citation_color} {row['cited_by_count']} citations**"
+                                    st.markdown(citation_text)
+                                    st.markdown(f"**Relevance:** {row['relevance_score']}/10")
+                                
+                                # DOI ссылка
+                                if pd.notna(row.get('doi')) and row['doi']:
+                                    doi_url = f"https://doi.org/{row['doi']}"
+                                    st.markdown(f"**DOI:** [{row['doi']}]({doi_url})")
+                                
+                                # Ключевые слова
+                                if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
+                                    st.markdown(f"**Keywords:** {row['keywords_formatted']}")
             
             # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
@@ -5433,7 +5660,7 @@ class ResultsPage:
             col_rec_download1, col_rec_download2 = st.columns(2)
             
             with col_rec_download1:
-                if hasattr(st.session_state, 'recommendations_txt_buffer'):
+                if hasattr(st.session_state, 'recommendations_txt_buffer') and st.session_state.recommendations_txt_buffer:
                     st.download_button(
                         label=get_text('recommendation_download_txt'),
                         data=st.session_state.recommendations_txt_buffer.getvalue(),
@@ -5444,7 +5671,7 @@ class ResultsPage:
                     )
             
             with col_rec_download2:
-                if hasattr(st.session_state, 'recommendations_csv_buffer'):
+                if hasattr(st.session_state, 'recommendations_csv_buffer') and st.session_state.recommendations_csv_buffer:
                     st.download_button(
                         label=get_text('recommendation_download_csv'),
                         data=st.session_state.recommendations_csv_buffer.getvalue(),
@@ -5795,5 +6022,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
