@@ -2679,7 +2679,7 @@ class ArticleRecommender:
 
 class TopicSelectorUI:
     """UI компонент для выбора тем"""
-    
+
     @staticmethod
     def render_topic_selection(topics_df, recommendations_df, container=None):
         """Отображает выбор тем и рекомендации"""
@@ -2696,33 +2696,61 @@ class TopicSelectorUI:
         
         # Создаем вкладки для каждой темы
         tab_labels = []
-        tab_contents = []
-        
-        for topic in list(topic_groups.keys())[:5]:  # Берем топ-5 тем
-            tab_labels.append(topic[:30] + "..." if len(topic) > 30 else topic)
-            
-            works = topic_groups[topic]
-            works.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
-            
-            # Создаем контент для вкладки
-            tab_html = f"<h4>📚 Тема: {topic}</h4>"
-            tab_html += f"<p>Найдено {len(works)} низкоцитируемых работ</p>"
-            
-            for i, work in enumerate(works[:20], 1):  # Показываем топ-20 для каждой темы
-                tab_html += TopicSelectorUI._create_work_card(work, i)
-            
-            tab_contents.append(tab_html)
         
         # Отображаем вкладки
         if container:
             with container:
+                # Берем топ-5 тем для вкладок
+                topics_for_tabs = list(topic_groups.keys())[:5]
+                tab_labels = [topic[:30] + "..." if len(topic) > 30 else topic 
+                             for topic in topics_for_tabs]
+                
                 tabs = st.tabs(tab_labels)
+                
                 for i, tab in enumerate(tabs):
                     with tab:
-                        st.markdown(tab_contents[i], unsafe_allow_html=True)
+                        topic_name = topics_for_tabs[i]
+                        works = topic_groups[topic_name]
+                        works.sort(key=lambda x: (x['relevance_score'], -x['cited_by_count']), reverse=True)
+                        
+                        # Заголовок вкладки
+                        st.markdown(f"### 📚 Тема: {topic_name}")
+                        st.markdown(f"*Найдено {len(works)} низкоцитируемых работ*")
+                        
+                        # Отображаем работы с использованием Streamlit компонентов
+                        for j, work in enumerate(works[:20], 1):  # Топ-20 для каждой темы
+                            with st.container():
+                                col1, col2 = st.columns([3, 1])
+                                
+                                with col1:
+                                    st.markdown(f"**#{j}. {work['title'][:120]}...**")
+                                    
+                                    authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
+                                    if authors:
+                                        st.markdown(f"👤 **Authors:** {authors}")
+                                    
+                                    if work.get('journal'):
+                                        year_text = f" ({work['publication_year']})" if work.get('publication_year') else ""
+                                        st.markdown(f"📰 **Journal:** {work['journal']}{year_text}")
+                                    
+                                    if work.get('matched_keywords'):
+                                        keywords = ', '.join(work['matched_keywords'][:3])
+                                        st.markdown(f"🔑 **Keywords:** {keywords}")
+                                
+                                with col2:
+                                    citation_color = "🔴" if work['cited_by_count'] == 0 else "🟡"
+                                    citation_text = "0 citations" if work['cited_by_count'] == 0 else f"{work['cited_by_count']} citations"
+                                    st.markdown(f"{citation_color} **{citation_text}**")
+                                    st.markdown(f"**Relevance:** {work['relevance_score']}/10")
+                                
+                                if work['doi']:
+                                    doi_url = f"https://doi.org/{work['doi']}"
+                                    st.markdown(f"[🔗 Open Article: {work['doi'][:30]}...]({doi_url})")
+                                
+                                st.divider()
         
         return tab_labels
-    
+
     @staticmethod
     def _create_work_card(work, index):
         """Создает HTML карточку для работы"""
@@ -2731,40 +2759,40 @@ class TopicSelectorUI:
         
         authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
         
+        # Используем CSS классы из темы вместо инлайн-стилей
         html = f"""
-        <div style="border-left: 4px solid #4ECDC4; padding: 10px 15px; margin: 10px 0; 
-                    background: linear-gradient(to right, rgba(78, 205, 196, 0.05), white);
-                    border-radius: 0 8px 8px 0;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="font-weight: bold; color: #1f77b4;">#{index}. {work['title'][:120]}...</span>
-                <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
-                           color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.8em;">
-                    {citation_color} {citation_text}
-                </span>
+        <div class="recommendation-item">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div class="recommendation-title">#{index}. {work['title'][:120]}...</div>
+                <div class="recommendation-score">
+                    <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
+                               color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.9em;">
+                        {citation_color} {citation_text}
+                    </span>
+                </div>
             </div>
             
-            <div style="margin-top: 8px; font-size: 0.9em;">
+            <div class="recommendation-meta">
         """
         
         if authors:
-            html += f"<div>👤 <strong>Authors:</strong> {authors}</div>"
+            html += f"<div><strong>👤 Authors:</strong> {authors}</div>"
         
         if work.get('journal'):
             year_text = f" ({work['publication_year']})" if work.get('publication_year') else ""
-            html += f"<div>📰 <strong>Journal:</strong> {work['journal']}{year_text}</div>"
+            html += f"<div><strong>📰 Journal:</strong> {work['journal']}{year_text}</div>"
         
         if work.get('matched_keywords'):
             keywords = ', '.join(work['matched_keywords'][:3])
-            html += f"<div>🔑 <strong>Keywords:</strong> {keywords}</div>"
+            html += f"<div><strong>🔑 Keywords:</strong> {keywords}</div>"
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
             html += f"""
             <div style="margin-top: 10px;">
                 <a href="{doi_url}" target="_blank" 
-                   style="background-color: #4ECDC4; color: white; padding: 5px 12px; 
-                          text-decoration: none; border-radius: 4px; font-size: 0.9em;">
-                   🔗 Open Article
+                   style="text-decoration: none; color: var(--primary); font-weight: 500;">
+                   🔗 Open Article DOI: {work['doi'][:30]}...
                 </a>
             </div>
             """
@@ -4102,6 +4130,43 @@ class ThemeManager:
                 margin-top: 5px;
                 font-size: 0.9rem;
                 line-height: 1.4;
+            }}
+
+            .recommendation-item {{
+                background-color: var(--cardBackground);
+                padding: 15px;
+                margin-bottom: 10px;
+                border-radius: 8px;
+                border-left: 4px solid var(--accent);
+                box-shadow: var(--shadow);
+            }}
+            
+            .recommendation-score {{
+                font-weight: bold;
+                color: var(--primary);
+                font-size: 1.1rem;
+            }}
+            
+            .recommendation-title {{
+                font-weight: bold;
+                margin: 5px 0;
+                color: var(--text);
+            }}
+            
+            .recommendation-meta {{
+                color: var(--text);
+                opacity: 0.9;
+                font-size: 0.95rem;
+                margin-top: 8px;
+            }}
+            
+            .recommendation-abstract {{
+                background-color: var(--background);
+                padding: 12px;
+                border-radius: 6px;
+                margin-top: 8px;
+                font-size: 0.9rem;
+                line-height: 1.5;
             }}
             
             .recommendation-progress {{
@@ -5836,40 +5901,46 @@ class ResultsPage:
                         topic_name = topic_names[i]
                         topic_works = recommendations_df[recommendations_df['topic'] == topic_name]
                         
-                        st.markdown(f"#### {topic_name}")
-                        st.markdown(f"*Found {len(topic_works)} low-citation articles*")
+                        st.markdown(f"#### 📚 {topic_name}")
+                        st.markdown(f"*Найдено {len(topic_works)} низкоцитируемых статей*")
                         
                         # Отображаем работы для этой темы
                         for idx, row in topic_works.head(30).iterrows():
-                            with st.expander(f"#{idx+1}: {row['title'][:197]}...", expanded=False):
+                            # Используем card-стиль из темы вместо expander
+                            with st.container():
+                                st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
+                                
                                 col1, col2 = st.columns([3, 1])
                                 
                                 with col1:
-                                    st.markdown(f"**Title:** {row['title']}")
+                                    st.markdown(f"**#{idx+1}. {row['title']}**")
                                     
                                     if pd.notna(row.get('authors_formatted')) and row['authors_formatted'] != "Unknown":
-                                        st.markdown(f"**Authors:** {row['authors_formatted']}")
+                                        st.markdown(f"**👤 Authors:** {row['authors_formatted']}")
                                     
                                     if pd.notna(row.get('journal')):
-                                        journal_text = f"**Journal:** {row['journal']}"
+                                        journal_text = f"**📰 Journal:** {row['journal']}"
                                         if pd.notna(row.get('publication_year')):
                                             journal_text += f", **Year:** {row['publication_year']}"
                                         st.markdown(journal_text)
                                 
                                 with col2:
                                     citation_color = "🔴" if row['cited_by_count'] == 0 else "🟡"
-                                    citation_text = f"**{citation_color} {row['cited_by_count']} citations**"
-                                    st.markdown(citation_text)
+                                    citation_text = "0 citations" if row['cited_by_count'] == 0 else f"{row['cited_by_count']} citations"
+                                    st.markdown(f"{citation_color} **{citation_text}**")
                                     st.markdown(f"**Relevance:** {row['relevance_score']}/10")
                                 
                                 # DOI ссылка
                                 if pd.notna(row.get('doi')) and row['doi']:
                                     doi_url = f"https://doi.org/{row['doi']}"
-                                    st.markdown(f"**DOI:** [{row['doi']}]({doi_url})")
+                                    st.markdown(f"[🔗 Open Article: {row['doi']}]({doi_url})", unsafe_allow_html=True)
                                 
                                 # Ключевые слова
                                 if pd.notna(row.get('keywords_formatted')) and row['keywords_formatted']:
-                                    st.markdown(f"**Keywords:** {row['keywords_formatted']}")
+                                    st.markdown(f"**🔑 Keywords:** {row['keywords_formatted']}")
+                                
+                                st.markdown("</div>", unsafe_allow_html=True)
+                                st.divider()
             
             # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
@@ -6239,3 +6310,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
