@@ -5031,57 +5031,64 @@ class ResultsPage:
             if st.button(get_text('new_session'), use_container_width=True, key="new_session_results"):
                 StageManager.clear_all()
 
-    @staticmethod
-    def _render_recommendations_section():
-        """Render recommendations section with progress bar"""
+    @staticmethod      
+    def _render_recommendations_section(self):
+        """Render recommendations section with topic-based analysis"""
         st.markdown(f"<div class='card'><div class='card-title'>{get_text('recommendations_title')}</div>", unsafe_allow_html=True)
         
         current_year = datetime.now().year
-        min_year = current_year - Config.RECOMMENDATION_YEARS_BACK
+        min_year = current_year - 5  # За последние 5 лет
         
-        st.markdown(f"<p>{get_text('recommendations_description').format(Config.RECOMMENDATION_YEARS_BACK)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
+        st.markdown(f"<p>{get_text('recommendations_description').format(5)} (from {min_year} to {current_year})</p>", unsafe_allow_html=True)
         
-        # Устанавливаем уникальный ключ для кнопки
-        generate_key = f"generate_recommendations_{hash(str(st.session_state.formatted_refs))}"
-        
-        if not st.session_state.recommendations_generated:
+        # Кнопка генерации рекомендаций
+        if not st.session_state.get('recommendations_generated', False):
             col_rec1, col_rec2 = st.columns([3, 1])
             
             with col_rec1:
-                st.info(f"Found {len(st.session_state.formatted_refs)} references. Click the button to generate recommendations.")
+                st.info(f"Found {len(st.session_state.formatted_refs)} references. Click to generate low-citation article recommendations.")
             
             with col_rec2:
                 if st.button(get_text('recommend_similar_articles'), 
                             use_container_width=True, 
-                            key=generate_key,
+                            key="generate_recommendations_new",
                             type="primary"):
                     st.session_state.recommendations_loading = True
                     st.rerun()
         
-        # Генерируем рекомендации если установлен флаг loading
+        # Генерация рекомендаций
         if st.session_state.get('recommendations_loading', False):
-            # Создаем контейнеры для прогресса
             progress_container = st.empty()
             status_container = st.empty()
             progress_bar = progress_container.progress(0)
             
-            def update_progress(progress_value: int, message: str):
-                """Обновление прогресс-бара"""
+            def update_progress(progress_value, message):
                 progress_bar.progress(progress_value)
                 status_container.text(f"{message} ({progress_value}%)")
             
             try:
-                # Используем оптимизированный рекомендатель
-                recommender = OptimizedArticleRecommender()
+                update_progress(10, "Extracting DOI from references...")
                 
-                # Генерируем рекомендации с отслеживанием прогресса
-                recommendations_df = recommender.generate_recommendations_with_progress(
+                # Извлекаем DOI
+                dois = []
+                for _, _, metadata in st.session_state.formatted_refs:
+                    if metadata and metadata.get('doi'):
+                        dois.append(metadata['doi'])
+                
+                if not dois:
+                    st.error("No DOI found in references")
+                    st.session_state.recommendations_loading = False
+                    return
+                
+                update_progress(20, f"Found {len(dois)} unique DOI, starting analysis...")
+                
+                # Генерируем рекомендации
+                recommendations_df = ArticleRecommender.generate_recommendations(
                     st.session_state.formatted_refs,
                     progress_callback=update_progress
                 )
                 
                 if recommendations_df is not None and not recommendations_df.empty:
-                    # Сохраняем результаты
                     st.session_state.recommendations = recommendations_df
                     st.session_state.recommendations_generated = True
                     
@@ -5094,124 +5101,80 @@ class ResultsPage:
                     if recommendations_csv:
                         st.session_state.recommendations_csv_buffer = recommendations_csv
                     
-                    # Обновляем DOCX с рекомендациями
-                    docx_buffer_with_recs = DocumentGenerator.generate_document(
-                        st.session_state.formatted_refs,
-                        generate_statistics(st.session_state.formatted_refs),
-                        st.session_state.style_config,
-                        st.session_state.duplicates_info,
-                        recommendations_df
-                    )
-                    st.session_state.docx_buffer = docx_buffer_with_recs
-                    
-                    # Обновляем прогресс
-                    update_progress(100, "Готово!")
+                    update_progress(100, "Analysis complete!")
                     time.sleep(0.5)
                     
-                    st.success(get_text('recommendations_count').format(len(recommendations_df)))
+                    st.success(f"Found {len(recommendations_df)} low-citation article recommendations across {recommendations_df['topic'].nunique()} topics")
                     st.rerun()
                     
                 else:
-                    update_progress(100, "Не найдено рекомендаций")
+                    update_progress(100, "No recommendations found")
                     st.warning(get_text('recommendations_no_results'))
                     
             except Exception as e:
-                update_progress(100, f"Ошибка: {str(e)[:100]}")
+                update_progress(100, f"Error: {str(e)[:50]}")
                 logger.error(f"Recommendation generation error: {e}")
                 st.error(f"{get_text('recommendations_error')}: {str(e)[:200]}")
             
             finally:
                 st.session_state.recommendations_loading = False
         
-        # Отображаем сгенерированные рекомендации
-        if st.session_state.recommendations_generated and st.session_state.recommendations is not None:
+        # Отображение результатов
+        if st.session_state.get('recommendations_generated', False) and st.session_state.recommendations is not None:
             recommendations_df = st.session_state.recommendations
             
-            # Вычисляем среднее число цитирований отдельно
-            avg_citations = recommendations_df['citation_count'].mean() if not recommendations_df.empty else 0
-            avg_citations_str = f"{avg_citations:.1f}" if not recommendations_df.empty else "0"
-            source_str = recommendations_df['source'].iloc[0] if not recommendations_df.empty else 'unknown'
+            # Статистика
+            topics_count = recommendations_df['topic'].nunique()
+            avg_citations = recommendations_df['cited_by_count'].mean()
+            zero_citation_count = (recommendations_df['cited_by_count'] == 0).sum()
             
             st.markdown(f"""
             <div class='stat-card' style='margin: 20px 0;'>
                 <div class='stat-value'>{len(recommendations_df)}</div>
-                <div class='stat-label'>Recommendations found</div>
+                <div class='stat-label'>Low-citation articles found</div>
                 <div style='font-size: 0.8rem; margin-top: 5px;'>
-                    Source: {source_str} | 
-                    Avg citations: {avg_citations_str}
+                    📚 Topics: {topics_count} | 
+                    📉 Avg citations: {avg_citations:.1f} | 
+                    🔴 Zero citations: {zero_citation_count}
                 </div>
             </div>
             """, unsafe_allow_html=True)
             
-            # Отображаем рекомендации
-            for idx, row in recommendations_df.iterrows():
-                with st.expander(f"#{idx+1}: {row['title'][:80]}... (Score: {row['score']:.3f})"):
-                    st.markdown(f"<div class='recommendation-item'>", unsafe_allow_html=True)
-                    
-                    # Заголовок и оценка
-                    col_score, col_year = st.columns([1, 1])
-                    with col_score:
-                        # Показываем "Семантическая близость" вместо "Relevance score"
-                        st.markdown(f"**Семантическая близость: {row['score']:.3f}**")
-                    with col_year:
-                        st.markdown(f"**{get_text('recommendation_year')} {row['year']}**")
-                    
-                    # Название
-                    st.markdown(f"**{row['title']}**")
-                    
-                    # Мета-информация
-                    col_meta1, col_meta2 = st.columns([2, 1])
-                    with col_meta1:
-                        st.markdown(f"**{get_text('recommendation_journal')}** {row['journal']}")
-                        st.markdown(f"**Authors:** {row['authors']}")
-                    
-                    with col_meta2:
-                        citation_count = row.get('citation_count', 0)
-                        st.markdown(f"**Citations:** {citation_count}")
-                        st.markdown(f"**Source:** {row['source']}")
-                    
-                    # DOI ссылка
-                    doi_url = f"https://doi.org/{row['doi']}"
-                    st.markdown(f"**DOI:** [{row['doi']}]({doi_url})")
-                    
-                    # Сходство и общие термины
-                    st.markdown(f"**Common terms:** {row['common_terms']}")
-                    
-                    # Аннотация (если есть)
-                    if row.get('abstract'):
-                        if st.checkbox(f"Show abstract", key=f"show_abstract_{idx}"):
-                            st.markdown(f"**Abstract:**")
-                            st.markdown(f"<div style='background-color: rgba(0,0,0,0.05); padding: 10px; border-radius: 5px; font-size: 0.9em;'>", unsafe_allow_html=True)
-                            st.markdown(row['abstract'])
-                            st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    st.markdown("</div>", unsafe_allow_html=True)
+            # Отображение рекомендаций по темам (вкладки)
+            st.markdown("### 📋 Recommendations by Topic")
             
-            # Кнопки скачивания рекомендаций
+            # Используем наш UI компонент
+            TopicSelectorUI.render_topic_selection(
+                pd.DataFrame({'topic': recommendations_df['topic'].unique()}),
+                recommendations_df,
+                container=st
+            )
+            
+            # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
             
             col_rec_download1, col_rec_download2 = st.columns(2)
             
             with col_rec_download1:
-                if hasattr(st.session_state, 'recommendations_txt_buffer') and st.session_state.recommendations_txt_buffer:
+                if hasattr(st.session_state, 'recommendations_txt_buffer'):
                     st.download_button(
                         label=get_text('recommendation_download_txt'),
                         data=st.session_state.recommendations_txt_buffer.getvalue(),
-                        file_name='article_recommendations.txt',
+                        file_name='low_citation_recommendations.txt',
                         mime='text/plain',
                         use_container_width=True,
-                        key="download_recommendations_txt"
+                        key="download_recommendations_txt_new"
                     )
             
             with col_rec_download2:
-                if hasattr(st.session_state, 'recommendations_csv_buffer') and st.session_state.recommendations_csv_buffer:
+                if hasattr(st.session_state, 'recommendations_csv_buffer'):
                     st.download_button(
                         label=get_text('recommendation_download_csv'),
                         data=st.session_state.recommendations_csv_buffer.getvalue(),
-                        file_name='article_recommendations.csv',
+                        file_name='low_citation_recommendations.csv',
                         mime='text/csv',
                         use_container_width=True,
-                        key="download_recommendations_csv"
+                        key="download_recommendations_csv_new"
                     )
             
             st.markdown("</div>", unsafe_allow_html=True)
@@ -5555,4 +5518,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
