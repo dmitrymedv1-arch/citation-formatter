@@ -2468,23 +2468,19 @@ class ArticleRecommender:
             if progress_callback:
                 progress_callback(60, "Анализ тем завершен, ищу низкоцитируемые работы...")
             
-            # Берем топ-3 темы (вместо 5 для ускорения)
-            top_topics = topics[:3]
+            top_topics = topics[:5]
             
             all_recommendations = []
             finder = LowCitationFinder()
             
-            # ПАРАЛЛЕЛЬНЫЙ поиск работ для всех тем
             if progress_callback:
                 progress_val = 60
                 progress_callback(progress_val, f"Параллельный поиск по {len(top_topics)} темам...")
             
-            # Собираем ключевые слова один раз
             keywords = []
             if analysis_result.get('keywords'):
-                keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:8]]  # Топ-8 вместо 10
+                keywords = [kw.lower() for kw, _ in analysis_result['keywords'][:10]]
             
-            # Параллельная обработка тем
             with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(top_topics), Config.OPENALEX_MAX_WORKERS)) as executor:
                 future_to_topic = {}
                 
@@ -6243,6 +6239,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
