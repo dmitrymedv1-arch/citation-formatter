@@ -5950,9 +5950,8 @@ class ResultsPage:
                             recommendation_html += "</div>"
                             
                             # Отображаем HTML
+                            recommendation_html += "<hr style='margin: 15px 0; border: none; border-top: 1px solid var(--border);'>"
                             st.markdown(recommendation_html, unsafe_allow_html=True)
-                            st.markdown("<hr style='margin: 15px 0; border: none; border-top: 1px solid var(--border);'>", 
-                                        unsafe_allow_html=True)
             
             # Кнопки скачивания
             st.markdown(f"<div class='card' style='margin-top: 20px;'><div class='card-title'>{get_text('recommendation_download')}</div>", unsafe_allow_html=True)
@@ -6322,6 +6321,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
