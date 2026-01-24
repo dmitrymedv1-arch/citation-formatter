@@ -3330,25 +3330,23 @@ class DOIProcessor:
             else:
                 return name.upper()
 
-    def _clean_text(self, text: str) -> str:
-        """Clean text from HTML tags and entities while preserving formula structure"""
+    def clean_text(text):
+        """Clean text from HTML tags and formatting"""
         if not text:
             return ""
         
-        # Убираем все HTML теги
+        # Удаляем HTML теги
         text = re.sub(r'<[^>]+>', '', text)
         
         # Декодируем HTML-сущности
         text = html.unescape(text)
         
-        # Заменяем все виды пробельных символов на обычные пробелы
-        # Включаем неразрывные пробелы, тонкие пробелы и т.д.
-        text = re.sub(r'[\n\r\t\u2000-\u200F\u2028-\u202F\u205F\u3000]+', ' ', text)
+        # Удаляем все управляющие символы и лишние пробелы
+        text = re.sub(r'[\n\r\t]+', ' ', text)  # Заменяем переносы на пробелы
+        text = re.sub(r'\s+', ' ', text)  # Сжимаем множественные пробелы
+        text = re.sub(r'^\s+|\s+$', '', text)  # Убираем пробелы в начале и конце
         
-        # Сжимаем множественные пробелы до одного
-        text = re.sub(r'\s+', ' ', text)
-        
-        return text.strip()
+        return text
 
 # Reference Processor
 class ReferenceProcessor:
@@ -6340,6 +6338,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
