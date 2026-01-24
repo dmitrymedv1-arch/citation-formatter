@@ -5473,9 +5473,22 @@ class CreatePage:
 
     @staticmethod
     def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
-        meta = { ... ваш текущий словарь ... }
+        meta = {
+            'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, 
+                        {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
+            'title': 'The chemistry of graphene oxide',  # здесь можно даже сразу вставить химическую формулу для теста
+            'journal': 'Chemical Society Reviews',
+            'year': 2010,
+            'volume': '39',
+            'issue': '1',
+            'pages': '228-240',
+            'article_number': '',
+            'doi': '10.1039/B917103G'
+        }
+        
         if 'title' in meta:
             meta['title'] = normalize_title_for_display(meta['title'])
+        
         return meta
     
     @staticmethod
@@ -6385,6 +6398,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
