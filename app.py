@@ -3331,29 +3331,24 @@ class DOIProcessor:
                 return name.upper()
 
     def _clean_text(self, text: str) -> str:
-        """Clean text from HTML tags and entities while preserving spacing for sub/superscripts"""
+        """Clean text from HTML tags and entities while preserving formula structure"""
         if not text:
             return ""
         
-        # Сначала заменяем HTML-теги с сохранением структуры
-        # Удаляем теги <scp> и </scp> полностью
-        text = re.sub(r'</?scp[^>]*>', '', text)
+        # Убираем все HTML теги, заменяя их на пробелы
+        text = re.sub(r'<[^>]+>', ' ', text)
         
-        # Для тегов <sub> и </sub> добавляем пробелы
-        text = re.sub(r'</?sub[^>]*>', ' ', text)
-        
-        # Для тегов <sup> и </sup> добавляем пробелы
-        text = re.sub(r'</?sup[^>]*>', ' ', text)
-        
-        # Удаляем другие HTML-теги
-        text = re.sub(r'<[^>]+>', '', text)
-        
-        # Обрабатываем HTML-сущности
+        # Декодируем HTML-сущности
         text = html.unescape(text)
         
-        # Удаляем лишние пробелы и переносы строк
+        # Удаляем лишние пробелы, включая те, что образовались от удаления тегов
         text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'\n', ' ', text)
+        
+        # Убираем переносы строк и табуляции
+        text = text.replace('\n', ' ').replace('\r', ' ').replace('\t', ' ')
+        
+        # Снова убираем лишние пробелы
+        text = re.sub(r'\s+', ' ', text)
         
         return text.strip()
 
@@ -6347,6 +6342,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
