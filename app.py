@@ -1589,7 +1589,6 @@ class Style6Formatter(BaseCitationFormatter):
             elements.append((metadata['volume'], True, False, ", ", False, None))
             elements.append((pages_formatted, False, False, ". ", False, None))
             elements.append((doi_url, False, False, "", True, metadata['doi']))
-            elements.append((".", False, False, "", False, None))
             return elements, False
 
 # Style 7 Formatter
@@ -1659,7 +1658,6 @@ class Style7Formatter(BaseCitationFormatter):
                 elements.append(("", False, False, ", ", False, None))
             elements.append((pages_formatted, False, False, ". ", False, None))
             elements.append((doi_url, False, False, "", True, metadata['doi']))
-            elements.append((".", False, False, "", False, None))
             return elements, False
 
 # Style 8 Formatter
@@ -6330,3 +6328,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
