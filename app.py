@@ -3329,15 +3329,32 @@ class DOIProcessor:
                 return name[0].upper() + name[1:].lower()
             else:
                 return name.upper()
-    
+
     def _clean_text(self, text: str) -> str:
-        """Clean text from HTML tags and entities"""
+        """Clean text from HTML tags and entities while preserving spacing for sub/superscripts"""
         if not text:
             return ""
         
+        # Сначала заменяем HTML-теги с сохранением структуры
+        # Удаляем теги <scp> и </scp> полностью
+        text = re.sub(r'</?scp[^>]*>', '', text)
+        
+        # Для тегов <sub> и </sub> добавляем пробелы
+        text = re.sub(r'</?sub[^>]*>', ' ', text)
+        
+        # Для тегов <sup> и </sup> добавляем пробелы
+        text = re.sub(r'</?sup[^>]*>', ' ', text)
+        
+        # Удаляем другие HTML-теги
         text = re.sub(r'<[^>]+>', '', text)
+        
+        # Обрабатываем HTML-сущности
         text = html.unescape(text)
-        text = re.sub(r'&[^;]+;', '', text)
+        
+        # Удаляем лишние пробелы и переносы строк
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n', ' ', text)
+        
         return text.strip()
 
 # Reference Processor
@@ -6330,6 +6347,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
