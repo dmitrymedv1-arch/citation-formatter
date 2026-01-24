@@ -3167,7 +3167,28 @@ class DOIProcessor:
             if re.search(pattern, text_upper):
                 return True
         return False
-    
+
+    def normalize_title_for_display(title: str) -> str:
+        if not title:
+            return ""
+        
+        # Уже очищено от тегов в _extract_metadata_from_api, но на всякий случай
+        title = re.sub(r'<[^>]+>', '', title)
+        
+        # Нормализация дефисов/минусов (если ещё не сделано)
+        title = title.replace('\u2010', '-').replace('\u2212', '-').replace('‐', '-')
+        
+        # Самое важное: сжимаем множественные пробелы и переносы строк
+        title = re.sub(r'\s+', ' ', title)          # все whitespace → один пробел
+        title = title.strip()                       # убираем пробелы в начале/конце
+        
+        # Дополнительно сжимаем пробелы вокруг химических индексов (очень помогает)
+        title = re.sub(r'([A-Za-z0-9δ])\s+([-−])\s+([A-Za-z0-9δ])', r'\1\2\3', title)
+        title = re.sub(r'([A-Za-z0-9δ])\s+([-−])$', r'\1\2', title)   # если в конце
+        title = re.sub(r'^([-−])\s+([A-Za-z0-9δ])', r'\1\2', title)   # если в начале
+        
+        return title
+        
     def _find_explicit_doi(self, reference: str) -> Optional[str]:
         """Find explicit DOI in text"""
         doi_patterns = [
@@ -5449,6 +5470,13 @@ class CreatePage:
             }
         else:
             return None
+
+    @staticmethod
+    def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
+        meta = { ... ваш текущий словарь ... }
+        if 'title' in meta:
+            meta['title'] = normalize_title_for_display(meta['title'])
+        return meta
     
     @staticmethod
     def _add_numbering(preview_ref: str, style_config: Dict) -> str:
@@ -6169,6 +6197,9 @@ def extract_metadata_sync(doi):
 def format_reference(metadata, style_config, for_preview=False):
     formatter = CitationFormatterFactory.create_formatter(style_config)
     return formatter.format_reference(metadata, for_preview)
+    elif element == "Title":
+    value = normalize_title_for_display(metadata['title'])
+    element_empty = not value
 
 def find_duplicate_references(formatted_refs):
     processor = ReferenceProcessor()
@@ -6354,6 +6385,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
