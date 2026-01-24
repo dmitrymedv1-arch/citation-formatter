@@ -3248,7 +3248,10 @@ class DOIProcessor:
             title = ''
             if 'title' in result and result['title']:
                 title = self._clean_text(result['title'][0])
-                title = re.sub(r'</?sub>|</?i>|</?SUB>|</?I>', '', title, flags=re.IGNORECASE)
+                # Убираем все HTML теги и форматирование
+                title = re.sub(r'<[^>]+>', '', title)  # Удаляем все оставшиеся теги
+                title = re.sub(r'[\n\r\t]+', ' ', title)  # Заменяем переносы на пробелы
+                title = re.sub(r'\s+', ' ', title).strip()  # Сжимаем пробелы
             
             journal = ''
             if 'container-title' in result and result['container-title']:
@@ -6338,6 +6341,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
