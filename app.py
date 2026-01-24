@@ -6210,9 +6210,9 @@ def extract_metadata_sync(doi):
 def format_reference(metadata, style_config, for_preview=False):
     formatter = CitationFormatterFactory.create_formatter(style_config)
     return formatter.format_reference(metadata, for_preview)
-    elif element == "Title":
-    value = normalize_title_for_display(metadata['title'])
-    element_empty = not value
+        elif element == "Title":
+        value = normalize_title_for_display(metadata['title'])
+        element_empty = not value
 
 def find_duplicate_references(formatted_refs):
     processor = ReferenceProcessor()
@@ -6398,6 +6398,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
