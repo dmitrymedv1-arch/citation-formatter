@@ -3247,15 +3247,16 @@ class DOIProcessor:
 
             title = ''
             if 'title' in result and result['title']:
-                raw_title = result['title'][0]
-                title = re.sub(r'<[^>]+>', '', raw_title)
-                title = title.replace('\u2010', '-')\
-                             .replace('\u2212', '-')\
-                             .replace('‐', '-')
-                title = re.sub(r'\s+', ' ', title).strip()
-                title = re.sub(r'(\d)\s*([−-])\s*([a-zA-Z])', r'\1\2\3', title)
-                title = re.sub(r'([A-Za-z0-9])\s+([−-])\s+([A-Za-z0-9])', r'\1\2\3', title)
-                title = re.sub(r'([−-])\s*([δ])', r'\1\2', title)  # для δ отдельно
+                raw = result['title'][0]
+                # Удаляем все HTML-теги
+                cleaned = re.sub(r'<[^>]+>', '', raw)
+                # Нормализуем дефисы/минусы
+                cleaned = cleaned.replace('\u2010', '-').replace('\u2212', '-').replace('‐', '-')
+                # Убираем лишние пробелы
+                cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+                # Сжимаем пробелы вокруг химических индексов
+                cleaned = re.sub(r'(\d)\s*([-−])\s*([a-zA-Zδ])', r'\1\2\3', cleaned)
+                title = cleaned
             
             journal = ''
             if 'container-title' in result and result['container-title']:
@@ -6353,6 +6354,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
