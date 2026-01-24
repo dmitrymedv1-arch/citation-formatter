@@ -3333,23 +3333,31 @@ class DOIProcessor:
             else:
                 return name.upper()
 
-    def clean_text(text):
-        """Clean text from HTML tags and formatting"""
+    def _clean_text(self, text: str) -> str:
+        """Clean text from HTML tags and entities with proper formatting"""
         if not text:
             return ""
         
-        # Удаляем HTML теги
-        text = re.sub(r'<[^>]+>', '', text)
+        # Удаляем ВСЕ HTML теги, включая <span>, <div>, <scp> и т.д.
+        text = re.sub(r'<[^>]*>', '', text)
         
         # Декодируем HTML-сущности
         text = html.unescape(text)
         
-        # Удаляем все управляющие символы и лишние пробелы
-        text = re.sub(r'[\n\r\t]+', ' ', text)  # Заменяем переносы на пробелы
-        text = re.sub(r'\s+', ' ', text)  # Сжимаем множественные пробелы
-        text = re.sub(r'^\s+|\s+$', '', text)  # Убираем пробелы в начале и конце
+        # Заменяем все виды пробельных символов на обычные пробелы
+        text = re.sub(r'[\n\r\t\f\v]+', ' ', text)
         
-        return text
+        # Заменяем неразрывные пробелы и другие специальные пробелы
+        text = text.replace('\u00A0', ' ')  # &nbsp;
+        text = text.replace('\u2002', ' ')  # en space
+        text = text.replace('\u2003', ' ')  # em space
+        text = text.replace('\u2009', ' ')  # thin space
+        
+        # Сжимаем множественные пробелы до одного
+        text = re.sub(r'\s{2,}', ' ', text)
+        
+        # Убираем пробелы в начале и конце
+        return text.strip()
 
 # Reference Processor
 class ReferenceProcessor:
@@ -6341,6 +6349,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
