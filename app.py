@@ -3329,7 +3329,7 @@ class DOIProcessor:
                 return name.upper()
 
     def _clean_text(self, text: str) -> str:
-        """Clean text from HTML tags and entities and normalize case for titles"""
+        """Clean text from HTML tags and entities"""
         if not text:
             return ""
         
@@ -3338,86 +3338,41 @@ class DOIProcessor:
         text = re.sub(r'&[^;]+;', '', text)
         text = text.strip()
         
-        # Для заголовков статей нормализуем регистр (первая буква каждого слова заглавная, остальные строчные)
-        # Проверяем, похоже ли это на заголовок (нет точек в середине, много заглавных букв)
-        if text and text.isupper() or (sum(1 for c in text if c.isupper()) > len(text) * 0.7):
-            # Используем title case, но с учетом специальных слов и знаков препинания
-            text = self._normalize_title_case(text)
+        # Если весь текст в верхнем регистре или большинство букв заглавные, нормализуем регистр
+        if text and (text.isupper() or sum(1 for c in text if c.isupper()) > len(text) * 0.7):
+            # Используем title case (каждое слово с заглавной буквы)
+            text = text.title()
+            # Но исправляем некоторые распространенные ошибки title()
+            corrections = {
+                ' A ': ' a ',
+                ' An ': ' an ',
+                ' The ': ' the ',
+                ' And ': ' and ',
+                ' But ': ' but ',
+                ' Or ': ' or ',
+                ' For ': ' for ',
+                ' Nor ': ' nor ',
+                ' On ': ' on ',
+                ' At ': ' at ',
+                ' To ': ' to ',
+                ' By ': ' by ',
+                ' In ': ' in ',
+                ' Of ': ' of ',
+                ' With ': ' with ',
+                ' As ': ' as ',
+                ' Is ': ' is ',
+                ' Via ': ' via ',
+                ' Vs ': ' vs ',
+                ' Vs. ': ' vs. ',
+                ' Etc ': ' etc ',
+                ' Etc. ': ' etc. ',
+            }
+            
+            for wrong, correct in corrections.items():
+                text = text.replace(wrong, correct)
+                text = text.replace(wrong.upper(), correct)
         
         return text
-    
-    def _normalize_title_case(self, text: str) -> str:
-        """Normalize title to proper case"""
-        if not text:
-            return ""
-        
-        # Разделяем на слова, сохраняя знаки препинания
-        words = re.findall(r'\b[\w\'-]+\b|[^\w\s]', text)
-        
-        # Список слов, которые обычно пишутся с заглавной буквы в заголовках
-        always_uppercase = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X',
-                           'DNA', 'RNA', 'USA', 'UK', 'UN', 'EU', 'WHO', 'COVID', 'SARS',
-                           'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
-                           'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
-        
-        # Список слов, которые обычно не пишутся с заглавной буквы в середине заголовка
-        lowercase_words = {'a', 'an', 'the', 'and', 'but', 'or', 'for', 'nor', 'on', 'at', 
-                          'to', 'by', 'in', 'of', 'with', 'as', 'is', 'was', 'were', 'be',
-                          'been', 'am', 'are', 'via', 'per', 'vs', 'vs.', 'etc', 'etc.'}
-        
-        result_words = []
-        
-        for i, word in enumerate(words):
-            # Если это слово (не знак препинания)
-            if word.isalpha() or (word.replace('-', '').replace("'", "").isalpha() and len(word) > 1):
-                word_lower = word.lower()
-                
-                # Первое и последнее слово всегда с заглавной
-                if i == 0 or i == len(words) - 1:
-                    result_words.append(word_lower.capitalize())
-                # Специальные слова, которые всегда с заглавной
-                elif word_lower.upper() in always_uppercase:
-                    result_words.append(word.upper() if word.isupper() else word_lower.upper())
-                # Слова, которые обычно строчные
-                elif word_lower in lowercase_words:
-                    result_words.append(word_lower)
-                # Слова после двоеточия и тире с заглавной
-                elif i > 0 and words[i-1] in [':', '-', '–', '—']:
-                    result_words.append(word_lower.capitalize())
-                # Остальные слова с заглавной
-                else:
-                    # Обработка слов с дефисами и апострофами
-                    if '-' in word:
-                        parts = word.split('-')
-                        capitalized_parts = []
-                        for part in parts:
-                            if part.isalpha():
-                                capitalized_parts.append(part.lower().capitalize())
-                            else:
-                                capitalized_parts.append(part)
-                        result_words.append('-'.join(capitalized_parts))
-                    elif "'" in word and len(word) > 2:
-                        # Слова типа "O'Reilly"
-                        apostrophe_pos = word.find("'")
-                        if apostrophe_pos > 0:
-                            result_words.append(word[:apostrophe_pos].lower().capitalize() + 
-                                               "'" + word[apostrophe_pos+1:].lower().capitalize())
-                        else:
-                            result_words.append(word_lower.capitalize())
-                    else:
-                        result_words.append(word_lower.capitalize())
-            else:
-                # Знаки препинания оставляем как есть
-                result_words.append(word)
-        
-        # Собираем обратно в строку
-        result = ''.join(result_words)
-        
-        # Убедимся, что первая буква заглавная
-        if result and result[0].isalpha():
-            result = result[0].upper() + result[1:]
-        
-        return result
 
 # Reference Processor
 class ReferenceProcessor:
@@ -6409,5 +6364,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
