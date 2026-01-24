@@ -1151,7 +1151,7 @@ class CustomCitationFormatter(BaseCitationFormatter):
                 value = self.format_authors(metadata['authors'])
                 element_empty = not value
             elif element == "Title":
-                value = normalize_title_for_display(metadata['title'])
+                value = metadata['title']
                 element_empty = not value
             elif element == "Journal":
                 value = self.format_journal_name(metadata['journal'])
@@ -3167,28 +3167,7 @@ class DOIProcessor:
             if re.search(pattern, text_upper):
                 return True
         return False
-
-    def normalize_title_for_display(title: str) -> str:
-        if not title:
-            return ""
-        
-        # Уже очищено от тегов в _extract_metadata_from_api, но на всякий случай
-        title = re.sub(r'<[^>]+>', '', title)
-        
-        # Нормализация дефисов/минусов (если ещё не сделано)
-        title = title.replace('\u2010', '-').replace('\u2212', '-').replace('‐', '-')
-        
-        # Самое важное: сжимаем множественные пробелы и переносы строк
-        title = re.sub(r'\s+', ' ', title)          # все whitespace → один пробел
-        title = title.strip()                       # убираем пробелы в начале/конце
-        
-        # Дополнительно сжимаем пробелы вокруг химических индексов (очень помогает)
-        title = re.sub(r'([A-Za-z0-9δ])\s+([-−])\s+([A-Za-z0-9δ])', r'\1\2\3', title)
-        title = re.sub(r'([A-Za-z0-9δ])\s+([-−])$', r'\1\2', title)   # если в конце
-        title = re.sub(r'^([-−])\s+([A-Za-z0-9δ])', r'\1\2', title)   # если в начале
-        
-        return title
-        
+    
     def _find_explicit_doi(self, reference: str) -> Optional[str]:
         """Find explicit DOI in text"""
         doi_patterns = [
@@ -3265,19 +3244,11 @@ class DOIProcessor:
                     'given': given_name,
                     'family': family_name
                 })
-
+            
             title = ''
             if 'title' in result and result['title']:
-                raw = result['title'][0]
-                # Удаляем все HTML-теги
-                cleaned = re.sub(r'<[^>]+>', '', raw)
-                # Нормализуем дефисы/минусы
-                cleaned = cleaned.replace('\u2010', '-').replace('\u2212', '-').replace('‐', '-')
-                # Убираем лишние пробелы
-                cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-                # Сжимаем пробелы вокруг химических индексов
-                cleaned = re.sub(r'(\d)\s*([-−])\s*([a-zA-Zδ])', r'\1\2\3', cleaned)
-                title = cleaned
+                title = self._clean_text(result['title'][0])
+                title = re.sub(r'</?sub>|</?i>|</?SUB>|</?I>', '', title, flags=re.IGNORECASE)
             
             journal = ''
             if 'container-title' in result and result['container-title']:
@@ -3358,31 +3329,15 @@ class DOIProcessor:
                 return name[0].upper() + name[1:].lower()
             else:
                 return name.upper()
-
+    
     def _clean_text(self, text: str) -> str:
-        """Clean text from HTML tags and entities with proper formatting"""
+        """Clean text from HTML tags and entities"""
         if not text:
             return ""
         
-        # Удаляем ВСЕ HTML теги, включая <span>, <div>, <scp> и т.д.
-        text = re.sub(r'<[^>]*>', '', text)
-        
-        # Декодируем HTML-сущности
+        text = re.sub(r'<[^>]+>', '', text)
         text = html.unescape(text)
-        
-        # Заменяем все виды пробельных символов на обычные пробелы
-        text = re.sub(r'[\n\r\t\f\v]+', ' ', text)
-        
-        # Заменяем неразрывные пробелы и другие специальные пробелы
-        text = text.replace('\u00A0', ' ')  # &nbsp;
-        text = text.replace('\u2002', ' ')  # en space
-        text = text.replace('\u2003', ' ')  # em space
-        text = text.replace('\u2009', ' ')  # thin space
-        
-        # Сжимаем множественные пробелы до одного
-        text = re.sub(r'\s{2,}', ' ', text)
-        
-        # Убираем пробелы в начале и конце
+        text = re.sub(r'&[^;]+;', '', text)
         return text.strip()
 
 # Reference Processor
@@ -5470,26 +5425,6 @@ class CreatePage:
             }
         else:
             return None
-
-    @staticmethod
-    def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
-        meta = {
-            'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, 
-                        {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
-            'title': 'The chemistry of graphene oxide',  # здесь можно даже сразу вставить химическую формулу для теста
-            'journal': 'Chemical Society Reviews',
-            'year': 2010,
-            'volume': '39',
-            'issue': '1',
-            'pages': '228-240',
-            'article_number': '',
-            'doi': '10.1039/B917103G'
-        }
-        
-        if 'title' in meta:
-            meta['title'] = normalize_title_for_display(meta['title'])
-        
-        return meta
     
     @staticmethod
     def _add_numbering(preview_ref: str, style_config: Dict) -> str:
@@ -6395,20 +6330,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
