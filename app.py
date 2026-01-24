@@ -2786,14 +2786,14 @@ class TopicSelectorUI:
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
-            html += f"""
+            html += f""
             <div style="margin-top: 10px;">
                 <a href="{doi_url}" target="_blank" 
                    style="text-decoration: none; color: var(--primary); font-weight: 500;">
                    🔗 Open Article DOI: {work['doi'][:30]}...
                 </a>
             </div>
-            """
+            ""
         
         html += "</div></div>"
         return html
@@ -6364,6 +6364,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
