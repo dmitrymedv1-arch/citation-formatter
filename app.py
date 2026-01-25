@@ -984,50 +984,6 @@ def clean_double_dots(text: str) -> str:
     """Remove double dots in text"""
     return re.sub(r'\.\.+', '.', text)
 
-# Reference Validator
-class ReferenceValidator:
-    """Validator for checking missing metadata in references"""
-    
-    @staticmethod
-    def check_missing_metadata(metadata: Dict[str, Any]) -> Tuple[bool, List[str]]:
-        """Check if metadata has missing required fields and return warning message"""
-        if not metadata:
-            return False, []
-        
-        missing_fields = []
-        warning_parts = []
-        
-        # Проверяем наличие volume
-        if not metadata.get('volume') or str(metadata.get('volume', '')).strip() == '':
-            missing_fields.append('volume')
-        
-        # Проверяем наличие pages или article_number
-        has_pages = metadata.get('pages') and str(metadata.get('pages', '')).strip() != ''
-        has_article_number = metadata.get('article_number') and str(metadata.get('article_number', '')).strip() != ''
-        if not has_pages and not has_article_number:
-            missing_fields.append('pages/article_number')
-        
-        # Проверяем наличие year
-        if not metadata.get('year'):
-            missing_fields.append('year')
-        
-        if missing_fields:
-            warning_message = "Check reference manually. Possibly, this is a non-journal source (monograph, book chapter, thesis)."
-            warning_parts.append(warning_message)
-            
-            # Дополнительная информация о том, что отсутствует
-            if 'volume' in missing_fields:
-                warning_parts.append("Missing volume.")
-            if 'pages/article_number' in missing_fields:
-                warning_parts.append("Missing pages/article number.")
-            if 'year' in missing_fields:
-                warning_parts.append("Missing year.")
-        
-        has_warning = len(missing_fields) > 0
-        full_warning = " ".join(warning_parts) if warning_parts else ""
-        
-        return has_warning, full_warning
-
 # Base Citation Formatter
 class BaseCitationFormatter:
     """Base class for citation formatting"""
@@ -1173,21 +1129,15 @@ class BaseCitationFormatter:
         """Format journal name considering selected style"""
         journal_style = self.style_config.get('journal_style', '{Full Journal Name}')
         return journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
-    
+
+# Custom Citation Formatter
 class CustomCitationFormatter(BaseCitationFormatter):
-    """Formatter for custom styles with improved Issue handling and missing data warnings"""
+    """Formatter for custom styles with improved Issue handling"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
             error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
-        
-        # Проверяем наличие обязательных полей
-        missing_fields = []
-        if not metadata.get('volume'):
-            missing_fields.append('volume')
-        if not metadata.get('pages') and not metadata.get('article_number'):
-            missing_fields.append('pages/article_number')
         
         elements = []
         previous_element_was_empty = False
@@ -1264,11 +1214,6 @@ class CustomCitationFormatter(BaseCitationFormatter):
                     separator = ""
                 
                 cleaned_elements.append((value, italic, bold, separator, is_doi_hyperlink, doi_value))
-        
-        # Добавляем предупреждение о недостающих полях
-        if missing_fields and not for_preview:
-            warning_message = "Check reference manually. Possibly, this is a non-journal source (monograph, book chapter, thesis)."
-            cleaned_elements.append((warning_message, False, False, "", False, None))
         
         if for_preview:
             ref_str = ""
@@ -2813,21 +2758,20 @@ class TopicSelectorUI:
         authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
         
         # Используем CSS классы из темы вместо инлайн-стилей
-        # Разбиваем длинную строку для лучшей читаемости
-        background_color = '#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'
-        
-        html = f'''<div class="recommendation-item">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div class="recommendation-title">#{index}. {work['title'][:120]}...</div>
-            <div class="recommendation-score">
-                <span style="background-color: {background_color}; 
-                           color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.9em;">
-                    {citation_color} {citation_text}
-                </span>
+        html = f"""
+        <div class="recommendation-item">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div class="recommendation-title">#{index}. {work['title'][:120]}...</div>
+                <div class="recommendation-score">
+                    <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
+                               color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.9em;">
+                        {citation_color} {citation_text}
+                    </span>
+                </div>
             </div>
-        </div>
-        
-        <div class="recommendation-meta">'''
+            
+            <div class="recommendation-meta">
+        """
         
         if authors:
             html += f"<div><strong>👤 Authors:</strong> {authors}</div>"
@@ -2842,14 +2786,14 @@ class TopicSelectorUI:
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
-            html += f'''
+            html += f"""
             <div style="margin-top: 10px;">
                 <a href="{doi_url}" target="_blank" 
                    style="text-decoration: none; color: var(--primary); font-weight: 500;">
                    🔗 Open Article DOI: {work['doi'][:30]}...
                 </a>
             </div>
-            '''
+            """
         
         html += "</div></div>"
         return html
@@ -2947,13 +2891,6 @@ class DocumentGenerator:
         color = OxmlElement('w:color')
         color.set(qn('w:val'), 'FF0000')
         run._element.get_or_add_rPr().append(color)
-
-    @staticmethod
-    def apply_red_background(run):
-        """Apply red background to run"""
-        shd = OxmlElement('w:shd')
-        shd.set(qn('w:fill'), 'FFCCCC')  # Светло-красный цвет
-        run._element.get_or_add_rPr().append(shd)
     
     @staticmethod
     def generate_document(formatted_refs: List[Tuple[Any, bool, Any]], 
@@ -2977,16 +2914,13 @@ class DocumentGenerator:
         output_doc.save(output_doc_buffer)
         output_doc_buffer.seek(0)
         return output_doc_buffer
-
+    
     @staticmethod
     def _add_formatted_references(doc: Document, 
                                 formatted_refs: List[Tuple[Any, bool, Any]], 
                                 style_config: Dict[str, Any],
                                 duplicates_info: Dict[int, int] = None):
-        """Add formatted references to document with warning highlighting"""
-        # Создаем валидатор для проверки ссылок
-        validator = ReferenceValidator()
-        
+        """Add formatted references to document"""
         for i, (elements, is_error, metadata) in enumerate(formatted_refs):
             numbering = style_config['numbering_style']
             
@@ -3007,18 +2941,10 @@ class DocumentGenerator:
             
             para = doc.add_paragraph(prefix)
             
-            # Проверяем, есть ли недостающие поля (предупреждение)
-            has_warning = False
-            warning_message = ""
-            if metadata:
-                has_warning, warning_message = validator.check_missing_metadata(metadata)
-            
             if is_error:
-                # Это ошибка (не найден DOI)
                 run = para.add_run(str(elements))
                 DocumentGenerator.apply_yellow_background(run)
             elif duplicates_info and i in duplicates_info:
-                # Это дубликат
                 original_index = duplicates_info[i] + 1
                 duplicate_note = get_text('duplicate_reference').format(original_index)
                 
@@ -3042,46 +2968,25 @@ class DocumentGenerator:
                             para.add_run(separator)
                     
                     para.add_run(f" - {duplicate_note}").italic = True
-                    
-                    # Добавляем предупреждение, если есть
-                    if has_warning and warning_message:
-                        warning_run = para.add_run(f" - {warning_message}")
-                        DocumentGenerator.apply_red_background(warning_run)
             else:
-                # Нормальная или предупреждающая ссылка
                 if metadata is None:
                     run = para.add_run(str(elements))
                     run.font.italic = True
                 else:
-                    # Добавляем основную часть ссылки
-                    if isinstance(elements, str):
-                        run = para.add_run(elements)
-                        if has_warning:
-                            DocumentGenerator.apply_red_background(run)
-                    else:
-                        for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
-                            if is_doi_hyperlink and doi_value:
-                                DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
-                            else:
-                                run = para.add_run(value)
-                                if italic:
-                                    run.font.italic = True
-                                if bold:
-                                    run.font.bold = True
-                                # Если есть предупреждение, подсвечиваем красным
-                                if has_warning:
-                                    DocumentGenerator.apply_red_background(run)
-                            
-                            if separator and j < len(elements) - 1:
-                                para.add_run(separator)
+                    for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+                        if is_doi_hyperlink and doi_value:
+                            DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
+                        else:
+                            run = para.add_run(value)
+                            if italic:
+                                run.font.italic = True
+                            if bold:
+                                run.font.bold = True
+                        
+                        if separator and j < len(elements) - 1:
+                            para.add_run(separator)
                     
-                    # Добавляем предупреждение после ссылки
-                    if has_warning and warning_message:
-                        warning_run = para.add_run(f" - {warning_message}")
-                        DocumentGenerator.apply_red_background(warning_run)
-                    
-                    # Добавляем финальную пунктуацию только если нет предупреждения
-                    if style_config['final_punctuation'] and not is_error and not has_warning:
+                    if style_config['final_punctuation'] and not is_error:
                         para.add_run(".")
     
     @staticmethod
@@ -3469,6 +3374,7 @@ class DOIProcessor:
         
         return text
 
+# Reference Processor
 class ReferenceProcessor:
     """Main processor for reference processing"""
     
@@ -3479,8 +3385,7 @@ class ReferenceProcessor:
     
     def process_references(self, references: List[str], style_config: Dict, 
                          progress_container, status_container) -> Tuple[List, io.BytesIO, io.BytesIO, int, int, Dict]:
-        """Process list of references with progress display and warnings"""
-        # Validate references count
+        """Process list of references with progress display"""
         is_valid, validation_messages = self.validator.validate_references_count(references)
         for msg in validation_messages:
             if "error" in msg.lower():
@@ -3500,7 +3405,6 @@ class ReferenceProcessor:
         valid_dois = []
         reference_doi_map = {}
         
-        # First pass: extract DOIs from references
         for i, ref in enumerate(references):
             if self.doi_processor._is_section_header(ref):
                 doi_list.append(f"{ref} [SECTION HEADER - SKIPPED]")
@@ -3520,7 +3424,6 @@ class ReferenceProcessor:
                 formatted_texts.append(error_msg)
                 doi_not_found_count += 1
         
-        # Process valid DOIs in batch
         if valid_dois:
             self._process_doi_batch(
                 valid_dois, reference_doi_map, references, 
@@ -3528,111 +3431,14 @@ class ReferenceProcessor:
                 progress_container, status_container
             )
         
-        # Count successfully found DOIs
         doi_found_count = len([ref for ref in formatted_refs if not ref[1] and ref[2]])
         
-        # Find duplicates
         duplicates_info = self._find_duplicates(formatted_refs)
         
-        # Add warning flags for missing metadata
-        formatted_refs_with_warnings = []
-        for i, (elements, is_error, metadata) in enumerate(formatted_refs):
-            # Check for missing metadata warnings
-            has_warning = False
-            if metadata and not is_error:
-                has_warning, _ = ReferenceValidator.check_missing_metadata(metadata)
-            
-            # Store the has_warning flag (we'll use it later in formatting)
-            # We'll add the warning text during formatting, not here
-            formatted_refs_with_warnings.append((elements, is_error or has_warning, metadata))
-        
-        # Replace formatted_refs with version that has warning flags
-        formatted_refs = formatted_refs_with_warnings
-        
-        # Create formatted TXT file
-        formatted_txt_buffer = self._create_formatted_txt_file_with_warnings(formatted_refs, style_config)
-        
-        # Create original TXT file with DOI list
+        formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
         original_txt_buffer = self._create_txt_file(doi_list)
         
         return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
-    
-    def _create_formatted_txt_file_with_warnings(self, formatted_refs: List[Tuple], style_config: Dict) -> io.BytesIO:
-        """Create TXT file with formatted references including warnings"""
-        output_txt_buffer = io.StringIO()
-        
-        for i, (elements, is_error_or_warning, metadata) in enumerate(formatted_refs):
-            # Format the reference
-            if is_error_or_warning and metadata is None:
-                # This is an error (DOI not found)
-                ref_text = str(elements)
-            elif metadata:
-                # This is a valid reference or has warning
-                ref_text = self._format_reference_for_text_with_warnings(metadata, style_config)
-            else:
-                ref_text = str(elements)
-            
-            # Add numbering
-            numbering = style_config.get('numbering_style', 'No numbering')
-            if numbering != "No numbering":
-                if numbering == "1":
-                    prefix = f"{i + 1} "
-                elif numbering == "1.":
-                    prefix = f"{i + 1}. "
-                elif numbering == "1)":
-                    prefix = f"{i + 1}) "
-                elif numbering == "(1)":
-                    prefix = f"({i + 1}) "
-                elif numbering == "[1]":
-                    prefix = f"[{i + 1}] "
-                else:
-                    prefix = f"{i + 1}. "
-                ref_text = prefix + ref_text
-            
-            output_txt_buffer.write(f"{ref_text}\n\n")
-        
-        output_txt_buffer.seek(0)
-        return io.BytesIO(output_txt_buffer.getvalue().encode('utf-8'))
-    
-    def _format_reference_for_text_with_warnings(self, metadata: Dict, style_config: Dict) -> str:
-        """Format reference for TXT file with warnings"""
-        formatter = CitationFormatterFactory.create_formatter(style_config)
-        
-        # Format the reference
-        formatted_ref, _ = formatter.format_reference(metadata, False)
-        
-        # Check for missing metadata warnings
-        has_warning, warning_message = ReferenceValidator.check_missing_metadata(metadata)
-        
-        # Build the reference text
-        if isinstance(formatted_ref, str):
-            ref_str = formatted_ref
-        else:
-            ref_str = ""
-            for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(formatted_ref):
-                if italic and bold:
-                    formatted_value = f"***{value}***"
-                elif italic:
-                    formatted_value = f"*{value}*"
-                elif bold:
-                    formatted_value = f"**{value}**"
-                else:
-                    formatted_value = value
-                
-                ref_str += formatted_value
-                
-                if separator and i < len(formatted_ref) - 1:
-                    ref_str += separator
-        
-        # Add warning if needed
-        if has_warning and warning_message:
-            ref_str += f" - {warning_message}"
-        
-        # Add final punctuation only if no warning
-        if style_config.get('final_punctuation') and not has_warning and not ref_str.endswith('.'):
-            ref_str += "."
-        
-        return ref_str
     
     def _process_doi_batch(self, valid_dois, reference_doi_map, references, 
                           formatted_refs, formatted_texts, doi_list, style_config,
@@ -3646,7 +3452,6 @@ class ReferenceProcessor:
         progress_bar = progress_container.progress(0)
         status_display = status_container.empty()
         
-        # Extract metadata for all DOIs
         metadata_results = self._extract_metadata_batch(valid_dois, progress_bar, status_display)
         
         doi_to_metadata = dict(zip(valid_dois, metadata_results))
@@ -3655,26 +3460,14 @@ class ReferenceProcessor:
         found_count = 0
         error_count = 0
         
-        # Format references with metadata
         for i, ref in enumerate(references):
             if i in reference_doi_map:
                 doi = reference_doi_map[i]
                 metadata = doi_to_metadata.get(doi)
                 
                 if metadata:
-                    # Format the reference
                     formatted_ref, is_error = self._format_reference(metadata, style_config)
-                    
-                    # Check for missing metadata warnings
-                    has_warning, warning_message = ReferenceValidator.check_missing_metadata(metadata)
-                    
-                    # Create formatted text with warning if needed
-                    if has_warning and warning_message:
-                        # We'll handle warnings in DOCX generation, not here in elements
-                        pass
-                    
-                    # Format for text output
-                    formatted_text = self._format_reference_for_text_with_warnings(metadata, style_config)
+                    formatted_text = self._format_reference_for_text(metadata, style_config)
                     
                     if doi in doi_list:
                         index = doi_list.index(doi)
@@ -3703,7 +3496,7 @@ class ReferenceProcessor:
         
         self.progress_manager.update_progress(total_to_process, found_count, error_count, 'complete')
         progress_bar.progress(1.0)
-    
+
     def _extract_metadata_batch(self, doi_list, progress_bar, status_display) -> List:
         """Batch extract metadata with retry"""
         results = [None] * len(doi_list)
@@ -3730,7 +3523,6 @@ class ReferenceProcessor:
                 progress_bar.progress(progress_ratio)
                 status_display.text(f"Fetching metadata: {completed}/{total}")
         
-        # Retry failed requests
         failed_indices = [i for i, result in enumerate(results) if result is None]
         
         if failed_indices:
@@ -3791,6 +3583,35 @@ class ReferenceProcessor:
         """Format reference for DOCX"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
         return formatter.format_reference(metadata, False)
+    
+    def _format_reference_for_text(self, metadata: Dict, style_config: Dict) -> str:
+        """Format reference for TXT file"""
+        formatter = CitationFormatterFactory.create_formatter(style_config)
+        elements, _ = formatter.format_reference(metadata, False)
+        
+        if isinstance(elements, str):
+            return elements
+        
+        ref_str = ""
+        for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+            if italic and bold:
+                formatted_value = f"***{value}***"
+            elif italic:
+                formatted_value = f"*{value}*"
+            elif bold:
+                formatted_value = f"**{value}**"
+            else:
+                formatted_value = value
+            
+            ref_str += formatted_value
+            
+            if separator and i < len(elements) - 1:
+                ref_str += separator
+        
+        if style_config.get('final_punctuation') and not ref_str.endswith('.'):
+            ref_str += "."
+        
+        return ref_str
     
     def _find_duplicates(self, formatted_refs: List) -> Dict[int, int]:
         """Find duplicate references"""
@@ -6543,11 +6364,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
