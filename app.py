@@ -366,6 +366,7 @@ TRANSLATIONS = {
         'recommendation_download': '📥 Download Recommendations',
         'recommendation_download_txt': 'Download as TXT',
         'recommendation_download_csv': 'Download as CSV',
+        'missing_metadata_warning': '⚠️ Volume/page/article number information is missing. This may indicate a non-journal source (book, chapter, or conference paper). Please verify the source.',
     },
     'ru': {
         'header': '🎨 Конструктор стилей цитирования',
@@ -523,6 +524,7 @@ TRANSLATIONS = {
         'recommendation_download': '📥 Скачать рекомендации',
         'recommendation_download_txt': 'Скачать как TXT',
         'recommendation_download_csv': 'Скачать как CSV',
+        'missing_metadata_warning': '⚠️ В этой ссылке отсутствует информация о томе/страниацах/номере статьи. Это может указывать на нежурнальный источник (книгу, главу, или конференционный тезис). Необходимо уточнение.',
     }
 }
 
@@ -2891,12 +2893,20 @@ class DocumentGenerator:
         color = OxmlElement('w:color')
         color.set(qn('w:val'), 'FF0000')
         run._element.get_or_add_rPr().append(color)
+
+    @staticmethod
+    def apply_pink_background(run):
+        """Apply pink background to run (for missing metadata warnings)"""
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), 'FFC0CB')  # Pink color
+        run._element.get_or_add_rPr().append(shd)
     
     @staticmethod
     def generate_document(formatted_refs: List[Tuple[Any, bool, Any]], 
                          statistics: Dict[str, Any],
                          style_config: Dict[str, Any],
                          duplicates_info: Dict[int, int] = None,
+                         missing_metadata_info: Dict[int, str] = None,
                          recommendations_df = None) -> io.BytesIO:
         """Generate DOCX document with references, statistics, and recommendations"""
         output_doc = Document()
@@ -2904,7 +2914,7 @@ class DocumentGenerator:
         output_doc.add_paragraph('See short stats after the References section')
         output_doc.add_heading('References', level=1)
         
-        DocumentGenerator._add_formatted_references(output_doc, formatted_refs, style_config, duplicates_info)
+        DocumentGenerator._add_formatted_references(output_doc, formatted_refs, style_config, duplicates_info, missing_metadata_info)
         DocumentGenerator._add_statistics_section(output_doc, statistics)
         
         if recommendations_df is not None and not recommendations_df.empty:
@@ -2914,12 +2924,13 @@ class DocumentGenerator:
         output_doc.save(output_doc_buffer)
         output_doc_buffer.seek(0)
         return output_doc_buffer
-    
+
     @staticmethod
     def _add_formatted_references(doc: Document, 
                                 formatted_refs: List[Tuple[Any, bool, Any]], 
                                 style_config: Dict[str, Any],
-                                duplicates_info: Dict[int, int] = None):
+                                duplicates_info: Dict[int, int] = None,
+                                missing_metadata_info: Dict[int, str] = None):
         """Add formatted references to document"""
         for i, (elements, is_error, metadata) in enumerate(formatted_refs):
             numbering = style_config['numbering_style']
@@ -2968,6 +2979,30 @@ class DocumentGenerator:
                             para.add_run(separator)
                     
                     para.add_run(f" - {duplicate_note}").italic = True
+            elif missing_metadata_info and i in missing_metadata_info:
+                # Missing metadata warning
+                warning_message = missing_metadata_info[i]
+                
+                if isinstance(elements, str):
+                    run = para.add_run(elements)
+                    DocumentGenerator.apply_pink_background(run)
+                    para.add_run(f" - {warning_message}").italic = True
+                else:
+                    for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+                        if is_doi_hyperlink and doi_value:
+                            DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
+                        else:
+                            run = para.add_run(value)
+                            if italic:
+                                run.font.italic = True
+                            if bold:
+                                run.font.bold = True
+                            DocumentGenerator.apply_pink_background(run)
+                        
+                        if separator and j < len(elements) - 1:
+                            para.add_run(separator)
+                    
+                    para.add_run(f" - {warning_message}").italic = True
             else:
                 if metadata is None:
                     run = para.add_run(str(elements))
@@ -3432,13 +3467,14 @@ class ReferenceProcessor:
             )
         
         doi_found_count = len([ref for ref in formatted_refs if not ref[1] and ref[2]])
-        
+
         duplicates_info = self._find_duplicates(formatted_refs)
+        missing_metadata_info = self._find_missing_metadata(formatted_refs)
         
         formatted_txt_buffer = self._create_formatted_txt_file(formatted_texts)
         original_txt_buffer = self._create_txt_file(doi_list)
         
-        return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info
+        return formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info, missing_metadata_info
     
     def _process_doi_batch(self, valid_dois, reference_doi_map, references, 
                           formatted_refs, formatted_texts, doi_list, style_config,
@@ -3612,7 +3648,7 @@ class ReferenceProcessor:
             ref_str += "."
         
         return ref_str
-    
+
     def _find_duplicates(self, formatted_refs: List) -> Dict[int, int]:
         """Find duplicate references"""
         seen_hashes = {}
@@ -3632,6 +3668,40 @@ class ReferenceProcessor:
                 seen_hashes[ref_hash] = i
         
         return duplicates_info
+    
+    def _find_missing_metadata(self, formatted_refs: List) -> Dict[int, str]:
+        """Find references with missing important metadata (volume, pages/article number)"""
+        missing_metadata_info = {}
+        
+        for i, (elements, is_error, metadata) in enumerate(formatted_refs):
+            if is_error or not metadata:
+                continue
+            
+            # Check for missing important metadata
+            missing_fields = []
+            
+            # Check volume
+            if not metadata.get('volume'):
+                missing_fields.append('volume')
+            
+            # Check for pages OR article number
+            if not metadata.get('pages') and not metadata.get('article_number'):
+                missing_fields.append('pages/article number')
+            
+            # If we have missing fields, create warning message
+            if missing_fields:
+                missing_list = ' and '.join(missing_fields)
+                warning_msg = f"⚠️ {missing_list.capitalize()} information is missing. "
+                
+                # Add specific guidance based on missing fields
+                if 'volume' in missing_fields:
+                    warning_msg += "This may indicate a non-journal source (book, chapter, or conference paper). "
+                
+                warning_msg += "Please verify the source type and consider manual correction."
+                
+                missing_metadata_info[i] = warning_msg
+        
+        return missing_metadata_info
     
     def _generate_reference_hash(self, metadata: Dict) -> Optional[str]:
         """Generate hash for identifying duplicates"""
@@ -3667,6 +3737,23 @@ class ReferenceProcessor:
             return f"{ref}\nПроверьте источник и добавьте DOI вручную."
         else:
             return f"{ref}\nPlease check this source and insert the DOI manually."
+    
+    def _create_missing_metadata_message(self, metadata: Dict, language: str) -> str:
+        """Create missing metadata warning message"""
+        missing_fields = []
+        
+        if not metadata.get('volume'):
+            missing_fields.append('volume')
+        
+        if not metadata.get('pages') and not metadata.get('article_number'):
+            missing_fields.append('pages/article number')
+        
+        missing_list = ' and '.join(missing_fields)
+        
+        if language == 'ru':
+            return f"⚠️ Отсутствует информация о {missing_list}. Это может указывать на источник не из журнала (книга, глава или тезисы конференции). Проверьте тип источника."
+        else:
+            return f"⚠️ {missing_list.capitalize()} information is missing. This may indicate a non-journal source (book, chapter, or conference paper). Please verify the source type."
     
     def _create_formatted_txt_file(self, formatted_texts: List[str]) -> io.BytesIO:
         """Create TXT file with formatted references"""
@@ -4068,6 +4155,11 @@ class ThemeManager:
                 background-color: rgba(78, 205, 196, 0.1);
                 border-left: 3px solid #4ECDC4;
             }}
+
+            .missing-metadata-reference {
+                background-color: rgba(255, 192, 203, 0.1);
+                border-left: 3px solid #FFC0CB;
+            }
             
             .select-scroll-container {{
                 max-height: 600px;
@@ -5615,9 +5707,9 @@ class InputOutputPage:
         processor = ReferenceProcessor()
         progress_container = st.empty()
         status_container = st.empty()
-        
+
         with st.spinner(get_text('processing')):
-            formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info = processor.process_references(
+            formatted_refs, formatted_txt_buffer, original_txt_buffer, doi_found_count, doi_not_found_count, duplicates_info, missing_metadata_info = processor.process_references(
                 references, st.session_state.style_config, progress_container, status_container
             )
             
@@ -5628,7 +5720,7 @@ class InputOutputPage:
                 st.info(f"Found {len(formatted_refs)} references. Recommendations will be available on the Results page.")
             
             docx_buffer = DocumentGenerator.generate_document(
-                formatted_refs, statistics, st.session_state.style_config, duplicates_info, recommendations_df
+                formatted_refs, statistics, st.session_state.style_config, duplicates_info, missing_metadata_info, recommendations_df
             )
             
             st.session_state.formatted_refs = formatted_refs
@@ -5639,6 +5731,7 @@ class InputOutputPage:
             st.session_state.doi_found_count = doi_found_count
             st.session_state.doi_not_found_count = doi_not_found_count
             st.session_state.duplicates_info = duplicates_info
+            st.session_state.missing_metadata_info = missing_metadata_info
             st.session_state.processing_complete = True
             st.session_state.processing_start_time = time.time()
             st.session_state.recommendations_generated = False
@@ -5697,6 +5790,8 @@ class ResultsPage:
                 css_class += " error-reference"
             elif i in st.session_state.duplicates_info:
                 css_class += " duplicate-reference"
+            elif i in st.session_state.missing_metadata_info:
+                css_class += " missing-metadata-reference"
             
             if is_error:
                 formatted_text = str(elements)
@@ -5734,6 +5829,9 @@ class ResultsPage:
                         original_index = st.session_state.duplicates_info[i] + 1
                         duplicate_note = get_text('duplicate_reference').format(original_index)
                         html_parts.append(f' - <em>{duplicate_note}</em>')
+                    elif i in st.session_state.missing_metadata_info:
+                        missing_metadata_note = st.session_state.missing_metadata_info[i]
+                        html_parts.append(f' - <em>{missing_metadata_note}</em>')
                     
                     if st.session_state.style_config.get('final_punctuation') and not is_error:
                         if html_parts and html_parts[-1].endswith('.'):
@@ -6364,3 +6462,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
