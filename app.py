@@ -2769,20 +2769,21 @@ class TopicSelectorUI:
         authors = work.get('authors_formatted', '') or ', '.join(work.get('authors', []))
         
         # Используем CSS классы из темы вместо инлайн-стилей
-        html = f"""
-        <div class="recommendation-item">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                <div class="recommendation-title">#{index}. {work['title'][:120]}...</div>
-                <div class="recommendation-score">
-                    <span style="background-color: {'#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'}; 
-                               color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.9em;">
-                        {citation_color} {citation_text}
-                    </span>
-                </div>
+        # Разбиваем длинную строку для лучшей читаемости
+        background_color = '#FF6B6B' if work['cited_by_count'] == 0 else '#FFD166'
+        
+        html = f'''<div class="recommendation-item">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div class="recommendation-title">#{index}. {work['title'][:120]}...</div>
+            <div class="recommendation-score">
+                <span style="background-color: {background_color}; 
+                           color: white; padding: 3px 8px; border-radius: 12px; font-size: 0.9em;">
+                    {citation_color} {citation_text}
+                </span>
             </div>
-            
-            <div class="recommendation-meta">
-        """
+        </div>
+        
+        <div class="recommendation-meta">'''
         
         if authors:
             html += f"<div><strong>👤 Authors:</strong> {authors}</div>"
@@ -2797,14 +2798,14 @@ class TopicSelectorUI:
         
         if work['doi']:
             doi_url = f"https://doi.org/{work['doi']}"
-            html += f"""
+            html += f'''
             <div style="margin-top: 10px;">
                 <a href="{doi_url}" target="_blank" 
                    style="text-decoration: none; color: var(--primary); font-weight: 500;">
                    🔗 Open Article DOI: {work['doi'][:30]}...
                 </a>
             </div>
-            """
+            '''
         
         html += "</div></div>"
         return html
@@ -6411,6 +6412,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
