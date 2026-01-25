@@ -4156,10 +4156,10 @@ class ThemeManager:
                 border-left: 3px solid #4ECDC4;
             }}
 
-            .missing-metadata-reference {
+            .missing-metadata-reference {{
                 background-color: rgba(255, 192, 203, 0.1);
                 border-left: 3px solid #FFC0CB;
-            }
+            }}
             
             .select-scroll-container {{
                 max-height: 600px;
@@ -6462,5 +6462,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
