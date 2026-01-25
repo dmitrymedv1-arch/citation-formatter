@@ -3955,7 +3955,7 @@ class ThemeManager:
             }}
             
             .global-stats-container {{
-                background: linear-gradient(135deg, {theme['primary']} 0%, {theme['secondary']} 100%);
+                background-image: linear-gradient(135deg, {theme['primary']} 0%, {theme['secondary']} 100%);
                 padding: 20px;
                 border-radius: 15px;
                 text-align: center;
@@ -6462,4 +6462,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
