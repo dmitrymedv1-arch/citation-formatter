@@ -4158,7 +4158,7 @@ class ThemeManager:
 
             .missing-metadata-reference {{
                 background-color: rgba(255, 192, 203, 0.1);
-                border-left: 3px solid #FFC0CB;
+                border-left: 3px solid #F7ADBA;
             }}
             
             .select-scroll-container {{
@@ -6462,6 +6462,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
