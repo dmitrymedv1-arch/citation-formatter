@@ -1129,15 +1129,21 @@ class BaseCitationFormatter:
         """Format journal name considering selected style"""
         journal_style = self.style_config.get('journal_style', '{Full Journal Name}')
         return journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
-
-# Custom Citation Formatter
+    
 class CustomCitationFormatter(BaseCitationFormatter):
-    """Formatter for custom styles with improved Issue handling"""
+    """Formatter for custom styles with improved Issue handling and missing data warnings"""
     
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
             error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
             return (error_message, True)
+        
+        # Проверяем наличие обязательных полей
+        missing_fields = []
+        if not metadata.get('volume'):
+            missing_fields.append('volume')
+        if not metadata.get('pages') and not metadata.get('article_number'):
+            missing_fields.append('pages/article_number')
         
         elements = []
         previous_element_was_empty = False
@@ -1215,6 +1221,11 @@ class CustomCitationFormatter(BaseCitationFormatter):
                 
                 cleaned_elements.append((value, italic, bold, separator, is_doi_hyperlink, doi_value))
         
+        # Добавляем предупреждение о недостающих полях
+        if missing_fields and not for_preview:
+            warning_message = "Check reference manually. Possibly, this is a non-journal source (monograph, book chapter, thesis)."
+            cleaned_elements.append((warning_message, False, False, "", False, None))
+        
         if for_preview:
             ref_str = ""
             for i, (value, _, _, separator, _, _) in enumerate(cleaned_elements):
@@ -1227,7 +1238,7 @@ class CustomCitationFormatter(BaseCitationFormatter):
             ref_str = re.sub(r'\.\.+', '.', ref_str)
             return ref_str, False
         else:
-            return cleaned_elements, False
+            return cleaned_elements, len(missing_fields) > 0  # Возвращаем флаг has_warnings
 
 # GOST Citation Formatter
 class GOSTCitationFormatter(BaseCitationFormatter):
@@ -2891,6 +2902,13 @@ class DocumentGenerator:
         color = OxmlElement('w:color')
         color.set(qn('w:val'), 'FF0000')
         run._element.get_or_add_rPr().append(color)
+
+    @staticmethod
+    def apply_red_background(run):
+        """Apply red background to run"""
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), 'FFCCCC')  # Светло-красный цвет
+        run._element.get_or_add_rPr().append(shd)
     
     @staticmethod
     def generate_document(formatted_refs: List[Tuple[Any, bool, Any]], 
@@ -2914,14 +2932,14 @@ class DocumentGenerator:
         output_doc.save(output_doc_buffer)
         output_doc_buffer.seek(0)
         return output_doc_buffer
-    
+
     @staticmethod
     def _add_formatted_references(doc: Document, 
                                 formatted_refs: List[Tuple[Any, bool, Any]], 
                                 style_config: Dict[str, Any],
                                 duplicates_info: Dict[int, int] = None):
         """Add formatted references to document"""
-        for i, (elements, is_error, metadata) in enumerate(formatted_refs):
+        for i, (elements, is_error_or_warning, metadata) in enumerate(formatted_refs):
             numbering = style_config['numbering_style']
             
             if numbering == "No numbering":
@@ -2941,9 +2959,35 @@ class DocumentGenerator:
             
             para = doc.add_paragraph(prefix)
             
-            if is_error:
-                run = para.add_run(str(elements))
-                DocumentGenerator.apply_yellow_background(run)
+            # is_error_or_warning теперь может быть True как для ошибок, так и для предупреждений
+            if is_error_or_warning:
+                if isinstance(elements, str):
+                    run = para.add_run(str(elements))
+                else:
+                    for j, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
+                        if is_doi_hyperlink and doi_value:
+                            DocumentGenerator.add_hyperlink(para, value, f"https://doi.org/{doi_value}")
+                        else:
+                            run = para.add_run(value)
+                            if italic:
+                                run.font.italic = True
+                            if bold:
+                                run.font.bold = True
+                        
+                        if separator and j < len(elements) - 1:
+                            para.add_run(separator)
+                
+                # Проверяем, является ли это ошибкой (не найдено DOI) или предупреждением (отсутствуют поля)
+                # Для предупреждений применяем красный фон
+                if metadata is None:  # Это ошибка (не найден DOI)
+                    run = para.add_run(str(elements))
+                    DocumentGenerator.apply_yellow_background(run)
+                else:  # Это предупреждение (отсутствуют обязательные поля)
+                    # Добавляем сообщение о предупреждении
+                    warning_msg = " Check reference manually. Possibly, this is a non-journal source (monograph, book chapter, thesis)."
+                    warning_run = para.add_run(warning_msg)
+                    DocumentGenerator.apply_red_background(warning_run)  # Красная заливка
+                    
             elif duplicates_info and i in duplicates_info:
                 original_index = duplicates_info[i] + 1
                 duplicate_note = get_text('duplicate_reference').format(original_index)
@@ -2986,7 +3030,7 @@ class DocumentGenerator:
                         if separator and j < len(elements) - 1:
                             para.add_run(separator)
                     
-                    if style_config['final_punctuation'] and not is_error:
+                    if style_config['final_punctuation'] and not is_error_or_warning:
                         para.add_run(".")
     
     @staticmethod
@@ -3583,11 +3627,11 @@ class ReferenceProcessor:
         """Format reference for DOCX"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
         return formatter.format_reference(metadata, False)
-    
+        
     def _format_reference_for_text(self, metadata: Dict, style_config: Dict) -> str:
         """Format reference for TXT file"""
         formatter = CitationFormatterFactory.create_formatter(style_config)
-        elements, _ = formatter.format_reference(metadata, False)
+        elements, has_warning = formatter.format_reference(metadata, False)
         
         if isinstance(elements, str):
             return elements
@@ -3608,7 +3652,10 @@ class ReferenceProcessor:
             if separator and i < len(elements) - 1:
                 ref_str += separator
         
-        if style_config.get('final_punctuation') and not ref_str.endswith('.'):
+        if has_warning:
+            ref_str += " [WARNING: Check reference manually. Possibly, this is a non-journal source (monograph, book chapter, thesis).]"
+        
+        if style_config.get('final_punctuation') and not ref_str.endswith('.') and not has_warning:
             ref_str += "."
         
         return ref_str
@@ -6364,6 +6411,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
