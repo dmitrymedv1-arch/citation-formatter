@@ -2631,11 +2631,12 @@ class ArticleRecommender:
                 return None
             
             output_txt_buffer = io.StringIO()
-            output_txt_buffer.write("LOW-CITATION ARTICLE RECOMMENDATIONS\n")
+            output_txt_buffer.write("ARTICLE RECOMMENDATIONS\n")
             output_txt_buffer.write("=" * 80 + "\n\n")
             output_txt_buffer.write(f"Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            output_txt_buffer.write(f"Citation Style Construction / © IHTE, https://ihte.ru/ © CTA, https://chimicatechnoacta.ru / developed by daM©\n")
             output_txt_buffer.write(f"Based on topic analysis and keyword matching\n")
-            output_txt_buffer.write(f"Showing {len(recommendations_df)} low-citation articles (<11 citations)\n\n")
+            output_txt_buffer.write(f"Showing {len(recommendations_df)} low-citation and fresh articles\n\n")
             
             current_topic = None
             
@@ -6456,4 +6457,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
