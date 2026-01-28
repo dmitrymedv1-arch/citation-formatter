@@ -1161,16 +1161,12 @@ class BaseCitationFormatter:
     def format_journal_name(self, journal_name: str) -> str:
         """Format journal name considering selected style"""
         journal_style = self.style_config.get('journal_style', '{Full Journal Name}')
-        formatted_name = journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
-
-        formatted_name = PunctuationNormalizer.normalize_punctuation(formatted_name)
-        
-        return formatted_name
+        return journal_abbrev.abbreviate_journal_name(journal_name, journal_style)
 
 # Custom Citation Formatter
 class CustomCitationFormatter(BaseCitationFormatter):
     """Formatter for custom styles with improved Issue handling"""
-
+    
     def format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
         if not metadata:
             error_message = "Error: Could not format the reference." if st.session_state.current_language == 'en' else "Ошибка: Не удалось отформатировать ссылку."
@@ -1261,10 +1257,9 @@ class CustomCitationFormatter(BaseCitationFormatter):
                 elif i == len(cleaned_elements) - 1 and self.style_config['final_punctuation']:
                     ref_str = ref_str.rstrip(',.') + "."
             
-            ref_str = PunctuationNormalizer.normalize_punctuation(ref_str)
+            ref_str = re.sub(r'\.\.+', '.', ref_str)
             return ref_str, False
         else:
-            cleaned_elements = PunctuationNormalizer.normalize_element_sequence(cleaned_elements)
             return cleaned_elements, False
 
 # GOST Citation Formatter
@@ -1873,49 +1868,6 @@ class Style10Formatter(BaseCitationFormatter):
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
-# Функция для применения нормализации ко всем стилям - добавить после всех классов форматирования
-def apply_punctuation_normalization_to_all_styles():
-    """Apply punctuation normalization to all formatter classes"""
-    
-    # Модифицируем BaseCitationFormatter
-    original_format_journal_name = BaseCitationFormatter.format_journal_name
-    
-    def new_format_journal_name(self, journal_name: str) -> str:
-        result = original_format_journal_name(self, journal_name)
-        return PunctuationNormalizer.normalize_punctuation(result)
-    
-    BaseCitationFormatter.format_journal_name = new_format_journal_name
-    
-    # Модифицируем все стили
-    formatter_classes = [
-        GOSTCitationFormatter, ACSCitationFormatter, RSCCitationFormatter, 
-        CTACitationFormatter, Style5Formatter, Style6Formatter, Style7Formatter,
-        Style8Formatter, Style9Formatter, Style10Formatter, CustomCitationFormatter
-    ]
-    
-    for formatter_class in formatter_classes:
-        original_format_reference = formatter_class.format_reference
-        
-        def new_format_reference(self, metadata: Dict[str, Any], for_preview: bool = False) -> Tuple[Any, bool]:
-            result, is_error = original_format_reference(self, metadata, for_preview)
-            
-            if is_error:
-                return result, is_error
-            
-            if for_preview:
-                if isinstance(result, str):
-                    return PunctuationNormalizer.normalize_punctuation(result), False
-                return result, False
-            else:
-                if isinstance(result, list):
-                    return PunctuationNormalizer.normalize_element_sequence(result), False
-                return result, False
-        
-        formatter_class.format_reference = new_format_reference
-
-# Вызываем функцию для применения нормализации
-apply_punctuation_normalization_to_all_styles()
-            
 # Citation Formatter Factory
 class CitationFormatterFactory:
     """Factory for creating citation formatters"""
@@ -1944,135 +1896,6 @@ class CitationFormatterFactory:
             return Style10Formatter(style_config)
         else:
             return CustomCitationFormatter(style_config)
-
-class PunctuationNormalizer:
-    """Normalizes punctuation in formatted references"""
-    
-    @staticmethod
-    def normalize_punctuation(text: str) -> str:
-        """Main method for punctuation normalization"""
-        if not text:
-            return text
-        
-        # Применяем все нормализации последовательно
-        text = PunctuationNormalizer._remove_double_dots(text)
-        text = PunctuationNormalizer._normalize_question_exclamation(text)
-        text = PunctuationNormalizer._normalize_semicolon_comma(text)
-        text = PunctuationNormalizer._normalize_multiple_spaces(text)
-        text = PunctuationNormalizer._normalize_trailing_punctuation(text)
-        text = PunctuationNormalizer._normalize_parentheses_spacing(text)
-        text = PunctuationNormalizer._normalize_bracket_spacing(text)
-        
-        return text.strip()
-    
-    @staticmethod
-    def _remove_double_dots(text: str) -> str:
-        """Normalize double/multiple dots to single dot"""
-        # Удаляем две и более точек подряд
-        text = re.sub(r'\.\.+', '.', text)
-        
-        # Удаляем точку после точки в сокращениях
-        text = re.sub(r'(\b[A-Za-z])\.\.', r'\1.', text)
-        
-        # Удаляем точку после других знаков препинания, за которыми идет точка
-        text = re.sub(r'([?!])\.', r'\1', text)
-        
-        return text
-    
-    @staticmethod
-    def _normalize_question_exclamation(text: str) -> str:
-        """Normalize ?. and !. to ? and !"""
-        text = re.sub(r'([?!])\.(?=\s|$)', r'\1', text)
-        text = re.sub(r'([?!])\.(?=[\s,;:])', r'\1', text)
-        return text
-    
-    @staticmethod
-    def _normalize_semicolon_comma(text: str) -> str:
-        """Normalize ; , to ; (remove space before comma after semicolon)"""
-        # Случай 1: ; , -> ;
-        text = re.sub(r';\s*,', ';', text)
-        
-        # Случай 2: ; ; -> ;
-        text = re.sub(r';\s*;', ';', text)
-        
-        # Случай 3: , , -> ,
-        text = re.sub(r',\s*,', ',', text)
-        
-        # Случай 4: : , -> :
-        text = re.sub(r':\s*,', ':', text)
-        
-        return text
-    
-    @staticmethod
-    def _normalize_multiple_spaces(text: str) -> str:
-        """Normalize multiple spaces to single space"""
-        text = re.sub(r'\s+', ' ', text)
-        return text
-    
-    @staticmethod
-    def _normalize_trailing_punctuation(text: str) -> str:
-        """Remove trailing punctuation issues"""
-        # Удаляем лишние точки/запятые в конце
-        text = re.sub(r'([.,;:])\s*$', r'\1', text)
-        
-        # Удаляем точку, если уже есть другой знак препинания
-        text = re.sub(r'([?!])\s*\.\s*$', r'\1', text)
-        
-        return text
-    
-    @staticmethod
-    def _normalize_parentheses_spacing(text: str) -> str:
-        """Normalize spacing around parentheses"""
-        # Удаляем пробелы внутри скобок
-        text = re.sub(r'\(\s+', '(', text)
-        text = re.sub(r'\s+\)', ')', text)
-        
-        # Нормализуем пробелы перед открывающей скобкой
-        text = re.sub(r'\s+\(', ' (', text)
-        
-        return text
-    
-    @staticmethod
-    def _normalize_bracket_spacing(text: str) -> str:
-        """Normalize spacing around square brackets"""
-        # Удаляем пробелы внутри квадратных скобок
-        text = re.sub(r'\[\s+', '[', text)
-        text = re.sub(r'\s+\]', ']', text)
-        
-        # Нормализуем пробелы перед открывающей квадратной скобкой
-        text = re.sub(r'\s+\[', ' [', text)
-        
-        return text
-    
-    @staticmethod
-    def normalize_element_sequence(elements: List[Tuple[str, bool, bool, str, bool, Any]]) -> List[Tuple[str, bool, bool, str, bool, Any]]:
-        """Normalize punctuation in element sequence"""
-        if not elements:
-            return elements
-        
-        normalized_elements = []
-        
-        for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
-            # Нормализуем значение элемента
-            normalized_value = PunctuationNormalizer.normalize_punctuation(value)
-            
-            # Нормализуем разделитель
-            normalized_separator = separator
-            
-            # Если это последний элемент и есть final_punctuation, не нормализуем разделитель
-            if i < len(elements) - 1:
-                normalized_separator = PunctuationNormalizer.normalize_punctuation(separator)
-            
-            normalized_elements.append((
-                normalized_value,
-                italic,
-                bold,
-                normalized_separator,
-                is_doi_hyperlink,
-                doi_value
-            ))
-        
-        return normalized_elements
 
 class SimpleTopicAnalyzer:
     """Упрощенный анализатор тем по DOI"""
@@ -3139,9 +2962,8 @@ class DocumentGenerator:
                                 style_config: Dict[str, Any],
                                 duplicates_info: Dict[int, int] = None,
                                 missing_metadata_info: Dict[int, str] = None):
+        """Add formatted references to document"""
         for i, (elements, is_error, metadata) in enumerate(formatted_refs):
-            if not is_error and isinstance(elements, list):
-                elements = PunctuationNormalizer.normalize_element_sequence(elements)
             numbering = style_config['numbering_style']
             
             if numbering == "No numbering":
@@ -3835,8 +3657,7 @@ class ReferenceProcessor:
         elements, _ = formatter.format_reference(metadata, False)
         
         if isinstance(elements, str):
-            # Применяем нормализацию
-            return PunctuationNormalizer.normalize_punctuation(elements)
+            return elements
         
         ref_str = ""
         for i, (value, italic, bold, separator, is_doi_hyperlink, doi_value) in enumerate(elements):
@@ -3856,8 +3677,6 @@ class ReferenceProcessor:
         
         if style_config.get('final_punctuation') and not ref_str.endswith('.'):
             ref_str += "."
-            
-        ref_str = PunctuationNormalizer.normalize_punctuation(ref_str)
         
         return ref_str
 
@@ -5974,10 +5793,8 @@ class ResultsPage:
             else:
                 if isinstance(elements, str):
                     formatted_text = elements
-                    formatted_text = PunctuationNormalizer.normalize_punctuation(formatted_text)
                     display_html = f'<div class="{css_class}">{formatted_text}</div>'
                 else:
-                    elements = PunctuationNormalizer.normalize_element_sequence(elements)
                     html_parts = []
                     for j, element_data in enumerate(elements):
                         value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
@@ -6639,13 +6456,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
-
-
-
-
-
