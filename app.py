@@ -5373,83 +5373,95 @@ class CreatePage:
         """Render style preview"""
         style_config = CreatePage._get_style_config()
         
-        if style_config['elements'] or any([style_config.get('gost_style', False), 
-                                           style_config.get('acs_style', False),
-                                           style_config.get('rsc_style', False),
-                                           style_config.get('cta_style', False),
-                                           style_config.get('style5', False),
-                                           style_config.get('style6', False),
-                                           style_config.get('style7', False),
-                                           style_config.get('style8', False),
-                                           style_config.get('style9', False),
-                                           style_config.get('style10', False)]):
+        # Всегда показываем превью, даже если элементы не настроены
+        # Это даст пользователю визуальную обратную связь
+        preview_metadata = CreatePage._get_preview_metadata(style_config)
+        
+        if preview_metadata:
+            elements, _ = format_reference(preview_metadata, style_config, for_preview=False)
             
-            preview_metadata = CreatePage._get_preview_metadata(style_config)
-            if preview_metadata:
-                elements, _ = format_reference(preview_metadata, style_config, for_preview=False)
+            st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+            
+            st.markdown(f"<small><b>{get_text('example')}</b></small>", unsafe_allow_html=True)
+            
+            if isinstance(elements, str):
                 preview_with_numbering = CreatePage._add_numbering_to_elements(elements, style_config)
+                display_html = f'<div class="formatted-text">{preview_with_numbering}</div>'
+            else:
+                html_parts = []
                 
-                st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+                numbering = style_config.get('numbering_style', 'No numbering')
+                prefix = ""
+                if numbering != "No numbering":
+                    if numbering == "1":
+                        prefix = f"<span>1 </span>"
+                    elif numbering == "1.":
+                        prefix = f"<span>1. </span>"
+                    elif numbering == "1)":
+                        prefix = f"<span>1) </span>"
+                    elif numbering == "(1)":
+                        prefix = f"<span>(1) </span>"
+                    elif numbering == "[1]":
+                        prefix = f"<span>[1] </span>"
+                    else:
+                        prefix = f"<span>1. </span>"
                 
-                st.markdown(f"<small><b>{get_text('example')}</b></small>", unsafe_allow_html=True)
+                html_parts.append(prefix)
                 
-                if isinstance(elements, str):
-                    display_html = f'<div class="formatted-text">{preview_with_numbering}</div>'
-                else:
-                    html_parts = []
+                for j, element_data in enumerate(elements):
+                    value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
                     
-                    numbering = style_config.get('numbering_style', 'No numbering')
-                    prefix = ""
-                    if numbering != "No numbering":
-                        if numbering == "1":
-                            prefix = f"<span>1 </span>"
-                        elif numbering == "1.":
-                            prefix = f"<span>1. </span>"
-                        elif numbering == "1)":
-                            prefix = f"<span>1) </span>"
-                        elif numbering == "(1)":
-                            prefix = f"<span>(1) </span>"
-                        elif numbering == "[1]":
-                            prefix = f"<span>[1] </span>"
-                        else:
-                            prefix = f"<span>1. </span>"
+                    format_classes = []
+                    if italic and bold:
+                        format_classes.append("formatted-text-italic-bold")
+                    elif italic:
+                        format_classes.append("formatted-text-italic")
+                    elif bold:
+                        format_classes.append("formatted-text-bold")
                     
-                    html_parts.append(prefix)
+                    format_class = " ".join(format_classes) if format_classes else ""
                     
-                    for j, element_data in enumerate(elements):
-                        value, italic, bold, separator, is_doi_hyperlink, doi_value = element_data
-                        
-                        format_classes = []
-                        if italic and bold:
-                            format_classes.append("formatted-text-italic-bold")
-                        elif italic:
-                            format_classes.append("formatted-text-italic")
-                        elif bold:
-                            format_classes.append("formatted-text-bold")
-                        
-                        format_class = " ".join(format_classes) if format_classes else ""
-                        
-                        if format_class:
-                            value_html = f'<span class="{format_class}">{value}</span>'
-                        else:
-                            value_html = f'<span>{value}</span>'
-                        
-                        html_parts.append(value_html)
-                        
-                        if separator and j < len(elements) - 1:
-                            html_parts.append(f'<span>{separator}</span>')
+                    if format_class:
+                        value_html = f'<span class="{format_class}">{value}</span>'
+                    else:
+                        value_html = f'<span>{value}</span>'
                     
-                    if style_config.get('final_punctuation'):
-                        if html_parts and html_parts[-1].endswith('.'):
-                            html_parts[-1] = html_parts[-1][:-1]
-                        html_parts.append('<span>.</span>')
+                    html_parts.append(value_html)
                     
-                    full_html = "".join(html_parts)
-                    display_html = f'<div class="formatted-text">{full_html}</div>'
+                    if separator and j < len(elements) - 1:
+                        html_parts.append(f'<span>{separator}</span>')
                 
-                st.markdown(f'<div class="style-preview">{display_html}</div>', unsafe_allow_html=True)
+                if style_config.get('final_punctuation'):
+                    if html_parts and html_parts[-1].endswith('.'):
+                        html_parts[-1] = html_parts[-1][:-1]
+                    html_parts.append('<span>.</span>')
                 
-                st.markdown("</div>", unsafe_allow_html=True)
+                full_html = "".join(html_parts)
+                display_html = f'<div class="formatted-text">{full_html}</div>'
+            
+            st.markdown(f'<div class="style-preview">{display_html}</div>', unsafe_allow_html=True)
+            
+            # Добавим информационное сообщение, если элементы не настроены
+            if not style_config['elements'] and not any([
+                style_config.get('gost_style', False),
+                style_config.get('acs_style', False),
+                style_config.get('rsc_style', False),
+                style_config.get('cta_style', False),
+                style_config.get('style5', False),
+                style_config.get('style6', False),
+                style_config.get('style7', False),
+                style_config.get('style8', False),
+                style_config.get('style9', False),
+                style_config.get('style10', False)
+            ]):
+                st.info("💡 Настройте элементы в разделе выше, чтобы увидеть изменения в превью")
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            # Если нет данных для превью, покажем информационное сообщение
+            st.markdown(f"<div class='card' style='margin-bottom: 5px; padding: 10px;'><div class='card-title' style='margin-bottom: 10px;'>{get_text('style_preview')}</div>", unsafe_allow_html=True)
+            st.info("ℹ️ Выберите стиль или настройте элементы, чтобы увидеть превью")
+            st.markdown("</div>", unsafe_allow_html=True)
     
     @staticmethod
     def _add_numbering_to_elements(elements, style_config):
@@ -5479,31 +5491,31 @@ class CreatePage:
         used_elements = set()
         
         for i in range(8):
-            element = st.session_state[f"el{i}"]
+            element = st.session_state.get(f"el{i}", "")
             if element and element not in used_elements:
                 element_configs.append((
                     element,
                     {
-                        'italic': st.session_state[f"it{i}"],
-                        'bold': st.session_state[f"bd{i}"],
-                        'parentheses': st.session_state[f"pr{i}"],
-                        'separator': st.session_state[f"sp{i}"]
+                        'italic': st.session_state.get(f"it{i}", False),
+                        'bold': st.session_state.get(f"bd{i}", False),
+                        'parentheses': st.session_state.get(f"pr{i}", False),
+                        'separator': st.session_state.get(f"sp{i}", ". ")
                     }
                 ))
                 used_elements.add(element)
         
         return {
-            'author_format': st.session_state.auth,
-            'author_separator': st.session_state.sep,
-            'et_al_limit': st.session_state.etal if st.session_state.etal > 0 else None,
-            'use_and_bool': st.session_state.use_and_checkbox,
-            'use_ampersand_bool': st.session_state.use_ampersand_checkbox,
-            'doi_format': st.session_state.doi,
-            'doi_hyperlink': st.session_state.doilink,
-            'page_format': st.session_state.page,
-            'final_punctuation': st.session_state.punct,
-            'numbering_style': st.session_state.num,
-            'journal_style': st.session_state.journal_style,
+            'author_format': st.session_state.get('auth', "AA Smith"),
+            'author_separator': st.session_state.get('sep', ", "),
+            'et_al_limit': st.session_state.get('etal', 0) if st.session_state.get('etal', 0) > 0 else None,
+            'use_and_bool': st.session_state.get('use_and_checkbox', False),
+            'use_ampersand_bool': st.session_state.get('use_ampersand_checkbox', False),
+            'doi_format': st.session_state.get('doi', "10.10/xxx"),
+            'doi_hyperlink': st.session_state.get('doilink', True),
+            'page_format': st.session_state.get('page', "122-128"),
+            'final_punctuation': st.session_state.get('punct', ""),
+            'numbering_style': st.session_state.get('num', "No numbering"),
+            'journal_style': st.session_state.get('journal_style', '{Full Journal Name}'),
             'elements': element_configs,
             'gost_style': st.session_state.get('gost_style', False),
             'acs_style': st.session_state.get('acs_style', False),
@@ -6498,6 +6510,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
