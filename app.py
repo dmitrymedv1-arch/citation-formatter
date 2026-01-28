@@ -367,7 +367,7 @@ TRANSLATIONS = {
         'recommendation_download': '📥 Download Recommendations',
         'recommendation_download_txt': 'Download as TXT',
         'recommendation_download_csv': 'Download as CSV',
-        'missing_metadata_warning': '⚠️ Volume/page/article number information is missing. This may indicate a non-journal source (book, chapter, or conference paper). Please verify the source.',
+        'missing_metadata_warning': '⚠️ Volume/page/article number information is missing. This may indicate a non-journal source (book, chapter, or conference paper) or a journal article with incomplete issue assignment. Please verify the source.',
     },
     'ru': {
         'header': '🎨 Конструктор стилей цитирования',
@@ -3726,7 +3726,7 @@ class ReferenceProcessor:
                 
                 # Add specific guidance based on missing fields
                 if 'volume' in missing_fields:
-                    warning_msg += "This may indicate a non-journal source (book, chapter, or conference paper). "
+                    warning_msg += "This may indicate a non-journal source (book, chapter, or conference paper) or a journal article with incomplete issue assignment. "
                 
                 warning_msg += "Please verify the source type and consider manual correction."
                 
@@ -3784,7 +3784,7 @@ class ReferenceProcessor:
         if language == 'ru':
             return f"⚠️ Отсутствует информация о {missing_list}. Это может указывать на источник не из журнала (книга, глава или тезисы конференции). Проверьте тип источника."
         else:
-            return f"⚠️ {missing_list.capitalize()} information is missing. This may indicate a non-journal source (book, chapter, or conference paper). Please verify the source type."
+            return f"⚠️ {missing_list.capitalize()} information is missing. This may indicate a non-journal source (book, chapter, or conference paper) or a journal article with incomplete issue assignment. Please verify the source type."
     
     def _create_formatted_txt_file(self, formatted_texts: List[str]) -> io.BytesIO:
         """Create TXT file with formatted references"""
@@ -6456,3 +6456,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
