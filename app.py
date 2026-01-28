@@ -5187,23 +5187,21 @@ class CreatePage:
             )
 
         with col2:
-            auth_value = st.session_state.auth
-            auth_index = 0
-
-            available_formats = Config.AUTHOR_FORMATS
+            # Получаем обновленный список форматов
+            available_formats = [
+                "AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A.",
+                "A A Smith", "A. A. Smith", "Smith A A", "Smith A. A.", "Smith A. A", "Smith, A. A."
+            ]
             
-            if auth_value in available_formats:
-                auth_index = available_formats.index(auth_value)
-            else:
-                auth_index = 0
+            # Обновляем значение в session_state, если оно невалидно
+            if st.session_state.auth not in available_formats:
                 st.session_state.auth = available_formats[0]
             
+            # Создаем selectbox
             st.selectbox(
                 get_text('author_format'),
                 available_formats,
-                key="auth",
-                index=auth_index,
-                help="Select author name format (last name and initials)"
+                key="auth"
             )
             
         with col3:
@@ -6500,6 +6498,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
