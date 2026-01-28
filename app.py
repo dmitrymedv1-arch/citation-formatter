@@ -5531,74 +5531,20 @@ class CreatePage:
 
     @staticmethod
     def _get_preview_metadata(style_config: Dict) -> Optional[Dict]:
-        """Get metadata for preview"""
-        if style_config.get('gost_style', False) or style_config.get('style5', False) or style_config.get('style6', False) or style_config.get('style7', False) or style_config.get('style8', False) or style_config.get('style9', False) or style_config.get('style10', False):
-            return {
-                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
-                'title': 'The chemistry of graphene oxide',
-                'journal': 'Chemical Society Reviews',
-                'year': 2010,
-                'volume': '39',
-                'issue': '1',
-                'pages': '228-240',
-                'article_number': '',
-                'doi': '10.1039/B917103G'
-            }
-        elif style_config.get('acs_style', False):
-            return {
-                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
-                'title': 'The chemistry of graphene oxide',
-                'journal': 'Chemical Society Reviews',
-                'year': 2010,
-                'volume': '39',
-                'issue': '1',
-                'pages': '228-240',
-                'article_number': '',
-                'doi': '10.1039/B917103G'
-            }
-        elif style_config.get('rsc_style', False):
-            return {
-                'authors': [{'given': 'D.R.', 'family': 'Dreyer'}, {'given': 'S.', 'family': 'Park'}, {'given': 'C.W.', 'family': 'Bielawski'}, {'given': 'R.S.', 'family': 'Ruoff'}],
-                'title': 'The chemistry of graphene oxide',
-                'journal': 'Chemical Society Reviews',
-                'year': 2010,
-                'volume': '39',
-                'issue': '1',
-                'pages': '228-240',
-                'article_number': '',
-                'doi': '10.1039/B917103G'
-            }
-        elif style_config.get('cta_style', False):
-            return {
-                'authors': [
-                    {'given': 'D.R.', 'family': 'Dreyer'},
-                    {'given': 'S.', 'family': 'Park'},
-                    {'given': 'C.W.', 'family': 'Bielawski'},
-                    {'given': 'R.S.', 'family': 'Ruoff'}
-                ],
-                'title': 'The chemistry of graphene oxide',
-                'journal': 'Chemical Society Reviews',
-                'year': 2010,
-                'volume': '39',
-                'issue': '1',
-                'pages': '228-240',
-                'article_number': '',
-                'doi': '10.1039/B917103G'
-            }
-        elif style_config.get('elements'):
-            return {
-                'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
-                'title': 'Advanced Research in Materials Science',
-                'journal': 'Journal of Materials Chemistry A',
-                'year': 2023,
-                'volume': '11',
-                'issue': '15',
-                'pages': '102-115',
-                'article_number': 'e2301234',
-                'doi': '10.1000/abc123'
-            }
-        else:
-            return None
+        """Get metadata for preview - всегда возвращаем данные для превью"""
+        # Всегда возвращаем данные для превью, даже если стиль не выбран
+        # Это даст пользователю визуальную обратную связь
+        return {
+            'authors': [{'given': 'John A.', 'family': 'Smith'}, {'given': 'Alice B.', 'family': 'Doe'}],
+            'title': 'Advanced Research in Materials Science',
+            'journal': 'Journal of Materials Chemistry A',
+            'year': 2023,
+            'volume': '11',
+            'issue': '15',
+            'pages': '102-115',
+            'article_number': 'e2301234',
+            'doi': '10.1000/abc123'
+        }
     
     @staticmethod
     def _add_numbering(preview_ref: str, style_config: Dict) -> str:
@@ -6510,6 +6456,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
