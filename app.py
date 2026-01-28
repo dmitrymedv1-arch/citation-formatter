@@ -103,7 +103,8 @@ class Config:
     
     # Styles
     NUMBERING_STYLES = ["No numbering", "1", "1.", "1)", "(1)", "[1]"]
-    AUTHOR_FORMATS = ["AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A."]
+    AUTHOR_FORMATS = ["AA Smith", "A.A. Smith", "Smith AA", "Smith A.A", "Smith, A.A.",
+                     "A A Smith", "A. A. Smith", "Smith A A", "Smith A. A.", "Smith A. A", "Smith, A. A."]
     PAGE_FORMATS = ["122 - 128", "122-128", "122 – 128", "122–128", "122–8", "122"]
     DOI_FORMATS = ["10.10/xxx", "doi:10.10/xxx", "DOI:10.10/xxx", "https://doi.org/10.10/xxx"]
     JOURNAL_STYLES = ["{Full Journal Name}", "{J. Abbr.}", "{J Abbr}"]
@@ -1018,7 +1019,7 @@ class BaseCitationFormatter:
             initials = given.split()[:2]
             first_initial = initials[0][0] if initials else ''
             second_initial = initials[1][0].upper() if len(initials) > 1 else ''
-            
+
             if author_format == "AA Smith":
                 formatted_author = f"{first_initial}{second_initial} {family}"
             elif author_format == "A.A. Smith":
@@ -1032,10 +1033,40 @@ class BaseCitationFormatter:
                 if second_initial:
                     formatted_author = f"{family} {first_initial}.{second_initial}."
                 else:
-                    formatted_author = f"{family} {first_initial}."
+                    formatted_author = f"{family} {first_initial}"
             elif author_format == "Smith, A.A.":
                 if second_initial:
                     formatted_author = f"{family}, {first_initial}.{second_initial}."
+                else:
+                    formatted_author = f"{family}, {first_initial}."
+            elif author_format == "A A Smith":
+                if second_initial:
+                    formatted_author = f"{first_initial} {second_initial} {family}"
+                else:
+                    formatted_author = f"{first_initial} {family}"
+            elif author_format == "A. A. Smith":
+                if second_initial:
+                    formatted_author = f"{first_initial}. {second_initial}. {family}"
+                else:
+                    formatted_author = f"{first_initial}. {family}"
+            elif author_format == "Smith A A":
+                if second_initial:
+                    formatted_author = f"{family} {first_initial} {second_initial}"
+                else:
+                    formatted_author = f"{family} {first_initial}"
+            elif author_format == "Smith A. A.":
+                if second_initial:
+                    formatted_author = f"{family} {first_initial}. {second_initial}."
+                else:
+                    formatted_author = f"{family} {first_initial}."
+            elif author_format == "Smith A. A":
+                if second_initial:
+                    formatted_author = f"{family} {first_initial}. {second_initial}"
+                else:
+                    formatted_author = f"{family} {first_initial}"
+            elif author_format == "Smith, A. A.":
+                if second_initial:
+                    formatted_author = f"{family}, {first_initial}. {second_initial}."
                 else:
                     formatted_author = f"{family}, {first_initial}."
             else:
@@ -6462,6 +6493,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
