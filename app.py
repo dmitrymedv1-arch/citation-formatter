@@ -5189,14 +5189,21 @@ class CreatePage:
         with col2:
             auth_value = st.session_state.auth
             auth_index = 0
-            if auth_value in Config.AUTHOR_FORMATS:
-                auth_index = Config.AUTHOR_FORMATS.index(auth_value)
+
+            available_formats = Config.AUTHOR_FORMATS
+            
+            if auth_value in available_formats:
+                auth_index = available_formats.index(auth_value)
+            else:
+                auth_index = 0
+                st.session_state.auth = available_formats[0]
             
             st.selectbox(
                 get_text('author_format'),
-                Config.AUTHOR_FORMATS,
+                available_formats,
                 key="auth",
-                index=auth_index
+                index=auth_index,
+                help="Select author name format (last name and initials)"
             )
             
         with col3:
@@ -6493,6 +6500,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
