@@ -2945,13 +2945,13 @@ class DocumentGenerator:
         
         # Добавляем логотип
         try:
-            if os.path.exists("logo.jpg"):
+            if os.path.exists("logo.png"):
                 # Создаем параграф для логотипа с центрированием
                 logo_paragraph = output_doc.add_paragraph()
                 logo_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 
                 # Добавляем изображение
-                logo_paragraph.add_run().add_picture("logo.jpg", width=Pt(100))
+                logo_paragraph.add_run().add_picture("logo.png", width=Pt(300))
                 
                 # Добавляем пустую строку после логотипа
                 output_doc.add_paragraph()
@@ -6476,6 +6476,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
