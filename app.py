@@ -38,6 +38,7 @@ from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 from typing import Optional
 from PIL import Image as PILImage
+from PIL import Image
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -6499,6 +6500,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
