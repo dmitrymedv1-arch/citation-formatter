@@ -37,7 +37,7 @@ from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 from typing import Optional
-from PIL import Image
+from PIL import Image as PILImage
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -2940,6 +2940,24 @@ class DocumentGenerator:
                          duplicates_info: Dict[int, int] = None,
                          missing_metadata_info: Dict[int, str] = None,
                          recommendations_df = None) -> io.BytesIO:
+        """Generate DOCX document with references, statistics, and recommendations"""
+        output_doc = Document()
+        
+        # Добавляем логотип
+        try:
+            if os.path.exists("logo.jpg"):
+                # Создаем параграф для логотипа с центрированием
+                logo_paragraph = output_doc.add_paragraph()
+                logo_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # Добавляем изображение
+                logo_paragraph.add_run().add_picture("logo.jpg", width=Pt(100))
+                
+                # Добавляем пустую строку после логотипа
+                output_doc.add_paragraph()
+        except Exception as e:
+            logger.warning(f"Не удалось добавить логотип: {e}")
+                         
         """Generate DOCX document with references, statistics, and recommendations"""
         output_doc = Document()
         output_doc.add_paragraph('Citation Style Construction / © IHTE, https://ihte.ru/ © CTA, https://chimicatechnoacta.ru / developed by daM©')
@@ -6458,6 +6476,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
