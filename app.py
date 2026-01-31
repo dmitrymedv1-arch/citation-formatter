@@ -2943,20 +2943,43 @@ class DocumentGenerator:
         """Generate DOCX document with references, statistics, and recommendations"""
         output_doc = Document()
         
-        # Добавляем логотип
+        # Добавляем заголовок с логотипом
         try:
             if os.path.exists("logo.png"):
-                # Создаем параграф для логотипа с центрированием
-                logo_paragraph = output_doc.add_paragraph()
+                # Создаем таблицу для выравнивания логотипа и текста
+                title_table = output_doc.add_table(rows=1, cols=2)
+                title_table.autofit = False
+                
+                # Ячейка для логотипа
+                logo_cell = title_table.cell(0, 0)
+                logo_cell.width = Pt(120)  # Ширина ячейки
+                logo_paragraph = logo_cell.paragraphs[0]
                 logo_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                logo_run = logo_paragraph.add_run()
+                logo_run.add_picture("logo.png", width=Pt(100))  # Размер логотипа
                 
-                # Добавляем изображение
-                logo_paragraph.add_run().add_picture("logo.png", width=Pt(300))
+                # Ячейка для текста
+                text_cell = title_table.cell(0, 1)
+                text_paragraph = text_cell.paragraphs[0]
+                title_run = text_paragraph.add_run('Citation Style Constructor')
+                title_run.font.size = Pt(20)
+                title_run.font.bold = True
                 
-                # Добавляем пустую строку после логотипа
+                # Добавляем пустую строку
                 output_doc.add_paragraph()
         except Exception as e:
-            logger.warning(f"Не удалось добавить логотип: {e}")
+            logger.warning(f"Не удалось добавить логотип в заголовок: {e}")
+            # Если не удалось добавить логотип, просто добавляем обычный заголовок
+            title_paragraph = output_doc.add_paragraph()
+            title_run = title_paragraph.add_run('Citation Style Constructor')
+            title_run.font.size = Pt(20)
+            title_run.font.bold = True
+            title_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Добавляем разделительную линию
+        sep_paragraph = output_doc.add_paragraph()
+        sep_run = sep_paragraph.add_run("_" * 80)
+        sep_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
                          
         """Generate DOCX document with references, statistics, and recommendations"""
         output_doc = Document()
@@ -6476,6 +6499,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
