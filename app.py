@@ -6165,7 +6165,7 @@ class CitationStyleApp:
         col_title, col_lang, col_theme = st.columns([2, 1, 1])
         
         with col_title:
-            st.image("logo.png", width=100)
+            st.image("logo.png", width=200)
             st.title("Citation Style Constructor")
         
         with col_lang:
@@ -6458,6 +6458,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
