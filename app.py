@@ -37,6 +37,7 @@ from sentence_transformers import SentenceTransformer, util
 from gensim.models import Phrases
 from gensim.models.phrases import Phraser
 from typing import Optional
+from PIL import Image
 
 # Download NLTK data - do it immediately and not quietly to see errors
 import nltk
@@ -6164,7 +6165,8 @@ class CitationStyleApp:
         col_title, col_lang, col_theme = st.columns([2, 1, 1])
         
         with col_title:
-            st.title(get_text('header'))
+            st.image("logo.jpg", width=100)
+            st.title("Citation Style Constructor")
         
         with col_lang:
             languages = [('Русский', 'ru'), ('English', 'en')]
@@ -6456,6 +6458,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
