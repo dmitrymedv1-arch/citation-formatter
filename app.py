@@ -3442,16 +3442,37 @@ class DOIProcessor:
         if not text:
             return ""
         
+        # Сохраняем важные теги <sub>, </sub>, <i>, </i>, <scp>, </scp>
+        # Временно заменяем их на специальные маркеры
+        text = text.replace('<sub>', '«SUB»').replace('</sub>', '«/SUB»')
+        text = text.replace('<i>', '«I»').replace('</i>', '«/I»')
+        text = text.replace('<scp>', '«SCP»').replace('</scp>', '«/SCP»')
+        text = text.replace('<SUP>', '«SUP»').replace('</SUP>', '«/SUP»')
+        text = text.replace('<sup>', '«SUP»').replace('</sup>', '«/SUP»')
+        
+        # Удаляем все остальные HTML-теги
         text = re.sub(r'<[^>]+>', '', text)
+        
+        # Восстанавливаем сохраненные теги
+        text = text.replace('«SUB»', '<sub>').replace('«/SUB»', '</sub>')
+        text = text.replace('«I»', '<i>').replace('«/I»', '</i>')
+        text = text.replace('«SCP»', '').replace('«/SCP»', '')  # Убираем scp, так как это просто для капителизации
+        text = text.replace('«SUP»', '<sup>').replace('«/SUP»', '</sup>')
+        
+        # Обрабатываем специальные символы и сущности
         text = html.unescape(text)
+        
+        # Заменяем оставшиеся сущности
         text = re.sub(r'&[^;]+;', '', text)
+        
+        # Нормализуем пробелы и тире
+        text = text.replace('\n', ' ').replace('\r', '')
+        text = re.sub(r'\s+', ' ', text)
         text = text.strip()
         
         # Если весь текст в верхнем регистре или большинство букв заглавные, нормализуем регистр
         if text and (text.isupper() or sum(1 for c in text if c.isupper()) > len(text) * 0.7):
-            # Используем title case (каждое слово с заглавной буквы)
             text = text.title()
-            # Но исправляем некоторые распространенные ошибки title()
             corrections = {
                 ' A ': ' a ',
                 ' An ': ' an ',
@@ -3476,7 +3497,6 @@ class DOIProcessor:
                 ' Etc ': ' etc ',
                 ' Etc. ': ' etc. ',
             }
-            
             for wrong, correct in corrections.items():
                 text = text.replace(wrong, correct)
                 text = text.replace(wrong.upper(), correct)
@@ -6500,6 +6520,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
