@@ -1568,7 +1568,7 @@ class Style5Formatter(BaseCitationFormatter):
             elements.append((journal_name, False, False, " ", False, None))
             elements.append((metadata['volume'], False, False, " (", False, None))
             elements.append((str(metadata['year']), False, False, ") ", False, None))
-            elements.append((pages_formatted, False, False, ". ", False, None))
+            elements.append((pages_formatted, False, False, " ", False, None))
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
 
@@ -6526,6 +6526,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
