@@ -1541,13 +1541,19 @@ class Style5Formatter(BaseCitationFormatter):
         
         doi_url = f"https://doi.org/{metadata['doi']}"
         
-        pages = metadata['pages']
-        if pages:
+        pages = metadata.get('pages', '')
+        article_number = metadata.get('article_number', '')
+        
+        # Сначала проверяем наличие страниц
+        if pages and pages.strip():
             if '-' in pages:
                 start_page, end_page = pages.split('-')
                 pages_formatted = f"{start_page}–{end_page}"
             else:
                 pages_formatted = pages
+        # Если страниц нет, но есть номер статьи, используем его
+        elif article_number and article_number.strip():
+            pages_formatted = article_number
         else:
             pages_formatted = ""
         
@@ -6520,6 +6526,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
