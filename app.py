@@ -4788,7 +4788,7 @@ class SelectPage:
         st.session_state.doi = "https://doi.org/10.10/xxx"
         st.session_state.doilink = True
         st.session_state.page = "122–128"
-        st.session_state.punct = "."
+        st.session_state.punct = ""
         st.session_state.journal_style = "{J. Abbr.}"
         
         for i in range(8):
@@ -6526,6 +6526,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
