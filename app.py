@@ -1787,19 +1787,28 @@ class Style9Formatter(BaseCitationFormatter):
         
         journal_name = self.format_journal_name(metadata['journal'])
         
+        # ИСПРАВЛЕНИЕ: сначала проверяем pages, потом article_number
         pages = metadata['pages']
-        if pages:
+        article_number = metadata.get('article_number', '')
+        
+        if pages and pages.strip():
             if '-' in pages:
                 first_page = pages.split('-')[0].strip()
                 pages_formatted = first_page
             else:
                 pages_formatted = pages.strip()
+        elif article_number and article_number.strip():
+            pages_formatted = article_number.strip()
         else:
             pages_formatted = ""
         
         doi_url = f"https://doi.org/{metadata['doi']}"
         
-        style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
+        # Формируем ссылку: если есть страницы или номер статьи, добавляем их
+        if pages_formatted:
+            style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']}, {pages_formatted} ({metadata['year']}); {doi_url}"
+        else:
+            style9_ref = f"{authors_str}. {journal_name}, {metadata['volume']} ({metadata['year']}); {doi_url}"
         
         if for_preview:
             return style9_ref, False
@@ -1808,7 +1817,12 @@ class Style9Formatter(BaseCitationFormatter):
             elements.append((authors_str, False, False, ". ", False, None))
             elements.append((journal_name, True, False, ", ", False, None))
             elements.append((metadata['volume'], False, True, ", ", False, None))
-            elements.append((pages_formatted, False, False, " (", False, None))
+            
+            if pages_formatted:
+                elements.append((pages_formatted, False, False, " (", False, None))
+            else:
+                elements.append(("", False, False, " (", False, None))
+            
             elements.append((str(metadata['year']), False, False, "); ", False, None))
             elements.append((doi_url, False, False, "", True, metadata['doi']))
             return elements, False
