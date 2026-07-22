@@ -5537,7 +5537,7 @@ class CreatePage:
                 style_config.get('style9', False),
                 style_config.get('style10', False)
             ]):
-                st.info("💡 Настройте элементы в разделе выше, чтобы увидеть изменения в превью")
+                st.info("💡 Adjust the elements in the sections above to see the changes in the preview")
             
             st.markdown("</div>", unsafe_allow_html=True)
         else:
